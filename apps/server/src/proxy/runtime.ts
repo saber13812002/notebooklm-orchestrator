@@ -537,13 +537,21 @@ export function createXrayProxyRuntime(opts: {
   binPath?: string;
   log?: (line: string) => void;
 }): ProxyRuntime {
-  const binPath = opts.binPath ?? path.join(opts.vendorDir, "xray");
+  // Windows requires the .exe extension to spawn a binary by path; POSIX uses
+  // the extensionless name. Check both so either layout works.
+  const candidates =
+    opts.binPath !== undefined
+      ? [opts.binPath]
+      : process.platform === "win32"
+        ? [path.join(opts.vendorDir, "xray.exe"), path.join(opts.vendorDir, "xray")]
+        : [path.join(opts.vendorDir, "xray"), path.join(opts.vendorDir, "xray.exe")];
+  const binPath = candidates.find((p) => existsSync(p));
   const log = opts.log ?? (() => {});
-  if (existsSync(binPath)) {
+  if (binPath) {
     log(`xray runtime enabled: ${binPath}`);
     return new XrayProxyRuntime(binPath, path.join(opts.vendorDir, "cfg"), log);
   }
-  log("xray binary not found — using safe stub (not_configured, fail-closed)");
+  log(`xray binary not found (looked in ${candidates.join(", ")}) — using safe stub (not_configured, fail-closed)`);
   return new XrayProxyRuntimeStub();
 }
 
