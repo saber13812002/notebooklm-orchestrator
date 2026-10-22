@@ -188,6 +188,34 @@ export class JobRunner {
             onProgress: (p, note) => this.d.jobs.setProgress(jobId, p, note),
           });
 
+          // Cancel race (MUST be the first statement of the success path): the
+          // user may have requested cancellation while the provider operation
+          // was completing (a real worker cannot always be interrupted on the
+          // service side). The state machine forbids CANCEL_REQUESTED ->
+          // SUCCEEDED, and honoring the user's cancel request is the correct
+          // terminal state — a late success must never silently overwrite a
+          // requested cancellation. Checking before any side effects means a
+          // cancelled job records no artifacts, no "ok" attempt and no
+          // account success.
+          if (controller.signal.aborted) {
+            this.d.jobs.recordAttempt(jobId, attemptNo, account.id, nodeId, attemptStart, "cancelled", {
+              reason: "user",
+              note: "provider operation completed after the cancel request; result discarded",
+            });
+            this.d.jobs.setStatus(jobId, "CANCELLED", {
+              errorClass: "provider",
+              errorMessage: "cancelled by user (provider operation completed server-side)",
+            });
+            this.logEvent(
+              jobId,
+              archive,
+              "cancelled",
+              "cancellation finalized; late provider result discarded",
+            );
+            this.finalizeArchive(jobId, archive);
+            return this.d.jobs.getOrThrow(jobId);
+          }
+
           const stored = result.artifacts.map((a, i) =>
             archive.storeArtifact(a.path, a.name, i + 1),
           );
@@ -195,7 +223,6 @@ export class JobRunner {
           this.d.jobs.recordAttempt(jobId, attemptNo, account.id, nodeId, attemptStart, "ok", {
             provider: this.d.provider.name,
           });
-
           this.d.accounts.recordSuccess(account.id);
           const sim = result.providerMeta.simulated;
           this.d.jobs.setStatus(jobId, "SUCCEEDED", {

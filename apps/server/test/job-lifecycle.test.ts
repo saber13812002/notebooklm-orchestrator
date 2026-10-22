@@ -169,6 +169,47 @@ describe("cancellation", () => {
     expect(events).toContain("cancelled");
   });
 
+  it("a late provider success after cancel stays CANCELLED (no spurious ok-attempt, no throw)", async () => {
+    // Regression: a real python worker may finish its operation AFTER the
+    // cancel request arrives (server-side completion cannot always be
+    // interrupted). Before the fix, the success path first recorded an "ok"
+    // attempt and a provider success on the account, then called
+    // setStatus(RUNNING -> SUCCEEDED) which the state machine rejects once
+    // the job is CANCEL_REQUESTED — leaving a misleading "ok" attempt on a
+    // cancelled job. Cancellation must win cleanly: exactly ONE attempt,
+    // outcome "cancelled".
+    setupHappy();
+    const job = createJob(parts.jobs);
+    // Simulate a worker whose operation completes normally even though the
+    // abort signal fired mid-flight (server-side completion).
+    parts.provider.runJob = async (req) => {
+      await new Promise((r) => setTimeout(r, 200));
+      return {
+        answerMarkdown: "# Late answer",
+        providerMeta: { provider: "mock", simulated: true },
+        artifacts: [],
+      };
+    };
+    const runPromise = parts.runner.run(job.id);
+    for (let i = 0; i < 100 && parts.jobs.get(job.id)!.status !== "RUNNING"; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(parts.jobs.get(job.id)!.status).toBe("RUNNING");
+
+    // Emulate the API cancel route on a RUNNING job: mark CANCEL_REQUESTED,
+    // then abort the runner's controller.
+    parts.jobs.setStatus(job.id, "CANCEL_REQUESTED");
+    expect(parts.runner.cancel(job.id)).toBe(true);
+
+    const result = await runPromise;
+    expect(result.status).toBe("CANCELLED");
+    const events = parts.jobs.events(job.id).map((e) => e.type);
+    expect(events).toContain("cancelled");
+    const attempts = parts.jobs.attempts(job.id);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]?.outcome).toBe("cancelled");
+  });
+
   it("run() is a no-op for jobs not in CREATED/QUEUED", async () => {
     setupHappy();
     const job = createJob(parts.jobs);

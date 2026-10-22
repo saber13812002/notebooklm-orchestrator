@@ -10,8 +10,11 @@
 #
 # NOTE: the PyPI package is "notebooklm-py" (NOT "notebooklm", which is an
 # unrelated abandoned package). The [browser] extra pulls playwright, which
-# the interactive login op requires. Pinned to the 0.8.x line whose public
-# API (from_storage / get_account_email / notebooks.list / sources.add_file /
+# the interactive login op requires; the [cookies] extra pulls rookie-cookies,
+# which the "import from a real browser" op (notebooklm auth import /
+# login --browser-cookies) imports lazily — without it, browser cookie
+# import fails at runtime. Pinned to the 0.8.x line whose public API
+# (from_storage / get_account_email / notebooks.list / sources.add_file /
 # wait_until_ready / chat.ask) was source-verified against research/notebooklm-py
 # at v0.8.5.
-notebooklm-py[browser]>=0.8.5,<0.9
+notebooklm-py[browser,cookies]>=0.8.5,<0.9

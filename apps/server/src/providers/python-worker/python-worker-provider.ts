@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, chmodSync } from "node:fs";
 import path from "node:path";
 import type { FailureClass } from "@nlo/shared";
+import { redactSecrets } from "@nlo/shared";
 import {
   CapLevel,
   ProviderFailure,
@@ -352,6 +353,13 @@ export class PythonWorkerProvider implements NotebookLMProvider {
     });
     try {
       await w.start();
+      w.setEventSink((data) => {
+        if (typeof data.stage === "string" && data.stage === "cli_stderr") {
+          // Redact: browser cookie-import stderr can contain credential-looking
+          // material (cookie dump errors, storage paths, tokens).
+          this.log(`worker cli: ${redactSecrets(typeof data.line === "string" ? data.line : "")}`);
+        }
+      });
       const r = await w.request<{ email: string | null; notebooks: number }>("browser-import", {
         sessionPath,
         browser: opts.browser,
@@ -427,15 +435,19 @@ export class PythonWorkerProvider implements NotebookLMProvider {
         answer: string;
         references: { sourceId: string | null; quote: string | null }[];
         checkedAt: string;
-      }>("job", {
-        sessionPath,
-        audioPath: req.audioPath ?? "",
-        audioName: req.audioPath ? path.basename(req.audioPath) : "",
-        prompt: req.prompt,
-        notebookTitle,
-        waitSec: 1800,
-        timeoutSec: Math.floor((this.opts.jobTimeoutMs ?? 30 * 60_000) / 1000),
-      });
+      }>(
+        "job",
+        {
+          sessionPath,
+          audioPath: req.audioPath ?? "",
+          audioName: req.audioPath ? path.basename(req.audioPath) : "",
+          prompt: req.prompt,
+          notebookTitle,
+          waitSec: 1800,
+          timeoutSec: Math.floor((this.opts.jobTimeoutMs ?? 30 * 60_000) / 1000),
+        },
+        { signal: req.signal },
+      );
 
       if (!r.answer || r.answer.trim().length === 0) {
         throw new ProviderFailure({

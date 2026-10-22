@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { redactSecrets } from "@nlo/shared";
 import { WorkerInbound, isResponse, type WorkerOp, type WorkerResponseT } from "./protocol.js";
 
 export class WorkerError extends Error {
@@ -178,7 +179,8 @@ export class WorkerSupervisor {
 
       const onAbort = () => {
         if (!this.pending.has(id)) return;
-        this.pending.delete(id);
+        // Do NOT delete the pending entry here: kill() -> failAll() rejects it
+        // (and every other in-flight request) by iterating this.pending.
         clearTimeout(timer);
         this.kill(new WorkerError(`python worker request cancelled (op=${op})`, "timeout"));
       };
@@ -281,11 +283,13 @@ export class WorkerSupervisor {
       }
     }
     // Always drain (even after cap) to avoid pipe backpressure deadlock.
-    this.log(`worker stderr: ${s.trim().slice(0, 300)}`);
+    // Redact: python CLI stderr can echo session paths, cookie errors, or
+    // credential-looking strings — never log them raw.
+    this.log(`worker stderr: ${redactSecrets(s.trim().slice(0, 300))}`);
   }
 
   private tail(): string {
-    return this.stderrTail.slice(-2000).replace(/\s+/g, " ").trim();
+    return redactSecrets(this.stderrTail.slice(-2000).replace(/\s+/g, " ").trim());
   }
 
   private failAll(err: WorkerError): void {

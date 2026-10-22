@@ -37,6 +37,7 @@ import os
 import signal
 import sys
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -318,20 +319,62 @@ async def op_browser_import(p: dict[str, Any]) -> dict[str, Any]:
         {"event": "log", "op": None, "data": {"stage": "importing_browser_cookies"}}
     )
     try:
-        proc = await asyncio.wait_for(
-            asyncio.create_subprocess_exec(
-                *argv,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env,
-            ),
-            timeout=timeout,
+        proc = await asyncio.create_subprocess_exec(
+            *argv,
+            # Non-interactive: the CLI must never inherit the worker's stdin
+            # (which is a live protocol pipe being drained by our reader
+            # thread). DEVNULL gives EOF if anything probes stdin.
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
-        out, err = await asyncio.wait_for(proc.communicate(), timeout=30)
-    except (asyncio.TimeoutError, TimeoutError):
-        raise RuntimeError(f"browser cookie import timed out after {timeout}s")
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"browser cookie import failed to start: {exc}")
 
-    tail = ((out + b"\n" + err).decode("utf-8", "replace")).strip()[-1500:]
+    # Stream stderr in real time (the CLI prints progress there) and buffer
+    # stdout, to surface exactly where a hang occurs.
+    stderr_lines: list[str] = []
+    stdout_chunks: list[bytes] = []
+
+    async def _drain_stderr() -> None:
+        assert proc.stderr is not None
+        while True:
+            raw = await proc.stderr.readline()
+            if not raw:
+                break
+            line = raw.decode("utf-8", "replace").rstrip()
+            if line:
+                stderr_lines.append(line)
+                await emit(
+                    {"event": "log", "op": None, "data": {"stage": "cli_stderr", "line": line[:500]}}
+                )
+
+    async def _drain_stdout() -> None:
+        assert proc.stdout is not None
+        while True:
+            raw = await proc.stdout.read(65536)
+            if not raw:
+                break
+            stdout_chunks.append(raw)
+
+    try:
+        async with asyncio.timeout(timeout):
+            await asyncio.gather(_drain_stderr(), _drain_stdout())
+            await proc.wait()
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
+        tail = " | ".join(stderr_lines[-10:])
+        raise RuntimeError(
+            f"browser cookie import timed out after {timeout}s. last stderr: {tail[-1200:]}"
+        )
+
+    tail = (
+        b"".join(stdout_chunks).decode("utf-8", "replace")
+        + "\n"
+        + "\n".join(stderr_lines)
+    ).strip()[-1500:]
     if proc.returncode != 0:
         raise RuntimeError(
             f"browser cookie import failed (exit {proc.returncode}): {tail}"
@@ -470,14 +513,31 @@ async def main() -> None:
     signal.signal(signal.SIGTERM, _on_term)
     signal.signal(signal.SIGINT, _on_term)
 
-    reader = asyncio.StreamReader()
-    protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+    # NOTE (Windows): the ProactorEventLoop cannot use overlapped I/O on pipe
+    # handles on this machine (CreateIoCompletionPort rejects pipe handles
+    # with ERROR_INVALID_HANDLE, while socket handles work). Reading stdin via
+    # the loop's pipe transport therefore crashes at startup. Instead, a
+    # dedicated blocking thread reads lines from stdin and forwards them to
+    # the event loop thread-safely — same protocol, no IOCP dependency.
+    queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+
+    def _stdin_reader() -> None:
+        try:
+            while True:
+                raw = sys.stdin.buffer.readline()
+                if not raw:
+                    break
+                loop.call_soon_threadsafe(queue.put_nowait, raw)
+        except Exception:  # noqa: BLE001 - stdin gone; EOF below
+            pass
+        loop.call_soon_threadsafe(queue.put_nowait, None)
+
+    threading.Thread(target=_stdin_reader, name="nlo-stdin", daemon=True).start()
 
     async def feed() -> None:
         while True:
-            line = await reader.readline()
-            if not line:
+            line = await queue.get()
+            if line is None:
                 break
             line = line.strip()
             if not line:

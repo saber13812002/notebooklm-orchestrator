@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolve, sep } from "node:path";
 import { resolveWithin, safeName } from "../src/safe-name.js";
 
 describe("safeName", () => {
@@ -34,8 +35,12 @@ describe("safeName", () => {
 
 describe("resolveWithin", () => {
   it("resolves inside the root", () => {
+    // Platform-aware: on Windows, resolve("/data/jobs") is CWD-relative
+    // (c:\data\jobs...), so the root itself is resolved first and the
+    // expectation joins with the platform separator.
+    const root = resolve("/data/jobs").replace(/[\\/]+$/, "");
     expect(resolveWithin("/data/jobs", "abc", "input", "prompt.md")).toBe(
-      "/data/jobs/abc/input/prompt.md",
+      `${root}${sep}abc${sep}input${sep}prompt.md`,
     );
   });
 
