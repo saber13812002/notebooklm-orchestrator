@@ -423,12 +423,8 @@ export class ProxyManager {
     if (!cfg.server) issues.push("server host missing");
     if (!Number.isInteger(cfg.port) || cfg.port < 1 || cfg.port > 65535)
       issues.push("port invalid");
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cfg.uuidSecretRef)
-    ) {
-      // uuidSecretRef holds a vault ref; validate the stored value shape lazily
-      // (the ref itself is fine as long as it's non-empty)
-    }
+    // uuidSecretRef holds a vault ref, not a UUID literal; the stored secret's
+    // shape is validated lazily, so only the ref's presence is checked here.
     if (!cfg.uuidSecretRef) issues.push("uuid secret ref missing");
     if (cfg.transport === "ws" && !cfg.wsPath) issues.push("ws transport requires path");
     if (cfg.transport === "grpc" && !cfg.extra?.serviceName) {

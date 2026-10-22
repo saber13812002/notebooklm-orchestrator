@@ -115,6 +115,10 @@ function sanitizeAccount(a: {
     displayEmail: row.displayEmail,
     status: row.status,
     enabled: row.enabled,
+    // hasAuth reflects the legacy account-row secret ref (auth_secret_ref), which
+    // is always null for API-created accounts. It is NOT the live authentication
+    // state — that is tracked in auth_sessions (the account's AUTHENTICATED status,
+    // the sole evidence of auth). See domain/auth-sessions.repo.ts.
     hasAuth: Boolean(row.authSecretRef),
     lastSuccessAt: row.lastSuccessAt,
     lastError: row.lastError,

@@ -182,7 +182,7 @@ describe("cancellation", () => {
     const job = createJob(parts.jobs);
     // Simulate a worker whose operation completes normally even though the
     // abort signal fired mid-flight (server-side completion).
-    parts.provider.runJob = async (req) => {
+    parts.provider.runJob = async (_req) => {
       await new Promise((r) => setTimeout(r, 200));
       return {
         answerMarkdown: "# Late answer",
