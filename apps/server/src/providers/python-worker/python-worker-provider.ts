@@ -396,6 +396,19 @@ export class PythonWorkerProvider implements NotebookLMProvider {
         needsReauth: true,
       });
     }
+    // A recorded audio input whose archive file no longer exists (e.g. an
+    // archive pruned between job creation and execution) must fail with a
+    // clear error, not be turned into the relative path "." that the worker
+    // would then reject with a confusing FileNotFoundError.
+    const audioPath: string | null = req.audioPath ?? null;
+    if (audioPath && !existsSync(audioPath)) {
+      throw new ProviderFailure({
+        failureClass: "invalid_input",
+        message: "input audio is recorded for this job but the stored file is missing",
+        ambiguous: false,
+        needsReauth: false,
+      });
+    }
     const notebookTitle = `nlo-${req.jobId.slice(0, 16)}`;
     const w = new WorkerSupervisor({
       pythonBin: this.opts.pythonBin,
@@ -439,8 +452,8 @@ export class PythonWorkerProvider implements NotebookLMProvider {
         "job",
         {
           sessionPath,
-          audioPath: req.audioPath ?? "",
-          audioName: req.audioPath ? path.basename(req.audioPath) : "",
+          audioPath: audioPath ?? "",
+          audioName: audioPath ? path.basename(audioPath) : "",
           prompt: req.prompt,
           notebookTitle,
           waitSec: 1800,
@@ -482,9 +495,13 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       if (e instanceof ProviderFailure) throw e;
       const code = e instanceof WorkerError ? e.code : "unknown";
       const message = e instanceof Error ? e.message : String(e);
+      const timedOut =
+        e instanceof WorkerError &&
+        (e.code === "timeout" || /timed out/.test(e.message));
+      const failed = timedOut ? " (operation failed: see timeout)" : "";
       throw new ProviderFailure({
         failureClass: this.toFailureClass(code),
-        message: `python-worker: ${message}`,
+        message: `python-worker: ${message}${failed}`,
         ambiguous: isAmbiguousCode(code),
         needsReauth: code === "auth",
       });

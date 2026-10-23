@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { JobArchive } from "../src/domain/archive.js";
 import {
   makeParts,
   addAccount,
@@ -82,6 +83,62 @@ describe("happy path", () => {
     const job = createJob(parts.jobs);
     await parts.runner.run(job.id);
     expect(parts.accounts.get(acct.id)?.lastSuccessAt).not.toBeNull();
+  });
+
+  it("persists verifiable operation IDs from the provider report into the jobs row", async () => {
+    // Regression: the python worker reports the REAL NotebookLM
+    // notebook/source/conversation IDs in providerMeta, but the runner's
+    // SUCCEEDED patch dropped them — the jobs table columns (notebook_id,
+    // source_id, conversation_id) stayed NULL for every live success, so a
+    // "real" result was not auditable at the destination service.
+    setupHappy();
+    const job = createJob(parts.jobs);
+    parts.provider.runJob = async (_req) => ({
+      answerMarkdown: "# Real answer",
+      providerMeta: {
+        provider: "python-worker",
+        simulated: false,
+        email: "user@example.com",
+        notebookId: "nb-123",
+        notebookTitle: "nlo-test",
+        sourceId: "src-456",
+        conversationId: "conv-789",
+      },
+      artifacts: [],
+    });
+    const result = await parts.runner.run(job.id);
+
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.notebookId).toBe("nb-123");
+    expect(result.notebookTitle).toBe("nlo-test");
+    expect(result.sourceId).toBe("src-456");
+    expect(result.conversationId).toBe("conv-789");
+    // The persisted row (a fresh read, not the in-memory return) carries them.
+    const stored = parts.db.raw
+      .prepare(
+        "SELECT notebook_id, notebook_title, source_id, conversation_id FROM jobs WHERE id = ?",
+      )
+      .get(job.id) as {
+      notebook_id: string | null;
+      notebook_title: string | null;
+      source_id: string | null;
+      conversation_id: string | null;
+    };
+    expect(stored.notebook_id).toBe("nb-123");
+    expect(stored.notebook_title).toBe("nlo-test");
+    expect(stored.source_id).toBe("src-456");
+    expect(stored.conversation_id).toBe("conv-789");
+  });
+
+  it("keeps operation ID columns null when the provider reports none", async () => {
+    setupHappy();
+    const job = createJob(parts.jobs);
+    await parts.runner.run(job.id); // plain mock provider: no IDs in meta
+    const result = parts.jobs.get(job.id)!;
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.notebookId).toBeNull();
+    expect(result.sourceId).toBeNull();
+    expect(result.conversationId).toBeNull();
   });
 
   it("a second run on a non-QUEUED job is a no-op (idempotency)", async () => {
@@ -207,6 +264,59 @@ describe("cancellation", () => {
     expect(events).toContain("cancelled");
     const attempts = parts.jobs.attempts(job.id);
     expect(attempts).toHaveLength(1);
+    expect(attempts[0]?.outcome).toBe("cancelled");
+  });
+
+  it("a job sitting in CANCEL_REQUESTED is terminated by a failure handler (no orphan)", async () => {
+    // Regression: a cancel on a RUNNING job sets CANCEL_REQUESTED and aborts
+    // the runner's controller. If the abort signal does not reach the
+    // in-flight provider (a real python worker stalled inside notebooklm-py
+    // cannot always be interrupted server-side), the failure path used to
+    // treat it as an ordinary provider error and the job sat in
+    // CANCEL_REQUESTED forever — an orphan the queue never picks up and the
+    // UI cannot cancel again. handleFailure must route a CANCEL_REQUESTED
+    // job to CANCELLED regardless of whether the error was an abort.
+    setupHappy();
+    const job = createJob(parts.jobs);
+    // Drive the job through the legal pre-attempt states to CANCEL_REQUESTED,
+    // exactly what the API cancel route does for a RUNNING job.
+    parts.jobs.setStatus(job.id, "VALIDATING");
+    parts.jobs.setStatus(job.id, "QUEUED");
+    parts.jobs.setStatus(job.id, "WAITING_FOR_ACCOUNT");
+    parts.jobs.setStatus(job.id, "WAITING_FOR_PROXY");
+    parts.jobs.setStatus(job.id, "RUNNING");
+    parts.jobs.setStatus(job.id, "CANCEL_REQUESTED");
+
+    const handler = (parts.runner as unknown as {
+      handleFailure: (
+        jobId: string,
+        accountId: string,
+        attemptNo: number,
+        nodeId: string | null,
+        attemptStart: string,
+        archive: JobArchive,
+        err: unknown,
+        wasAborted: boolean,
+      ) => Promise<"terminal" | "retry">;
+    }).handleFailure.bind(parts.runner);
+
+    // A NON-aborted failure (the provider was merely stalled when the cancel
+    // landed) must still terminate the job as CANCELLED.
+    const archive = new JobArchive(parts.jobsDir, job.id);
+    const outcome = await handler(
+      job.id,
+      "acc-x",
+      1,
+      "n1",
+      new Date().toISOString(),
+      archive,
+      new Error("worker request timed out"),
+      false,
+    );
+    expect(outcome).toBe("terminal");
+    expect(parts.jobs.get(job.id)!.status).toBe("CANCELLED");
+    const attempts = parts.jobs.attempts(job.id);
+    expect(attempts.length).toBe(1);
     expect(attempts[0]?.outcome).toBe("cancelled");
   });
 

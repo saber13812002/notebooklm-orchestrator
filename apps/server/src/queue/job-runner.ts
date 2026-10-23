@@ -163,6 +163,21 @@ export class JobRunner {
         }
 
         // --- RUNNING -------------------------------------------------------
+        // A cancel request arriving between the WAITING_FOR_PROXY and RUNNING
+        // status writes (or during selection, when status is not RUNNING yet)
+        // must not be lost: the API route set the job to CANCEL_REQUESTED
+        // while the runner was in flight. Without this check the attempt would
+        // start and a later cancel would no-op (no active controller) —
+        // orphaning the job in CANCEL_REQUESTED forever.
+        if (this.d.jobs.getOrThrow(jobId).status === "CANCEL_REQUESTED") {
+          this.d.jobs.setStatus(jobId, "CANCELLED", {
+            errorClass: "provider",
+            errorMessage: "cancelled by user",
+          });
+          this.logEvent(jobId, archive, "cancelled", "cancelled before attempt started");
+          this.finalizeArchive(jobId, archive);
+          return this.d.jobs.getOrThrow(jobId);
+        }
         const job = this.d.jobs.getOrThrow(jobId);
         this.d.jobs.setStatus(jobId, "RUNNING", { accountId: account.id, nodeId });
         this.logEvent(jobId, archive, "running", `attempt ${job.attempt + 1}`);
@@ -225,6 +240,14 @@ export class JobRunner {
           });
           this.d.accounts.recordSuccess(account.id);
           const sim = result.providerMeta.simulated;
+          // Verifiable operation IDs from the provider's own report (the
+          // python worker returns the real NotebookLM notebook/source/
+          // conversation IDs). Persisted to the jobs row columns so a
+          // successful job is auditable at the destination service; absent
+          // values stay null (never fabricated).
+          const meta = result.providerMeta as Record<string, unknown>;
+          const strOrNull = (v: unknown): string | null =>
+            typeof v === "string" && v.length > 0 ? v : null;
           this.d.jobs.setStatus(jobId, "SUCCEEDED", {
             answerMarkdown: result.answerMarkdown,
             resultProviderMeta: result.providerMeta,
@@ -233,6 +256,10 @@ export class JobRunner {
             // assumed: mock provider => "mock"; worker reports simulated
             // false => "real"; anything else => "unknown" (shown as such).
             resultProvenance: sim === true ? "mock" : sim === false ? "real" : "unknown",
+            notebookId: strOrNull(meta.notebookId),
+            notebookTitle: strOrNull(meta.notebookTitle),
+            sourceId: strOrNull(meta.sourceId),
+            conversationId: strOrNull(meta.conversationId),
           });
           if (result.answerMarkdown) archive.writeAnswer(result.answerMarkdown);
           this.logEvent(jobId, archive, "succeeded", "job completed");

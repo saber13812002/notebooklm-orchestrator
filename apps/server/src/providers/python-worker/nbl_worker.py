@@ -404,7 +404,7 @@ async def op_job(p: dict[str, Any]) -> dict[str, Any]:
     async def _progress(stage: str, **data: Any) -> None:
         await emit({"event": "progress", "op": None, "data": {"stage": stage, **data}})
 
-    if not audio_path.is_file():
+    if not str(audio_path).strip() or not audio_path.is_file():
         raise FileNotFoundError(f"audio file not found: {audio_path}")
 
     await _progress("opening_session")
@@ -579,7 +579,20 @@ async def main() -> None:
                     }
                 )
 
-    await asyncio.gather(feed(), stop)
+    feed_task = asyncio.create_task(feed())
+    await stop
+    # The supervisor sends SIGTERM (or closes stdin) to terminate the worker,
+    # e.g. on request timeout. A running op (notebooklm-py calls, waits) must
+    # NOT outlive the process: cancel it so asyncio.run can finish and the
+    # interpreter can exit. Without this, on Windows a SIGTERM'd worker keeps
+    # its in-flight op alive until the child is force-killed, and the
+    # NotebookLM-side operation may complete after the job was already
+    # finalized (orphaned server-side work).
+    feed_task.cancel()
+    try:
+        await feed_task
+    except (asyncio.CancelledError, Exception):  # noqa: BLE001
+        pass
 
 
 if __name__ == "__main__":
