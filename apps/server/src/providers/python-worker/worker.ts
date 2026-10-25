@@ -345,6 +345,14 @@ export class WorkerSupervisor {
         clearTimeout(t);
         resolve();
       });
+      // Also close stdin: the worker treats EOF as a shutdown, so it exits
+      // cleanly even on hosts where SIGTERM delivery to asyncio processes
+      // is unreliable (see nbl_worker.py main()).
+      try {
+        child.stdin.end();
+      } catch {
+        /* stdin may already be closed */
+      }
       try {
         if (process.platform !== "win32") process.kill(-pid, "SIGTERM");
         else child.kill("SIGTERM");

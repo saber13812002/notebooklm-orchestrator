@@ -506,12 +506,21 @@ async def main() -> None:
     loop = asyncio.get_running_loop()
     stop = loop.create_future()
 
-    def _on_term(signum, _frame):
+    def _stop_once() -> None:
         if not stop.done():
             stop.set_result(None)
 
-    signal.signal(signal.SIGTERM, _on_term)
-    signal.signal(signal.SIGINT, _on_term)
+    # Prefer the event loop's own signal plumbing: its C-level handler only
+    # writes to a self-pipe, so the callback runs as normal loop processing.
+    # On some Linux hosts a Python-level signal.signal() callback is NOT
+    # delivered while an asyncio loop is running (observed on s52, 2026-10-25),
+    # which left the worker unresponsive to SIGTERM. Windows'
+    # ProactorEventLoop has no add_signal_handler, so fall back there.
+    for _sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(_sig, _stop_once)
+        except (NotImplementedError, RuntimeError, ValueError):
+            signal.signal(_sig, lambda _s, _f: _stop_once())
 
     # NOTE (Windows): the ProactorEventLoop cannot use overlapped I/O on pipe
     # handles on this machine (CreateIoCompletionPort rejects pipe handles
@@ -531,6 +540,9 @@ async def main() -> None:
         except Exception:  # noqa: BLE001 - stdin gone; EOF below
             pass
         loop.call_soon_threadsafe(queue.put_nowait, None)
+        # Stdin EOF is the supervisor's signal-free shutdown path: it must
+        # end the process even when no SIGTERM was ever delivered/honored.
+        loop.call_soon_threadsafe(_stop_once)
 
     threading.Thread(target=_stdin_reader, name="nlo-stdin", daemon=True).start()
 
@@ -580,19 +592,23 @@ async def main() -> None:
                 )
 
     feed_task = asyncio.create_task(feed())
-    await stop
+    stop_task = asyncio.ensure_future(stop)
+    # Wait for EITHER the stop signal OR stdin EOF (feed_task finishing).
+    # Awaiting the stop future alone meant a worker whose stdin was already
+    # closed — or whose SIGTERM never fired — never exited.
+    await asyncio.wait({stop_task, feed_task}, return_when=asyncio.FIRST_COMPLETED)
     # The supervisor sends SIGTERM (or closes stdin) to terminate the worker,
     # e.g. on request timeout. A running op (notebooklm-py calls, waits) must
     # NOT outlive the process: cancel it so asyncio.run can finish and the
-    # interpreter can exit. Without this, on Windows a SIGTERM'd worker keeps
-    # its in-flight op alive until the child is force-killed, and the
-    # NotebookLM-side operation may complete after the job was already
-    # finalized (orphaned server-side work).
-    feed_task.cancel()
-    try:
-        await feed_task
-    except (asyncio.CancelledError, Exception):  # noqa: BLE001
-        pass
+    # interpreter can exit. Without this, a worker keeps its in-flight op
+    # alive until the child is force-killed, and the NotebookLM-side
+    # operation may complete after the job was already finalized (orphaned
+    # server-side work).
+    if not feed_task.done():
+        feed_task.cancel()
+    if not stop_task.done():
+        stop_task.cancel()
+    await asyncio.gather(feed_task, stop_task, return_exceptions=True)
 
 
 if __name__ == "__main__":
