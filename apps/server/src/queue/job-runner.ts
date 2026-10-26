@@ -252,6 +252,11 @@ export class JobRunner {
             answerMarkdown: result.answerMarkdown,
             resultProviderMeta: result.providerMeta,
             progress: 100,
+            // Clear error fields carried over from a previous failed attempt
+            // (setStatus preserves prior values when the patch omits them,
+            // so a SUCCEEDED job must explicitly null them).
+            errorClass: null,
+            errorMessage: null,
             // Provenance is measured from the provider's own report, never
             // assumed: mock provider => "mock"; worker reports simulated
             // false => "real"; anything else => "unknown" (shown as such).
