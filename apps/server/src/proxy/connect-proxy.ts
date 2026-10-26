@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, readFileSync, unlink } from "node:fs";
 import https from "node:https";
 import { tmpdir } from "node:os";
@@ -43,10 +43,43 @@ export interface FetchThroughResult {
 const BROWSER_UA =
   "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-function findCurl(): string | null {
-  for (const p of ["/usr/bin/curl", "/bin/curl", "/usr/local/bin/curl"]) {
+/** PATH lookup for curl, mirroring the shell (first hit wins). */
+function curlOnPath(): string | null {
+  const dirs = (process.env.PATH ?? "").split(path.delimiter).filter(Boolean);
+  for (const d of dirs) {
+    const p = path.join(d, "curl");
     if (existsSync(p)) return p;
   }
+  return null;
+}
+
+let cachedCurl: string | null | undefined;
+
+/**
+ * Select a WORKING curl binary. Mere existence is not enough: on the
+ * AI-TOOLS deployment the distro /usr/bin/curl exists but is broken at
+ * startup ("symbol lookup error: curl_global_trace") because a hand-built
+ * /usr/local/lib/libcurl.so.4 shadows the distro's versioned libcurl.
+ * Probe each candidate with --version and return the first that runs.
+ * The result is cached: re-probing every health check would waste a spawn
+ * per call, and a broken binary does not heal on its own.
+ */
+function findCurl(): string | null {
+  if (cachedCurl !== undefined) return cachedCurl;
+  const candidates: string[] = [];
+  for (const p of [curlOnPath(), "/usr/local/bin/curl", "/usr/bin/curl", "/bin/curl"]) {
+    if (p && !candidates.includes(p)) candidates.push(p);
+  }
+  for (const p of candidates) {
+    try {
+      execFileSync(p, ["--version"], { stdio: ["ignore", "pipe", "pipe"], timeout: 5000 });
+      cachedCurl = p;
+      return p;
+    } catch {
+      /* candidate does not run — try the next one */
+    }
+  }
+  cachedCurl = null;
   return null;
 }
 
