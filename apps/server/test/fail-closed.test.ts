@@ -12,7 +12,7 @@ import {
 } from "./helpers.js";
 
 /**
- * Fail-closed egress tests (docs/proxy-design.md §6).
+ * Fail-closed egress tests (docs/architecture/proxy-design.md §6).
  *
  * Core invariant asserted in every scenario: provider traffic ONLY ever goes
  * through an approved tunnel. The mock egress records every attempt; a

@@ -35,7 +35,7 @@ RUN apt-get update \
 # No Chromium here on purpose: the ONLY op that launches a browser is the
 # interactive Google login, and it CANNOT work inside a container — it reads
 # the user's REAL browser profile, which lives on the host. In Docker, attach
-# accounts via storage-state upload instead (see docs/quick-start.md §3).
+# accounts via storage-state upload instead (see docs/development/quick-start.md §3).
 # So we skip `playwright install-deps`/`install` (they'd pull browser system
 # libs for a browser that will never run here).
 RUN apt-get update \

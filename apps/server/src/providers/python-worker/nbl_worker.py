@@ -26,7 +26,7 @@ Security notes:
   * Nothing sensitive is printed; progress events carry only counters/ids.
   * Proxy routing (when required) is done via HTTPS_PROXY/HTTP_PROXY/
     ALL_PROXY env vars set by the supervisor BEFORE spawn — the notebooklm-py
-    web client honors them (default trust_env). See docs/proxy-design.md.
+    web client honors them (default trust_env). See docs/architecture/proxy-design.md.
 """
 
 from __future__ import annotations

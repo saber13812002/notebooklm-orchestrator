@@ -82,7 +82,7 @@ systemctl is-active "$SVC" >/dev/null 2>&1 \
   || log "warning: service $SVC is not active (first deploy?)"
 [ -f .env ] || log "warning: .env missing — server will run on defaults"
 if [ ! -x data/vendor/xray ] && [ "$DRY_RUN" != "1" ]; then
-  log "vendor xray missing — expected to be present from setup; install per docs/deployment.md §vendor"
+  log "vendor xray missing — expected to be present from setup; install per docs/deployment/s52-deploy.md §vendor"
 fi
 
 # ------------------------------------------------------------- 4. backup

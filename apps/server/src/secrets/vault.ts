@@ -6,7 +6,7 @@ import type { Db } from "../db/db.js";
 /**
  * File-DB hybrid secret store: AES-256-GCM, per-record random nonce.
  *
- * Threat model (documented in docs/security.md):
+ * Threat model (documented in docs/security/threat-model.md):
  *  - Protects against casual exposure, backup mistakes, and accidental
  *    logging of DB files.
  *  - The key file lives beside the data dir (mode 0600). Anyone with full

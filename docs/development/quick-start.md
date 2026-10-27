@@ -174,4 +174,4 @@ storage-state) → verify → AUTHENTICATED. شغل‌های در صف با حس
 - نود «پاسخ نداد» → URI را دوباره چک کن، یا «تست پینگ» روی همان ردیف؛
 - درخواست در `NEEDS_ATTENTION` گیر کرد → یعنی خطای مبهم وسط عملیات غیرقابل‌تکرار
   بود؛ از دکمه‌ی «دوباره در صف» پیش برو؛
-- جزئیات امنیت (چرا loopback، کوکی‌ها کجا، vault): [`security.md`](security.md).
+- جزئیات امنیت (چرا loopback، کوکی‌ها کجا، vault): [`threat-model.md`](../security/threat-model.md).
