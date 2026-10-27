@@ -29,5 +29,9 @@ Thumbs.db
 .idea/
 .vscode/
 
+# python
+__pycache__/
+*.pyc
+
 # vendor (downloaded at runtime, never in git)
 vendor/

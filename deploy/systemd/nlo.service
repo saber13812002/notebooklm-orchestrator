@@ -1,0 +1,40 @@
+# NotebookLM Orchestrator — s52 deployment (single-user, loopback only)
+#
+# Install:  sudo install -m 644 /tmp/nlo.service /etc/systemd/system/nlo.service
+#           sudo systemctl daemon-reload
+#           sudo systemctl enable --now nlo
+# Status:   systemctl status nlo | journalctl -u nlo -f
+#
+# Design notes:
+# - Type=simple + Restart=always: crash -> auto-restart after 5s (mission M3).
+# - ExecStart uses the repo-local tsx directly (no npm/npx layer) with
+#   WorkingDirectory=apps/server, exactly like `npm run start --workspace`.
+# - The server auto-loads <repo>/.env (see apps/server/src/config.ts
+#   loadDotEnv); NLO_HOST=127.0.0.1 in .env keeps the bind loopback-only.
+# - SIGTERM triggers the graceful drain in src/main.ts; TimeoutStopSec gives
+#   the queue up to 2 minutes to drain before SIGKILL.
+# - Logs go to the journal: journalctl -u nlo
+[Unit]
+Description=NotebookLM Orchestrator (single-user, loopback)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=saber
+Group=saber
+WorkingDirectory=/home/saber/saberprojects/notebooklm-orchestrator/apps/server
+Environment=PATH=/home/saber/.local/node22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/home/saber/saberprojects/notebooklm-orchestrator/node_modules/.bin/tsx src/main.ts
+Restart=always
+RestartSec=5
+TimeoutStopSec=120
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nlo
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
