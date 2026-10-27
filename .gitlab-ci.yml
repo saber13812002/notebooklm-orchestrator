@@ -1,0 +1,63 @@
+# NLO — CI (internal GitLab: git.ai.ismc.ir)
+#
+# MIRRORS the GitHub Actions pipeline (.github/workflows/ci.yml). GitHub remains
+# the source of truth; this file exists so the internal mirror can run the same
+# checks as soon as a runner is provisioned for this project.
+#
+# STATUS: ready, NOT yet active — no runner has been registered for this
+# project (provisioning requires maintainer approval; see
+# docs/operations/gitlab-sync.md). Until then, this pipeline will not run and
+# does not gate anything.
+#
+# The docker job is gated behind BUILD_DOCKER=1 (project CI/CD variable)
+# because it needs a runner with Docker access; the quality stage only needs
+# any docker-capable (or shell + node 22) runner.
+
+stages:
+  - quality
+  - docker
+
+variables:
+  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
+
+cache:
+  key:
+    files:
+      - package-lock.json
+  paths:
+    - .npm
+    - node_modules/.cache
+
+quality:
+  stage: quality
+  image: node:22-bookworm
+  script:
+    - npm ci
+    - npm run lint
+    - npm run format:check
+    - npm run typecheck
+    - npm test
+    - npm run build
+
+docker:
+  stage: docker
+  image: docker:27
+  services:
+    - docker:27-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker build -t nlo:ci .
+    - docker run -d --name nlo-smoke -p 127.0.0.1:4870:4870 nlo:ci
+    - |
+      for i in $(seq 1 30); do
+        if curl -fsS http://127.0.0.1:4870/api/health; then
+          echo "health OK"
+          exit 0
+        fi
+        sleep 2
+      done
+      docker logs nlo-smoke
+      exit 1
+  rules:
+    - if: $BUILD_DOCKER == "1"
