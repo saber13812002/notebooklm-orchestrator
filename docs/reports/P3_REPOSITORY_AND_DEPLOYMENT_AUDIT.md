@@ -2,7 +2,9 @@
 
 **Date:** 2026-10-27 (UTC) · **Server:** s52 (`172.20.1.52`), service `nlo`, port 4870
 **Repo:** `https://github.com/saber13812002/notebooklm-orchestrator`
-**Final deployed commit:** `180e5a2` (local `main` == `origin/main` == s52)
+**Final state:** local `main` == `origin/main` == s52 git HEAD (all at the
+tip of `main`, docs-only deltas on top of `180e5a2`). The running application
+on s52 is functionally identical to `180e5a2` (no code delta).
 
 All statements below were verified by direct inspection on 2026-10-27; nothing
 in this report is assumed from earlier phases.
