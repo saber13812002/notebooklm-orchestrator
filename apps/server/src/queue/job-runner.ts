@@ -213,10 +213,18 @@ export class JobRunner {
           // cancelled job records no artifacts, no "ok" attempt and no
           // account success.
           if (controller.signal.aborted) {
-            this.d.jobs.recordAttempt(jobId, attemptNo, account.id, nodeId, attemptStart, "cancelled", {
-              reason: "user",
-              note: "provider operation completed after the cancel request; result discarded",
-            });
+            this.d.jobs.recordAttempt(
+              jobId,
+              attemptNo,
+              account.id,
+              nodeId,
+              attemptStart,
+              "cancelled",
+              {
+                reason: "user",
+                note: "provider operation completed after the cancel request; result discarded",
+              },
+            );
             this.d.jobs.setStatus(jobId, "CANCELLED", {
               errorClass: "provider",
               errorMessage: "cancelled by user (provider operation completed server-side)",

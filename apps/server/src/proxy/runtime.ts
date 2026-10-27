@@ -551,7 +551,9 @@ export function createXrayProxyRuntime(opts: {
     log(`xray runtime enabled: ${binPath}`);
     return new XrayProxyRuntime(binPath, path.join(opts.vendorDir, "cfg"), log);
   }
-  log(`xray binary not found (looked in ${candidates.join(", ")}) — using safe stub (not_configured, fail-closed)`);
+  log(
+    `xray binary not found (looked in ${candidates.join(", ")}) — using safe stub (not_configured, fail-closed)`,
+  );
   return new XrayProxyRuntimeStub();
 }
 

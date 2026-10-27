@@ -13,14 +13,14 @@ in this report is assumed from earlier phases.
 
 ## Mission 1 — Actual repository state (as found)
 
-| | Local (Windows dev) | GitHub `origin/main` | s52 deployed |
-|---|---|---|---|
-| Branch | `main` | `main` | `main` |
-| HEAD at inspection | `a909905` | `7df8aa6` | `7df8aa6` |
-| Working tree | clean | n/a | `M` on 2 files + 2 untracked `.bak` files |
-| `5bcccad` present | yes | **no** | **no** (as commit) |
-| `a909905` present | yes | **no** | **no** (as commit) |
-| Untracked | `deploy/`, one `.pyc` | n/a | 2 `.bak` files (P2 backups) |
+|                    | Local (Windows dev)   | GitHub `origin/main` | s52 deployed                              |
+| ------------------ | --------------------- | -------------------- | ----------------------------------------- |
+| Branch             | `main`                | `main`               | `main`                                    |
+| HEAD at inspection | `a909905`             | `7df8aa6`            | `7df8aa6`                                 |
+| Working tree       | clean                 | n/a                  | `M` on 2 files + 2 untracked `.bak` files |
+| `5bcccad` present  | yes                   | **no**               | **no** (as commit)                        |
+| `a909905` present  | yes                   | **no**               | **no** (as commit)                        |
+| Untracked          | `deploy/`, one `.pyc` | n/a                  | 2 `.bak` files (P2 backups)               |
 
 **Key findings**
 
@@ -35,7 +35,7 @@ in this report is assumed from earlier phases.
    exactly match the `a909905` blobs:
    - `connect-proxy.ts` → `b4b1a7a7…` ✔
    - `job-runner.ts` → `7072a980…` ✔
-   No server-only work existed — nothing was missing from the local repo.
+     No server-only work existed — nothing was missing from the local repo.
 3. **A Python bytecode cache had been committed** to the repository
    (`apps/server/src/providers/python-worker/__pycache__/nbl_worker.cpython-312.pyc`)
    — a regenerable artifact in git history.
@@ -46,11 +46,11 @@ in this report is assumed from earlier phases.
 
 ## Mission 2 — Git workflow repair (actions taken, all non-destructive)
 
-| Commit | Change |
-|---|---|
+| Commit    | Change                                                                             |
+| --------- | ---------------------------------------------------------------------------------- |
 | `6c60855` | Add `deploy/systemd/nlo.service` (secret-free) + `.gitignore` python-cache entries |
-| `1744cc6` | `git rm --cached` the tracked `__pycache__/*.pyc` (regenerable artifact) |
-| `8d7362d` | Add `deploy/deploy.sh` + `docs/deployment.md` (reproducible procedure) |
+| `1744cc6` | `git rm --cached` the tracked `__pycache__/*.pyc` (regenerable artifact)           |
+| `8d7362d` | Add `deploy/deploy.sh` + `docs/deployment.md` (reproducible procedure)             |
 | `180e5a2` | PATH-hardened dep install + repo-local vitest in `deploy.sh` (non-interactive SSH) |
 
 - `origin` was already correctly configured (verified before changing
@@ -71,7 +71,7 @@ in this report is assumed from earlier phases.
 ## Mission 3 — Reproducible deployment procedure
 
 Implemented as [`deploy/deploy.sh`](../../deploy/deploy.sh) +
-[`docs/deployment.md`](../deployment.md). The script was **executed twice on
+[`docs/deployment/s52-deploy.md`](../deployment/s52-deploy.md). The script was **executed twice on
 the live server** (both `DEPLOY SUCCESS`):
 
 1. `git fetch origin`; resolve target commit; deploy only commits reachable
@@ -100,19 +100,19 @@ deploys; the third advanced a real commit
 
 ## Mission 4 — Live system verification (2026-10-27 08:35 UTC)
 
-| Check | Result |
-|---|---|
-| `nlo.service` | `active` (MainPID 1805140, restarted 08:35:38) |
-| UI `GET /` | 200 |
-| `/api/health` | `{"ok":true,…}` |
-| `/api/health/ready` | `ready:true`, provider `python-worker configured`, `proxyRuntime available (xray)`, `liveDisabled:true` |
-| Port 4870 | exactly **one** listener (service node process) — no duplicate instance |
-| Worker lifecycle | spawned with venv python (`pid=1805543`) during readiness validation → **exited code=0, signal=none**; historical `SIGTERM: shutting down (draining queue)` lines confirm graceful stops |
-| App commit | HEAD `180e5a2` == `data/deployed-commit` `180e5a2` |
-| Account | `acc_5a03a60bbda24085` ACTIVE, enabled, default |
-| Proxies | `france1-SeyedSaber` + `England_1` both enabled (config intact) |
-| Session | `sess_013327da4aff48eb` AUTHENTICATED, `hasStoredFile:true`; `sessionUsable:false` — **expected**: 10-min verification TTL expired ~15h ago (re-verify via `POST /api/sessions/:acc/verify` before the next live job) |
-| Tests | server suite **59/59 pass** on s52 (5 files) |
+| Check               | Result                                                                                                                                                                                                                |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `nlo.service`       | `active` (MainPID 1805140, restarted 08:35:38)                                                                                                                                                                        |
+| UI `GET /`          | 200                                                                                                                                                                                                                   |
+| `/api/health`       | `{"ok":true,…}`                                                                                                                                                                                                       |
+| `/api/health/ready` | `ready:true`, provider `python-worker configured`, `proxyRuntime available (xray)`, `liveDisabled:true`                                                                                                               |
+| Port 4870           | exactly **one** listener (service node process) — no duplicate instance                                                                                                                                               |
+| Worker lifecycle    | spawned with venv python (`pid=1805543`) during readiness validation → **exited code=0, signal=none**; historical `SIGTERM: shutting down (draining queue)` lines confirm graceful stops                              |
+| App commit          | HEAD `180e5a2` == `data/deployed-commit` `180e5a2`                                                                                                                                                                    |
+| Account             | `acc_5a03a60bbda24085` ACTIVE, enabled, default                                                                                                                                                                       |
+| Proxies             | `france1-SeyedSaber` + `England_1` both enabled (config intact)                                                                                                                                                       |
+| Session             | `sess_013327da4aff48eb` AUTHENTICATED, `hasStoredFile:true`; `sessionUsable:false` — **expected**: 10-min verification TTL expired ~15h ago (re-verify via `POST /api/sessions/:acc/verify` before the next live job) |
+| Tests               | server suite **59/59 pass** on s52 (5 files)                                                                                                                                                                          |
 
 No full live job was re-run: the deployment changed no application code
 (only `deploy/` + docs), and P2 already produced two real successful jobs
@@ -128,31 +128,31 @@ Selection/registration: single factory in
 [`app-context.ts`](../../apps/server/src/app-context.ts:103)
 (`config.provider === "python-worker"` → live adapter, else `MockProvider`).
 
-| Component | Files | Status |
-|---|---|---|
-| Provider contract + capability levels | `providers/types.ts` | **Implemented and verified** (enforced by app-context; both branches exercised) |
-| NotebookLM live adapter | `providers/python-worker/python-worker-provider.ts` (534 ln) | **Implemented and verified live** (P2: 2 real jobs, real notebook/source/conversation IDs, `simulated:false`) |
-| Mock provider | `providers/mock-provider.ts` | **Implemented and verified** (full test suite; honest `implemented_tested` levels) |
-| MCP client integration | — | **Not implemented** (zero references in codebase; remains a future evaluation option per `docs/provider-evaluation.md`) |
-| Python worker integration | `worker.ts` (supervisor: arg-array spawn, JSONL stdio, deadlines, process-group kill, SIGTERM→SIGKILL, stderr cap), `protocol.ts`, `nbl_worker.py` (ops: `ping`, `validate`, `verify`, `login`, `browser_import`, `job`) | **Implemented and verified** (live spawn/exit-code-0 observed; P2 jobs; P1 shutdown fix `7df8aa6`) |
-| Source management (audio) | job upload → archive `input/` → adapter `runJob` → worker `op_job` (ADD_SOURCE_FILE + processing wait) | **Implemented; wav verified live** (`.mp3` et al. declared unverified) |
-| Prompt execution | worker `op_job` conversation turn | **Implemented and verified live** (correct grounded answers, P2) |
-| Artifact / output registry | `domain/archive.ts` (per-job manifest, `execution/timeline.jsonl`, `output/answer.md`, `output/artifacts/`), `jobs.repo.recordAttempt`, `GET /api/jobs/:id/artifacts/:aid` + `/audio/download` | **Implemented and verified** (answer archived in P2; live worker honestly returns `artifacts: []` — chat answers are text) |
-| Job orchestration | `queue/queue.ts`, `queue/job-runner.ts` (state machine, attempts, fail-closed account/proxy selection, cancel, events) | **Implemented and verified** (job-lifecycle + fail-closed tests; P2 retry-after-502 success) |
-| Download manager | artifact + input-audio download endpoints only | **Partially implemented** — no general download subsystem for external (Drive/URL) sources; out of scope per mission |
+| Component                             | Files                                                                                                                                                                                                                    | Status                                                                                                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Provider contract + capability levels | `providers/types.ts`                                                                                                                                                                                                     | **Implemented and verified** (enforced by app-context; both branches exercised)                                            |
+| NotebookLM live adapter               | `providers/python-worker/python-worker-provider.ts` (534 ln)                                                                                                                                                             | **Implemented and verified live** (P2: 2 real jobs, real notebook/source/conversation IDs, `simulated:false`)              |
+| Mock provider                         | `providers/mock-provider.ts`                                                                                                                                                                                             | **Implemented and verified** (full test suite; honest `implemented_tested` levels)                                         |
+| MCP client integration                | —                                                                                                                                                                                                                        | **Not implemented** (zero references in codebase; remains a future evaluation option per `docs/provider-evaluation.md`)    |
+| Python worker integration             | `worker.ts` (supervisor: arg-array spawn, JSONL stdio, deadlines, process-group kill, SIGTERM→SIGKILL, stderr cap), `protocol.ts`, `nbl_worker.py` (ops: `ping`, `validate`, `verify`, `login`, `browser_import`, `job`) | **Implemented and verified** (live spawn/exit-code-0 observed; P2 jobs; P1 shutdown fix `7df8aa6`)                         |
+| Source management (audio)             | job upload → archive `input/` → adapter `runJob` → worker `op_job` (ADD_SOURCE_FILE + processing wait)                                                                                                                   | **Implemented; wav verified live** (`.mp3` et al. declared unverified)                                                     |
+| Prompt execution                      | worker `op_job` conversation turn                                                                                                                                                                                        | **Implemented and verified live** (correct grounded answers, P2)                                                           |
+| Artifact / output registry            | `domain/archive.ts` (per-job manifest, `execution/timeline.jsonl`, `output/answer.md`, `output/artifacts/`), `jobs.repo.recordAttempt`, `GET /api/jobs/:id/artifacts/:aid` + `/audio/download`                           | **Implemented and verified** (answer archived in P2; live worker honestly returns `artifacts: []` — chat answers are text) |
+| Job orchestration                     | `queue/queue.ts`, `queue/job-runner.ts` (state machine, attempts, fail-closed account/proxy selection, cancel, events)                                                                                                   | **Implemented and verified** (job-lifecycle + fail-closed tests; P2 retry-after-502 success)                               |
+| Download manager                      | artifact + input-audio download endpoints only                                                                                                                                                                           | **Partially implemented** — no general download subsystem for external (Drive/URL) sources; out of scope per mission       |
 
 Live adapter declared capability matrix (from
 `capabilities()`, `python-worker-provider.ts:187`):
 
-| Operation | Declared level | Live evidence |
-|---|---|---|
-| validateConfiguration | `implemented_tested` | readiness check green on s52 |
-| getAccountStatus | `implemented_untested_live` | verified: 165 notebooks, `mismatch:false` |
-| login (interactive Playwright) | `implemented_untested_live` | not exercised — s52 used `browser_import` instead (which *is* live-verified) |
-| submitAudioJob | `implemented_untested_live` | live-verified in P2 (upload + processing) |
-| retrieveResult | `implemented_untested_live` | live-verified in P2 (correct answers) |
-| retrieveArtifacts | `unsupported` | honest — chat workflow yields text only |
-| cancelJob | `experimental` | kill-worker semantics; in-flight op may still finish |
+| Operation                      | Declared level              | Live evidence                                                                |
+| ------------------------------ | --------------------------- | ---------------------------------------------------------------------------- |
+| validateConfiguration          | `implemented_tested`        | readiness check green on s52                                                 |
+| getAccountStatus               | `implemented_untested_live` | verified: 165 notebooks, `mismatch:false`                                    |
+| login (interactive Playwright) | `implemented_untested_live` | not exercised — s52 used `browser_import` instead (which _is_ live-verified) |
+| submitAudioJob                 | `implemented_untested_live` | live-verified in P2 (upload + processing)                                    |
+| retrieveResult                 | `implemented_untested_live` | live-verified in P2 (correct answers)                                        |
+| retrieveArtifacts              | `unsupported`               | honest — chat workflow yields text only                                      |
+| cancelJob                      | `experimental`              | kill-worker semantics; in-flight op may still finish                         |
 
 Note: even after P2's live verification the declared levels remain
 `implemented_untested_live` — there is no `verified_live` level in

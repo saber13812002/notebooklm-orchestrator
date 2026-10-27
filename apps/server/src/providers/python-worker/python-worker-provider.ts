@@ -496,8 +496,7 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       const code = e instanceof WorkerError ? e.code : "unknown";
       const message = e instanceof Error ? e.message : String(e);
       const timedOut =
-        e instanceof WorkerError &&
-        (e.code === "timeout" || /timed out/.test(e.message));
+        e instanceof WorkerError && (e.code === "timeout" || /timed out/.test(e.message));
       const failed = timedOut ? " (operation failed: see timeout)" : "";
       throw new ProviderFailure({
         failureClass: this.toFailureClass(code),

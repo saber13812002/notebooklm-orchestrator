@@ -1,0 +1,26 @@
+# Line-ending normalization
+#
+# Prettier (npm run format:check) requires LF. Without this file, Windows
+# checkouts (core.autocrlf=true) materialize CRLF working trees and the
+# format gate fails for every file, while Linux checkouts see LF blobs.
+# Forcing eol=lf for text files makes the working tree, the index, and the
+# blobs agree on every platform, and keeps `git status` clean cross-machine.
+* text=auto eol=lf
+
+# Scripts that must keep LF even on Windows (deploy + systemd units).
+deploy/deploy.sh text eol=lf
+deploy/systemd/nlo.service text eol=lf
+
+# Binaries — never line-ending-normalize.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.gif binary
+*.pdf binary
+*.zip binary
+*.sqlite binary
+*.sqlite-shm binary
+*.sqlite-wal binary
+*.key binary
+*.pem binary

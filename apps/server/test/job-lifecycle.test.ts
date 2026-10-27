@@ -287,18 +287,20 @@ describe("cancellation", () => {
     parts.jobs.setStatus(job.id, "RUNNING");
     parts.jobs.setStatus(job.id, "CANCEL_REQUESTED");
 
-    const handler = (parts.runner as unknown as {
-      handleFailure: (
-        jobId: string,
-        accountId: string,
-        attemptNo: number,
-        nodeId: string | null,
-        attemptStart: string,
-        archive: JobArchive,
-        err: unknown,
-        wasAborted: boolean,
-      ) => Promise<"terminal" | "retry">;
-    }).handleFailure.bind(parts.runner);
+    const handler = (
+      parts.runner as unknown as {
+        handleFailure: (
+          jobId: string,
+          accountId: string,
+          attemptNo: number,
+          nodeId: string | null,
+          attemptStart: string,
+          archive: JobArchive,
+          err: unknown,
+          wasAborted: boolean,
+        ) => Promise<"terminal" | "retry">;
+      }
+    ).handleFailure.bind(parts.runner);
 
     // A NON-aborted failure (the provider was merely stalled when the cancel
     // landed) must still terminate the job as CANCELLED.

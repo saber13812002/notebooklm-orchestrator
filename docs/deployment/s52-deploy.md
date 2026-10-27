@@ -31,18 +31,18 @@ bash deploy/deploy.sh origin/main        # or a specific SHA / tag
 
 What the script does, in order:
 
-| Step | Action |
-|---|---|
-| 1 | `git fetch origin`; resolve target commit; refuse if not on `origin/main` (warns for local commits) |
-| 2 | Refuse if the working tree has uncommitted **tracked** changes |
-| 3 | Prerequisite warnings: service active, `.env` present, `data/vendor/xray` present |
-| 4 | Back up `data/nlo.sqlite` + `.env` to `data/backups/` (0600), prune to 5 |
-| 5 | `git checkout` the target (no-op if HEAD already matches) |
-| 6 | `npm ci --omit=dev` **only if** `package*.json` changed; venv sync **only if** `python-requirements.txt` changed |
-| 7 | `sudo systemctl restart nlo` |
-| 8 | Verify: unit `active`, `/api/health`, `/api/health/ready` (`ready:true`), port 4870 listening, journal free of new errors |
-| 9 | `apps/server` vitest suite (failures are reported, not fatal) |
-| 10 | Record the deployed commit to `data/deployed-commit` |
+| Step | Action                                                                                                                    |
+| ---- | ------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `git fetch origin`; resolve target commit; refuse if not on `origin/main` (warns for local commits)                       |
+| 2    | Refuse if the working tree has uncommitted **tracked** changes                                                            |
+| 3    | Prerequisite warnings: service active, `.env` present, `data/vendor/xray` present                                         |
+| 4    | Back up `data/nlo.sqlite` + `.env` to `data/backups/` (0600), prune to 5                                                  |
+| 5    | `git checkout` the target (no-op if HEAD already matches)                                                                 |
+| 6    | `npm ci --omit=dev` **only if** `package*.json` changed; venv sync **only if** `python-requirements.txt` changed          |
+| 7    | `sudo systemctl restart nlo`                                                                                              |
+| 8    | Verify: unit `active`, `/api/health`, `/api/health/ready` (`ready:true`), port 4870 listening, journal free of new errors |
+| 9    | `apps/server` vitest suite (failures are reported, not fatal)                                                             |
+| 10   | Record the deployed commit to `data/deployed-commit`                                                                      |
 
 **Dry run** (no restart, no backup, no checkout):
 
