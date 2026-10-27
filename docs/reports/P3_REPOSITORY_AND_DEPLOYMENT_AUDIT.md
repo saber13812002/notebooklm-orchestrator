@@ -92,11 +92,11 @@ Rollback = re-run at the previous good commit (printed on every run); DB
 restore from `data/backups/` is a separate manual step. Dry-run mode:
 `NLO_DEPLOY_DRY_RUN=1`.
 
-Execution evidence: backups created (`nlo-…-180e5a2.sqlite`,
-`env-…-180e5a2.env`), restart clean, all verifications green, **59/59 tests
-passed**. Caveat: both live runs were *no-op* deploys (HEAD already at
-target), so the checkout branch of the script is code-reviewed but not yet
-exercised by a live commit advance.
+Execution evidence (3 live runs, all `DEPLOY SUCCESS`): backups created
+(`nlo-…-<sha>.sqlite`, `env-…-<sha>.env`), clean restarts, all verifications
+green, **59/59 tests passed** every run. The first two runs were no-op
+deploys; the third advanced a real commit
+(`git checkout: 180e5a2 -> 888e8f9`), proving the checkout path end-to-end.
 
 ## Mission 4 — Live system verification (2026-10-27 08:35 UTC)
 
@@ -168,16 +168,14 @@ Note: even after P2's live verification the declared levels remain
 2. **England node instability** — intermittent TLS resets
    (`curl exited 35`); France is the reliable route. Monitor via the proxy
    panel; consider disabling the flaky node.
-3. **Exercise the deploy checkout path once for real** (advance to a new
-   commit and deploy) to close the one untested branch of `deploy.sh`.
-4. **Clean up s52 P2 leftovers** — untracked
+3. **Clean up s52 P2 leftovers** — untracked
    `connect-proxy.ts.bak-curlfix`, `job-runner.ts.bak-e2efix` (safe to delete
    once the next deploy backup exists).
-5. **Upgrade capability levels** to a `verified_live` tier with P2 evidence;
+4. **Upgrade capability levels** to a `verified_live` tier with P2 evidence;
    verify `.mp3` upload and interactive `login` live to move them.
-6. **MCP integration** remains unimplemented — revisit only when the
+5. **MCP integration** remains unimplemented — revisit only when the
    provider-evaluation decision calls for it.
-7. s52's local git has no `origin` remote (it fetches the GitHub URL
+6. s52's local git has no `origin` remote (it fetches the GitHub URL
    directly in the deploy script); optionally `git remote add origin …` for
    convenience.
 
