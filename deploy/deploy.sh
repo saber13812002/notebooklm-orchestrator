@@ -40,6 +40,15 @@ DRY_RUN="${NLO_DEPLOY_DRY_RUN:-0}"
 log()  { printf '\033[1;34m[deploy]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[deploy:FAIL]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Non-interactive SSH shells may lack the node install on PATH (it is set in
+# login profiles / the systemd unit). Prepend known node locations.
+for d in /home/saber/.local/node22/bin /usr/local/bin /usr/bin; do
+  if [ -x "$d/npm" ]; then
+    case ":$PATH:" in *":$d:"*) ;; *) PATH="$d:$PATH";; esac
+  fi
+done
+export PATH
+
 command -v git >/dev/null || fail "git not found"
 [ -f package.json ] || fail "not a repo root: $REPO"
 
@@ -151,8 +160,14 @@ else
 fi
 
 # ----------------------------------------------- 9. regression (server tests)
-log "running server regression tests (vitest)"
-if (cd apps/server && npx vitest run --silent); then
+# Non-interactive shells may not have a custom node install on PATH —
+# prepend the repo-local .bin so the test run never depends on the caller's
+# shell environment.
+VIT="$REPO/node_modules/.bin/vitest"
+[ -x "$VIT" ] || VIT="$REPO/apps/server/node_modules/.bin/vitest"
+if [ ! -x "$VIT" ]; then
+  log "WARNING — vitest binary not found (run 'npm ci' first); skipping tests"
+elif (cd apps/server && "$VIT" run --silent); then
   log "tests: PASS"
 else
   log "WARNING — test suite reported failures (service is running; review output above)"
