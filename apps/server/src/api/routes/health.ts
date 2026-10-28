@@ -2,16 +2,20 @@ import type { FastifyInstance } from "fastify";
 import type { AppContext } from "../../app-context.js";
 import { parseAllowEntry, ApiCodes, ApiError } from "@nlo/shared";
 
-export function registerHealthRoutes(app: FastifyInstance, ctx: AppContext): void {
+export function registerHealthRoutes(
+  app: FastifyInstance,
+  ctx: AppContext,
+  base: string = "/api",
+): void {
   // Liveness (no auth).
-  app.get("/api/health", async () => ({
+  app.get(`${base}/health`, async () => ({
     ok: true,
     service: "notebooklm-orchestrator",
     time: new Date().toISOString(),
   }));
 
   // Readiness: reports provider/proxy runtime state honestly.
-  app.get("/api/health/ready", async () => {
+  app.get(`${base}/health/ready`, async () => {
     const runtime = ctx.runtime.status();
     const providerConfig = await ctx.provider.validateConfiguration().catch(() => ({
       ok: false,
@@ -31,7 +35,7 @@ export function registerHealthRoutes(app: FastifyInstance, ctx: AppContext): voi
   });
 
   // Provider account health probe (safe: no network in mock; gated in live).
-  app.post<{ Body: { accountId: string } }>("/api/health/account", async (req, reply) => {
+  app.post<{ Body: { accountId: string } }>(`${base}/health/account`, async (req, reply) => {
     const { accountId } = req.body ?? {};
     if (!accountId) {
       return reply.code(400).send({
@@ -49,7 +53,7 @@ export function registerHealthRoutes(app: FastifyInstance, ctx: AppContext): voi
 
   // SSRF-guarded destination reachability check. The destination is NOT
   // user-supplied here; it is resolved from the server allowlist by name.
-  app.post<{ Body: { name: string } }>("/api/health/egress", async (req, reply) => {
+  app.post<{ Body: { name: string } }>(`${base}/health/egress`, async (req, reply) => {
     const name = (req.body?.name ?? "").trim();
     const entry = ctx.config.healthAllowlist.find((raw) => {
       try {

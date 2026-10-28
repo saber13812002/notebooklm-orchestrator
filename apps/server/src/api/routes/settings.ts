@@ -23,8 +23,12 @@ const DEFAULTS: Record<string, number> = {
   jobs_max_prompt_chars: 20_000,
 };
 
-export function registerSettingsRoutes(app: FastifyInstance, ctx: AppContext): void {
-  app.get("/api/settings", async () => {
+export function registerSettingsRoutes(
+  app: FastifyInstance,
+  ctx: AppContext,
+  base: string = "/api",
+): void {
+  app.get(`${base}/settings`, async () => {
     const rows = ctx.db.raw.prepare("SELECT key, value_json, updated_at FROM settings").all() as {
       key: string;
       value_json: string;
@@ -43,7 +47,7 @@ export function registerSettingsRoutes(app: FastifyInstance, ctx: AppContext): v
     };
   });
 
-  app.put("/api/settings", async (req, reply) => {
+  app.put(`${base}/settings`, async (req, reply) => {
     const body = settingsSchema.parse(req.body);
     if (Object.keys(body).length === 0) {
       return reply.code(400).send({
@@ -76,7 +80,7 @@ export function registerSettingsRoutes(app: FastifyInstance, ctx: AppContext): v
    * Secret inventory for the admin UI: refs + kinds only, NEVER values.
    * The UI renders masked refs (e.g. `vless-uuid:••••-1234`).
    */
-  app.get("/api/secrets", async () => {
+  app.get(`${base}/secrets`, async () => {
     // Refs may embed credentials (e.g. `vless-uuid:<uuid>`); mask them.
     const secrets = ctx.vault.list().map((s) => ({ ...s, ref: redactSecrets(s.ref) }));
     return { secrets };

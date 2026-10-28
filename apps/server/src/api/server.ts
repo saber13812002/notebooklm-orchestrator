@@ -12,6 +12,7 @@ import { registerProxyRoutes } from "./routes/proxies.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
+import { registerV1Routes } from "./v1.js";
 
 /**
  * Build the Fastify app. Binds to config.host (default 127.0.0.1).
@@ -126,6 +127,10 @@ export async function buildApp(
   registerProviderRoutes(app, ctx);
   registerSessionRoutes(app, ctx);
   registerSettingsRoutes(app, ctx);
+
+  // Versioned product API (/api/v1 + OpenAPI + Swagger). Additive: the
+  // legacy loopback surface above is byte-for-byte unchanged.
+  await registerV1Routes(app, ctx);
 
   return app;
 }

@@ -20,8 +20,12 @@ const updateAccount = z.object({
   quotaNote: z.string().max(200).nullable().optional(),
 });
 
-export function registerAccountRoutes(app: FastifyInstance, ctx: AppContext): void {
-  app.post("/api/accounts", async (req, reply) => {
+export function registerAccountRoutes(
+  app: FastifyInstance,
+  ctx: AppContext,
+  base: string = "/api",
+): void {
+  app.post(`${base}/accounts`, async (req, reply) => {
     const body = createAccount.parse(req.body);
     const account = ctx.accounts.create({
       label: body.label,
@@ -33,15 +37,15 @@ export function registerAccountRoutes(app: FastifyInstance, ctx: AppContext): vo
     return reply.code(201).send(sanitizeAccount(account));
   });
 
-  app.get("/api/accounts", async () => ctx.accounts.list().map(sanitizeAccount));
+  app.get(`${base}/accounts`, async () => ctx.accounts.list().map(sanitizeAccount));
 
-  app.get<{ Params: { id: string } }>("/api/accounts/:id", async (req) => {
+  app.get<{ Params: { id: string } }>(`${base}/accounts/:id`, async (req) => {
     const a = ctx.accounts.get(req.params.id);
     if (!a) throw new ApiError(ApiCodes.notFound, "account not found", 404);
     return sanitizeAccount(a);
   });
 
-  app.patch<{ Params: { id: string } }>("/api/accounts/:id", async (req) => {
+  app.patch<{ Params: { id: string } }>(`${base}/accounts/:id`, async (req) => {
     const body = updateAccount.parse(req.body);
     const a = ctx.accounts.update(req.params.id, body);
     return sanitizeAccount(a);
@@ -51,13 +55,13 @@ export function registerAccountRoutes(app: FastifyInstance, ctx: AppContext): vo
   // account may be default — the repo enforces the invariant atomically.
   const defaultBody = z.object({ isDefault: z.boolean() });
 
-  app.post<{ Params: { id: string } }>("/api/accounts/:id/default", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/accounts/:id/default`, async (req) => {
     const body = defaultBody.parse(req.body ?? {});
     const a = ctx.accounts.setDefault(req.params.id, body.isDefault);
     return sanitizeAccount(a);
   });
 
-  app.delete<{ Params: { id: string } }>("/api/accounts/:id", async (req, reply) => {
+  app.delete<{ Params: { id: string } }>(`${base}/accounts/:id`, async (req, reply) => {
     const ok = ctx.accounts.delete(req.params.id);
     if (!ok) throw new ApiError(ApiCodes.notFound, "account not found", 404);
     // Account removal must also handle its stored session safely: the
@@ -78,7 +82,7 @@ export function registerAccountRoutes(app: FastifyInstance, ctx: AppContext): vo
   });
 
   // Safe provider-backed health check (no network in mock).
-  app.post<{ Params: { id: string } }>("/api/accounts/:id/health", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/accounts/:id/health`, async (req) => {
     const a = ctx.accounts.get(req.params.id);
     if (!a) throw new ApiError(ApiCodes.notFound, "account not found", 404);
     const credentialRef = a.authSecretRef ?? `session:${a.id}`;

@@ -1,11 +1,10 @@
-import { pipeline } from "node:stream/promises";
-import path from "node:path";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";
-import { ApiError, ApiCodes, resolveWithin, safeName, type JobInput } from "@nlo/shared";
+import { ApiError, ApiCodes, resolveWithin, safeName } from "@nlo/shared";
 import type { AppContext } from "../../app-context.js";
-import { JobArchive } from "../../domain/archive.js";
 import { dataPaths } from "../../config.js";
+import { createJobFromUpload, parseJobMultipart } from "../job-create.js";
+import "../request-augment.js";
 
 const listQuery = z.object({
   status: z.string().optional(),
@@ -16,139 +15,51 @@ const listQuery = z.object({
   offset: z.coerce.number().int().min(0).optional(),
 });
 
-export function registerJobRoutes(app: FastifyInstance, ctx: AppContext): void {
+/** A valid Idempotency-Key: 8-128 chars, printable, unambiguous. */
+const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._-]{8,128}$/;
+
+export function registerJobRoutes(
+  app: FastifyInstance,
+  ctx: AppContext,
+  base: string = "/api",
+): void {
   // Create a job: multipart with fields prompt, preferredAccountId,
   // preferredNodeId and an optional file part "audio".
-  app.post("/api/jobs", async (req, reply) => {
-    const fields: Record<string, string> = {};
-    // The multipart iterator only advances past a file part once its stream is
-    // consumed, so we MUST drain each file stream INSIDE the loop (to a temp
-    // file) or the request hangs forever.
-    let audio: { filename: string; type: string; tempPath: string } | null = null;
-    let tempAudioPath: string | null = null;
-
-    try {
-      for await (const part of req.parts()) {
-        if (part.type === "file") {
-          if (!audio) {
-            tempAudioPath = await saveMultipartToTemp(ctx, part.file);
-            audio = {
-              filename: part.filename ?? "upload",
-              type: part.mimetype ?? "application/octet-stream",
-              tempPath: tempAudioPath,
-            };
-          } else {
-            await drainStream(part.file); // extra file parts: discard
-          }
-        } else if (part.fieldname) {
-          fields[part.fieldname] = String(part.value);
-        }
+  //
+  // Idempotency (C5): an `Idempotency-Key` header is honored ONLY when the
+  // request carries a resolved API token (the v1 surface). Legacy loopback
+  // callers have no token, so their behavior is unchanged (always a fresh
+  // job). A replay (same token + key) returns the ORIGINAL job with 200 and
+  // `x-idempotent-replay: true` — no second job, no second archive.
+  app.post(`${base}/jobs`, async (req, reply) => {
+    const parsed = await parseJobMultipart(req, ctx);
+    const rawKey = req.headers["idempotency-key"];
+    let idempotencyKey: string | null = null;
+    if (rawKey !== undefined) {
+      const key = Array.isArray(rawKey) ? (rawKey[0] ?? "") : String(rawKey);
+      if (!IDEMPOTENCY_KEY_RE.test(key)) {
+        await parsed.cleanup();
+        throw new ApiError(
+          ApiCodes.validation,
+          "Idempotency-Key must be 8-128 chars of [A-Za-z0-9._-]",
+          400,
+        );
       }
-    } catch (err) {
-      if (tempAudioPath) await rm(tempAudioPath);
-      throw err;
+      idempotencyKey = key;
     }
-
-    const prompt = (fields.prompt ?? "").trim();
-    if (!prompt) {
-      if (tempAudioPath) await rm(tempAudioPath);
-      throw new ApiError(ApiCodes.validation, "prompt is required", 400);
-    }
-
-    const preferredAccountId = fields.preferredAccountId || null;
-    const preferredNodeId = fields.preferredNodeId || null;
-    const title = (fields.title ?? "").trim() || null;
-
-    // Reject an unknown account ID up front (clearer than a runner failure
-    // later); the runner re-checks eligibility + a live verified session.
-    if (preferredAccountId && !ctx.accounts.get(preferredAccountId)) {
-      if (tempAudioPath) await rm(tempAudioPath);
-      throw new ApiError(ApiCodes.notFound, "preferred account not found", 404);
-    }
-
-    // Validate + hash the audio if present.
-    let audioMeta: JobInput["audio"] = {
-      originalName: "",
-      mediaType: "",
-      size: 0,
-      sha256: "",
-      providerConfirmed: false,
-    };
-
-    if (audio && tempAudioPath) {
-      const ext = path.extname(audio.filename).toLowerCase().replace(".", "");
-      try {
-        if (!ctx.config.allowedAudioExtensions.includes(ext)) {
-          throw new ApiError(ApiCodes.validation, `unsupported audio extension: .${ext}`, 400);
-        }
-        const size = await sizeOf(tempAudioPath);
-        if (size === 0) {
-          throw new ApiError(ApiCodes.validation, "audio file is empty", 400);
-        }
-        if (size > ctx.config.maxUploadBytes) {
-          throw new ApiError(ApiCodes.validation, "audio file exceeds size limit", 413);
-        }
-        const { sha256OfFile } = await import("../../domain/archive.js");
-        audioMeta = {
-          originalName: audio.filename,
-          mediaType: audio.type || `audio/${ext}`,
-          size,
-          sha256: sha256OfFile(tempAudioPath),
-          // Only .wav is confirmed by the real provider; others are unverified.
-          providerConfirmed: ext === "wav",
-        };
-      } catch (err) {
-        await rm(tempAudioPath);
-        throw err;
-      }
-    }
-
-    const job = ctx.jobs.create({
-      input: {
-        prompt,
-        title,
-        audio: audioMeta,
-        preferredAccountId,
-        preferredNodeId,
-      },
-      configSnapshot: {
-        provider: ctx.provider.name,
-        proxyRuntime: ctx.config.proxyRuntime,
-        host: ctx.config.host,
-      },
+    const { job, idempotentReplay } = await createJobFromUpload(ctx, parsed, {
+      idempotencyKey,
+      tokenId: req.apiToken?.id ?? null,
     });
-
-    // Initialize the archive and store the audio under a sanitized name.
-    try {
-      const archive = new JobArchive(dataPaths(ctx.config.dataDir).jobsDir, job.id);
-      archive.init({
-        prompt,
-        originalAudioName: audioMeta.size > 0 ? audioMeta.originalName : null,
-        audioMediaType: audioMeta.size > 0 ? audioMeta.mediaType : null,
-        configSnapshot: job.configSnapshot,
-        createdAt: job.createdAt,
-      });
-      if (audio && tempAudioPath) {
-        await archive.storeAudio(tempAudioPath, audioMeta.originalName);
-      }
-      ctx.jobs.appendEvent(job.id, "created", "job created and queued");
-    } catch {
-      // Roll back: fail the job, do not leak the raw error.
-      ctx.jobs.setStatus(job.id, "FAILED", {
-        errorClass: "invalid_input",
-        errorMessage: "archive initialization failed",
-      });
-      throw new ApiError(ApiCodes.validation, "could not store request", 400);
-    } finally {
-      // The temp upload is copied into the archive; drop the temp copy.
-      if (tempAudioPath) await rm(tempAudioPath);
+    if (idempotentReplay) {
+      reply.header("x-idempotent-replay", "true");
+      return reply.code(200).send({ id: job.id, status: job.status });
     }
-
     return reply.code(201).send({ id: job.id, status: job.status });
   });
 
   // List with filters + pagination.
-  app.get("/api/jobs", async (req) => {
+  app.get(`${base}/jobs`, async (req) => {
     const q = listQuery.parse(req.query);
     const status = q.status
       ? (q.status.split(",") as import("@nlo/shared").JobStatus[])
@@ -163,25 +74,25 @@ export function registerJobRoutes(app: FastifyInstance, ctx: AppContext): void {
     });
   });
 
-  app.get<{ Params: { id: string } }>("/api/jobs/:id", async (req) => {
+  app.get<{ Params: { id: string } }>(`${base}/jobs/:id`, async (req) => {
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
     return job;
   });
 
-  app.get<{ Params: { id: string } }>("/api/jobs/:id/events", async (req) => {
+  app.get<{ Params: { id: string } }>(`${base}/jobs/:id/events`, async (req) => {
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
     return ctx.jobs.events(job.id);
   });
 
-  app.get<{ Params: { id: string } }>("/api/jobs/:id/attempts", async (req) => {
+  app.get<{ Params: { id: string } }>(`${base}/jobs/:id/attempts`, async (req) => {
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
     return ctx.jobs.attempts(job.id);
   });
 
-  app.get<{ Params: { id: string } }>("/api/jobs/:id/artifacts", async (req) => {
+  app.get<{ Params: { id: string } }>(`${base}/jobs/:id/artifacts`, async (req) => {
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
     const rows = (ctx.jobs as unknown as { db: { raw: import("node:sqlite").DatabaseSync } }).db.raw
@@ -202,7 +113,7 @@ export function registerJobRoutes(app: FastifyInstance, ctx: AppContext): void {
 
   // Download a single artifact (safe: storage_key is server-assigned).
   app.get<{ Params: { id: string; artifactId: string } }>(
-    "/api/jobs/:id/artifacts/:artifactId",
+    `${base}/jobs/:id/artifacts/:artifactId`,
     async (req, reply) => {
       const job = ctx.jobs.get(req.params.id);
       if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
@@ -231,7 +142,7 @@ export function registerJobRoutes(app: FastifyInstance, ctx: AppContext): void {
   // server-stored at data/jobs/<id>/input/audio-<safeName> and the path is
   // re-derived from the job's own recorded metadata (resolveWithin keeps it
   // inside the job dir), so no client-controlled path component exists.
-  app.get<{ Params: { id: string } }>("/api/jobs/:id/audio", async (req, reply) => {
+  app.get<{ Params: { id: string } }>(`${base}/jobs/:id/audio`, async (req, reply) => {
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
     const { originalName, size, mediaType } = job.input.audio;
@@ -264,7 +175,7 @@ export function registerJobRoutes(app: FastifyInstance, ctx: AppContext): void {
   });
 
   // Download variant of the input audio (attachment disposition).
-  app.get<{ Params: { id: string } }>("/api/jobs/:id/audio/download", async (req, reply) => {
+  app.get<{ Params: { id: string } }>(`${base}/jobs/:id/audio/download`, async (req, reply) => {
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
     const { originalName, size, mediaType } = job.input.audio;
@@ -299,7 +210,7 @@ export function registerJobRoutes(app: FastifyInstance, ctx: AppContext): void {
     return reply.send(createReadStream(file));
   });
 
-  app.post<{ Params: { id: string } }>("/api/jobs/:id/cancel", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/jobs/:id/cancel`, async (req) => {
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
     // Terminal: nothing to do.
@@ -332,7 +243,7 @@ export function registerJobRoutes(app: FastifyInstance, ctx: AppContext): void {
   });
 
   // Re-queue a NEEDS_ATTENTION job (human reconciliation).
-  app.post<{ Params: { id: string } }>("/api/jobs/:id/requeue", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/jobs/:id/requeue`, async (req) => {
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
     if (job.status !== "NEEDS_ATTENTION") {
@@ -342,39 +253,4 @@ export function registerJobRoutes(app: FastifyInstance, ctx: AppContext): void {
     ctx.jobs.appendEvent(job.id, "requeued", "job requeued by operator");
     return { ok: true, status: "QUEUED" };
   });
-}
-
-async function saveMultipartToTemp(
-  ctx: AppContext,
-  stream: import("node:stream").Readable,
-): Promise<string> {
-  const { randomUUID } = await import("node:crypto");
-  const { mkdirSync, createWriteStream } = await import("node:fs");
-  const dir = path.join(dataPaths(ctx.config.dataDir).tempDir, "uploads");
-  mkdirSync(dir, { recursive: true });
-  const dest = path.join(dir, `upl_${randomUUID()}`);
-  const ws = createWriteStream(dest);
-  await pipeline(stream, ws);
-  return dest;
-}
-
-/** Consume and discard a stream (required to advance the multipart parser). */
-async function drainStream(stream: import("node:stream").Readable): Promise<void> {
-  const { Writable } = await import("node:stream");
-  const sink = new Writable({
-    write(_chunk, _enc, cb) {
-      cb();
-    },
-  });
-  await pipeline(stream, sink);
-}
-
-async function rm(file: string): Promise<void> {
-  const { rm: rmFn } = await import("node:fs/promises");
-  await rmFn(file, { force: true }).catch(() => {});
-}
-
-async function sizeOf(file: string): Promise<number> {
-  const { statSync } = await import("node:fs");
-  return statSync(file).size;
 }

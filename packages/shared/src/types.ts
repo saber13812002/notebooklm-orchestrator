@@ -183,6 +183,9 @@ export interface Job {
   conversationId?: string | null;
   operationIds?: Record<string, string> | null;
   resultProvenance?: ResultProvenance;
+  // --- idempotency (set only when created via a token-scoped API) ---
+  idempotencyKey?: string | null;
+  tokenId?: string | null;
 }
 
 export type FailureClass =

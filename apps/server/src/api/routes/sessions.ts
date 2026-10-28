@@ -23,7 +23,11 @@ import { PythonWorkerProvider } from "../../providers/python-worker/python-worke
 const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 const PROVIDER = "python-worker";
 
-export function registerSessionRoutes(app: FastifyInstance, ctx: AppContext): void {
+export function registerSessionRoutes(
+  app: FastifyInstance,
+  ctx: AppContext,
+  base: string = "/api",
+): void {
   const worker: PythonWorkerProvider | null =
     ctx.provider instanceof PythonWorkerProvider ? ctx.provider : null;
 
@@ -135,7 +139,7 @@ export function registerSessionRoutes(app: FastifyInstance, ctx: AppContext): vo
     };
   }
 
-  app.get("/api/sessions", async () => {
+  app.get(`${base}/sessions`, async () => {
     const accounts = ctx.accounts.list();
     return {
       provider: ctx.provider.name,
@@ -144,7 +148,7 @@ export function registerSessionRoutes(app: FastifyInstance, ctx: AppContext): vo
     };
   });
 
-  app.get<{ Params: { id: string } }>("/api/sessions/:id", async (req) => {
+  app.get<{ Params: { id: string } }>(`${base}/sessions/:id`, async (req) => {
     const acct = ctx.accounts.get(req.params.id);
     if (!acct) throw new ApiError(ApiCodes.notFound, "account not found", 404);
     return sessionView(acct.id);
@@ -191,7 +195,7 @@ export function registerSessionRoutes(app: FastifyInstance, ctx: AppContext): vo
     ctx.sessions.transition(accountId, PROVIDER, "AUTH_IN_PROGRESS", {});
   };
 
-  app.post<{ Params: { id: string } }>("/api/sessions/:id/login", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/sessions/:id/login`, async (req) => {
     const w = requireWorker();
     const acct = ctx.accounts.get(req.params.id);
     if (!acct) throw new ApiError(ApiCodes.notFound, "account not found", 404);
@@ -266,7 +270,7 @@ export function registerSessionRoutes(app: FastifyInstance, ctx: AppContext): vo
     timeoutSec: z.number().int().min(30).max(600).optional(),
   });
 
-  app.post<{ Params: { id: string } }>("/api/sessions/:id/browser-import", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/sessions/:id/browser-import`, async (req) => {
     const w = requireWorker();
     const acct = ctx.accounts.get(req.params.id);
     if (!acct) throw new ApiError(ApiCodes.notFound, "account not found", 404);
@@ -318,9 +322,9 @@ export function registerSessionRoutes(app: FastifyInstance, ctx: AppContext): vo
     const acct = ctx.accounts.getOrThrow(req.params.id);
     return verifyAccount(w, acct.id);
   };
-  app.post<{ Params: { id: string } }>("/api/sessions/:id/verify", verifyHandler);
+  app.post<{ Params: { id: string } }>(`${base}/sessions/:id/verify`, verifyHandler);
   // refresh is semantically the same check (the service decides)
-  app.post<{ Params: { id: string } }>("/api/sessions/:id/refresh", verifyHandler);
+  app.post<{ Params: { id: string } }>(`${base}/sessions/:id/refresh`, verifyHandler);
 
   // --- import a storage-state JSON ------------------------------------------
   const importBody = z.object({
@@ -328,7 +332,7 @@ export function registerSessionRoutes(app: FastifyInstance, ctx: AppContext): vo
     serverPath: z.string().min(1).max(1024).optional(),
   });
 
-  app.post<{ Params: { id: string } }>("/api/sessions/:id/import", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/sessions/:id/import`, async (req) => {
     const w = requireWorker();
     const acct = ctx.accounts.getOrThrow(req.params.id);
     const body = importBody.parse(req.body);
@@ -386,7 +390,7 @@ export function registerSessionRoutes(app: FastifyInstance, ctx: AppContext): vo
   });
 
   // --- logout ----------------------------------------------------------------
-  app.delete<{ Params: { id: string } }>("/api/sessions/:id", async (req) => {
+  app.delete<{ Params: { id: string } }>(`${base}/sessions/:id`, async (req) => {
     const w = requireWorker();
     const acct = ctx.accounts.getOrThrow(req.params.id);
     ctx.sessions.delete(acct.id, PROVIDER);

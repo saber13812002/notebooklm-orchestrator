@@ -26,13 +26,16 @@ export class JobsRepo {
     input: JobInput;
     configSnapshot: Record<string, unknown>;
     maxAttempts?: number;
+    /** Token-scoped idempotency anchor (both set together or both null). */
+    idempotencyKey?: string | null;
+    tokenId?: string | null;
   }): Job {
     const id = this.newId();
     const now = this.db.now();
     this.db.raw
       .prepare(
-        `INSERT INTO jobs (id, status, input_json, attempt, max_attempts, progress, config_snapshot_json, created_at, updated_at)
-         VALUES (?, 'CREATED', ?, 0, ?, 0, ?, ?, ?)`,
+        `INSERT INTO jobs (id, status, input_json, attempt, max_attempts, progress, config_snapshot_json, created_at, updated_at, idempotency_key, token_id)
+         VALUES (?, 'CREATED', ?, 0, ?, 0, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -41,8 +44,18 @@ export class JobsRepo {
         JSON.stringify(input.configSnapshot),
         now,
         now,
+        input.idempotencyKey ?? null,
+        input.tokenId ?? null,
       );
     return this.getOrThrow(id);
+  }
+
+  /** Look up a job by its token-scoped idempotency key (unique index). */
+  findByIdempotencyKey(tokenId: string, key: string): Job | null {
+    const row = this.db.raw
+      .prepare("SELECT * FROM jobs WHERE token_id = ? AND idempotency_key = ?")
+      .get(tokenId, key) as Record<string, unknown> | undefined;
+    return row ? this.map(row) : null;
   }
 
   get(id: string): Job | null {
@@ -334,6 +347,8 @@ export class JobsRepo {
         ? JSON.parse(row.operation_ids_json as string)
         : null) as Record<string, string> | null,
       resultProvenance: (row.result_provenance as ResultProvenance | undefined) ?? "unknown",
+      idempotencyKey: (row.idempotency_key as string | null) ?? null,
+      tokenId: (row.token_id as string | null) ?? null,
     };
   }
 }

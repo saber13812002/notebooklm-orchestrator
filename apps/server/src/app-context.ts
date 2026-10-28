@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dataPaths, loadConfig, type AppConfig } from "./config.js";
 import { Db } from "./db/db.js";
 import { AccountsRepo } from "./domain/accounts.repo.js";
+import { ApiTokensRepo } from "./domain/api-tokens.repo.js";
 import { AuthSessionsRepo } from "./domain/auth-sessions.repo.js";
 import { JobsRepo } from "./domain/jobs.repo.js";
 import { ProxiesRepo } from "./domain/proxies.repo.js";
@@ -28,6 +29,7 @@ export interface AppContext {
   sessions: AuthSessionsRepo;
   proxies: ProxiesRepo;
   jobs: JobsRepo;
+  apiTokens: ApiTokensRepo;
   provider: NotebookLMProvider;
   runtime: ProxyRuntime;
   egress: MockProviderEgress;
@@ -49,6 +51,7 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
   const sessions = new AuthSessionsRepo(db);
   const proxies = new ProxiesRepo(db);
   const jobs = new JobsRepo(db);
+  const apiTokens = new ApiTokensRepo(db);
 
   mkdirSync(paths.sessionsDir, { recursive: true, mode: 0o700 });
   mkdirSync(paths.vendorDir, { recursive: true });
@@ -162,6 +165,7 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     sessions,
     proxies,
     jobs,
+    apiTokens,
     provider,
     runtime,
     egress,

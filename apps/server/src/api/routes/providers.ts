@@ -9,8 +9,12 @@ import type { AppContext } from "../../app-context.js";
  * inflates or re-labels levels. The mock provider is clearly flagged so the
  * UI can label everything it produces as mock.
  */
-export function registerProviderRoutes(app: FastifyInstance, ctx: AppContext): void {
-  app.get("/api/provider", async () => {
+export function registerProviderRoutes(
+  app: FastifyInstance,
+  ctx: AppContext,
+  base: string = "/api",
+): void {
+  app.get(`${base}/provider`, async () => {
     const config = await ctx.provider.validateConfiguration().catch(() => ({
       ok: false,
       issues: ["provider validation failed"],

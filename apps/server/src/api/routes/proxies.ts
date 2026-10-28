@@ -25,9 +25,13 @@ const manualNode = z.object({
   priority: z.number().int().min(0).max(10000).optional(),
 });
 
-export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void {
+export function registerProxyRoutes(
+  app: FastifyInstance,
+  ctx: AppContext,
+  base: string = "/api",
+): void {
   // Add by URI (recommended): secret (UUID) goes straight to the vault.
-  app.post("/api/proxies", async (req, reply) => {
+  app.post(`${base}/proxies`, async (req, reply) => {
     const body = z
       .object({ uri: z.string().max(2048), priority: z.number().int().optional() })
       .parse(req.body);
@@ -46,7 +50,7 @@ export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void
   });
 
   // Add manually (all fields provided; UUID still vaulted).
-  app.post("/api/proxies/manual", async (req, reply) => {
+  app.post(`${base}/proxies/manual`, async (req, reply) => {
     const body = manualNode.parse(req.body);
     const ref = `vless-uuid:${body.uuid}`;
     ctx.vault.put(ref, body.uuid, "vless-uuid");
@@ -74,7 +78,7 @@ export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void
 
   // List with the persisted per-node health (last check), so the UI can
   // show a latency column without running fresh checks on load.
-  app.get("/api/proxies", async () =>
+  app.get(`${base}/proxies`, async () =>
     ctx.proxies.list().map((n) => ({ ...maskNode(n), health: ctx.proxies.health(n.id) })),
   );
 
@@ -85,7 +89,7 @@ export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void
   // allowlisted (the default), otherwise the first allowlist entry — the
   // SSRF guard only permits allowlisted targets, and tests use a fixed-IP
   // allowlist that deliberately excludes the real host.
-  app.post("/api/proxies/ping-all", async () => {
+  app.post(`${base}/proxies/ping-all`, async () => {
     const nblHost = "notebooklm.google.com";
     const nblAllowed = ctx.config.healthAllowlist.some(
       (e) => (e.includes(":") ? (e.split(":")[0] ?? "") : e).replace(/^\[|\]$/g, "") === nblHost,
@@ -116,7 +120,7 @@ export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void
     return { at: new Date().toISOString(), target: `${dest.host}:${dest.port}`, results };
   });
 
-  app.get<{ Params: { id: string } }>("/api/proxies/:id", async (req) => {
+  app.get<{ Params: { id: string } }>(`${base}/proxies/:id`, async (req) => {
     const n = ctx.proxies.get(req.params.id);
     if (!n) throw new ApiError(ApiCodes.notFound, "node not found", 404);
     return {
@@ -146,7 +150,7 @@ export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void
     preferred: z.boolean().optional(),
   });
 
-  app.patch<{ Params: { id: string } }>("/api/proxies/:id", async (req) => {
+  app.patch<{ Params: { id: string } }>(`${base}/proxies/:id`, async (req) => {
     const body = patchNode.parse(req.body);
     const current = ctx.proxies.getOrThrow(req.params.id);
     const config: ProxyNodeConfig = {
@@ -176,7 +180,7 @@ export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void
     return maskNode(node);
   });
 
-  app.delete<{ Params: { id: string } }>("/api/proxies/:id", async (req, reply) => {
+  app.delete<{ Params: { id: string } }>(`${base}/proxies/:id`, async (req, reply) => {
     const node = ctx.proxies.get(req.params.id);
     if (!node) throw new ApiError(ApiCodes.notFound, "node not found", 404);
     ctx.proxies.delete(req.params.id);
@@ -196,13 +200,13 @@ export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void
   });
 
   // Validate config only (no network).
-  app.post<{ Params: { id: string } }>("/api/proxies/:id/validate", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/proxies/:id/validate`, async (req) => {
     const node = ctx.proxies.getOrThrow(req.params.id);
     return ctx.proxyManager.validateConfig(node);
   });
 
   // Runtime availability (binary present? configured?).
-  app.get("/api/proxies/runtime", async () => ctx.runtime.status());
+  app.get(`${base}/proxies/runtime`, async () => ctx.runtime.status());
 
   // Full STAGED health check (config -> runtime -> tunnel -> REAL fetch
   // through the tunnel), SSRF-guarded. `target` selects the destination:
@@ -214,7 +218,7 @@ export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void
       target: z.enum(["egress", "notebooklm"]).optional(),
     })
     .optional();
-  app.post<{ Params: { id: string } }>("/api/proxies/:id/health", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/proxies/:id/health`, async (req) => {
     const node = ctx.proxies.getOrThrow(req.params.id);
     const body = healthBody?.parse(req.body ?? {});
     const dest =
@@ -228,7 +232,7 @@ export function registerProxyRoutes(app: FastifyInstance, ctx: AppContext): void
   });
 
   // Connectivity test through the tunnel (no egress IP assertion).
-  app.post<{ Params: { id: string } }>("/api/proxies/:id/connectivity", async (req) => {
+  app.post<{ Params: { id: string } }>(`${base}/proxies/:id/connectivity`, async (req) => {
     const node = ctx.proxies.getOrThrow(req.params.id);
     const status = ctx.runtime.status();
     if (status.state === "not_configured") {

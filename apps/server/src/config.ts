@@ -26,20 +26,35 @@ export interface AppConfig {
   jobTimeoutMs: number;
   /** Development only: allow live jobs without a proxy tunnel. */
   allowDirectEgress: boolean;
+  /**
+   * When true, the versioned API surface (/api/v1) REQUIRES a valid API
+   * token (Authorization: Bearer nlo_...). Loopback UI traffic to the
+   * legacy /api routes is unaffected. Default false: tokens are optional
+   * (used for audit attribution + idempotency) until the operator
+   * enables enforcement.
+   */
+  apiAuthEnforced: boolean;
+  /** Rate limit window (requests per window) for token-authenticated /api/v1 traffic. */
+  apiRateLimitMax: number;
+  /** Rate limit window duration. */
+  apiRateLimitWindowMs: number;
 }
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..", "..");
 
-function intEnv(name: string, def: number): number {
-  const raw = process.env[name];
+/** Env getter honoring `loadConfig` overrides over process.env. */
+type EnvGetter = (name: string) => string | undefined;
+
+function intEnv(env: EnvGetter, name: string, def: number): number {
+  const raw = env(name);
   if (!raw) return def;
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 0) throw new Error(`env ${name} must be a non-negative integer`);
   return n;
 }
 
-function boolEnv(name: string, def: boolean): boolean {
-  const raw = process.env[name];
+function boolEnv(env: EnvGetter, name: string, def: boolean): boolean {
+  const raw = env(name);
   if (raw === undefined || raw === "") return def;
   if (["1", "true", "yes", "on"].includes(raw.toLowerCase())) return true;
   if (["0", "false", "no", "off"].includes(raw.toLowerCase())) return false;
@@ -105,7 +120,7 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     throw new Error("NLO_PROXY_RUNTIME must be 'mock' or 'xray'");
   }
 
-  const maxUploadBytes = intEnv("NLO_MAX_UPLOAD_BYTES", 200 * 1024 * 1024);
+  const maxUploadBytes = intEnv(env, "NLO_MAX_UPLOAD_BYTES", 200 * 1024 * 1024);
   if (maxUploadBytes > 5 * 1024 * 1024 * 1024) {
     throw new Error("NLO_MAX_UPLOAD_BYTES is unreasonably large");
   }
@@ -124,19 +139,22 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
 
   return {
     host,
-    port: intEnv("NLO_PORT", 4870),
+    port: intEnv(env, "NLO_PORT", 4870),
     dataDir,
     vaultKey: vaultKey ?? null,
     provider: provider as AppConfig["provider"],
     proxyRuntime: proxyRuntime as AppConfig["proxyRuntime"],
     maxUploadBytes,
     allowedAudioExtensions,
-    liveTestsEnabled: boolEnv("NLO_LIVE_TESTS", false),
+    liveTestsEnabled: boolEnv(env, "NLO_LIVE_TESTS", false),
     healthAllowlist,
     pythonBin: env("NLO_PYTHON_BIN") ?? "python3",
     loginBrowser: env("NLO_LOGIN_BROWSER") ?? "chromium",
-    jobTimeoutMs: intEnv("NLO_JOB_TIMEOUT_MS", 30 * 60_000),
-    allowDirectEgress: boolEnv("NLO_ALLOW_DIRECT_EGRESS", false),
+    jobTimeoutMs: intEnv(env, "NLO_JOB_TIMEOUT_MS", 30 * 60_000),
+    allowDirectEgress: boolEnv(env, "NLO_ALLOW_DIRECT_EGRESS", false),
+    apiAuthEnforced: boolEnv(env, "NLO_API_AUTH", false),
+    apiRateLimitMax: intEnv(env, "NLO_API_RATE_LIMIT_MAX", 120),
+    apiRateLimitWindowMs: intEnv(env, "NLO_API_RATE_LIMIT_WINDOW_MS", 60_000),
   };
 }
 
