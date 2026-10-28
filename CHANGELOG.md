@@ -65,6 +65,23 @@ only with a recorded live run; otherwise "planned".
 - No push, no deploy: s52 continues serving from its current commit until
   a reviewed deploy is requested (Phase D territory).
 
+### Verified (2026-10-28 — live acceptance, `b5e9ad3` deployed on s52 at 13:43Z)
+
+- **Production smoke (s52):** `/api/health` + `/api/health/ready` 200;
+  `/api/openapi.json` (52 operations) + `/api/docs` (Swagger UI) live-verified;
+  legacy + v1 surfaces green; Web UI (index/asset/SPA fallback) 200; single
+  service instance; 3 jobs intact (no data loss); rollback `80a9e66` ready.
+- **Deployed-code feature checks** (sandbox, deployed code, mock provider,
+  `NLO_API_AUTH=true`): enforced auth (401/403/429 + audit), scopes,
+  revoked/disabled tokens, idempotent replay (`x-idempotent-replay`, no
+  duplicate job), correlation IDs (echo/generate), and the runnable
+  TypeScript client + Python client from `docs/api/README.md`.
+- **Not performed (honest):** the one controlled live audio-to-text job —
+  session re-verify failed at the NotebookLM region/anti-abuse gate
+  (`location=unsupported`, both egress nodes); mock results were never
+  reported as live. Full report:
+  `docs/reports/PHASE_C_LIVE_ACCEPTANCE.md`.
+
 ### Unchanged
 
 - Legacy `/api/*` behavior, loopback trust model, queue/provider/proxy

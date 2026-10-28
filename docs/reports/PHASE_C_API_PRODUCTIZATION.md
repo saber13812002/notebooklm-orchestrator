@@ -47,19 +47,19 @@ changes, no live-test runs (manual gate only).
 
 ## 3. Deliverables C1–C6 (with honest status labels)
 
-| Item                                                                                | Status                                                                                                       | Evidence                                                                                       |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| C1 legacy API audit                                                                 | IMPLEMENTED_AND_VERIFIED                                                                                     | §1 + `docs/reports/PHASE_A_AUDIT.md` §7; regression suite `api.test.ts` (59 tests) still green |
-| C2 OpenAPI at `/api/openapi.json` + Swagger `/api/docs` (mirrored under `/api/v1/`) | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                         | `spec.ts` + `v1.ts`; 24-test suite; bidirectional drift test                                   |
-| C3 `/api/v1/*` versioned surface (52 ops), legacy unchanged                         | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                         | "v1 mirrors the legacy surface" describe; legacy tests untouched                               |
-| C4 tokens: create/list/enable/revoke, scopes, hash-only                             | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                         | "token lifecycle", "enforced auth mode" describes                                              |
-| C4 per-token rate limiting                                                          | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                         | "per-token rate limiting" describe (429 + `retryAfterSeconds` + audit)                         |
-| C4 audit trail (append-only, token-attributed, no secrets)                          | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                         | "audit trail" describe; `api_audit_log` table                                                  |
-| C5 idempotent job creation (`Idempotency-Key`, token-scoped)                        | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                         | "idempotent job creation" describe                                                             |
-| C5 correlation IDs (`x-correlation-id`)                                             | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                         | "correlation ids" describe                                                                     |
-| C6 cURL + TypeScript + Python examples hitting the real API                         | IMPLEMENTED_AND_VERIFIED (examples reviewed against verified response shapes; not executed against live s52) | `docs/api/README.md`, `docs/api/examples/client.ts`                                            |
-| Webhooks                                                                            | NOT_IMPLEMENTED (Phase G, by plan)                                                                           | —                                                                                              |
-| External publishing / TLS / domain                                                  | NOT_IMPLEMENTED (Phase F, by plan)                                                                           | —                                                                                              |
+| Item                                                                                | Status                                                                                                                                                                                                                         | Evidence                                                                                       |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| C1 legacy API audit                                                                 | IMPLEMENTED_AND_VERIFIED                                                                                                                                                                                                       | §1 + `docs/reports/PHASE_A_AUDIT.md` §7; regression suite `api.test.ts` (59 tests) still green |
+| C2 OpenAPI at `/api/openapi.json` + Swagger `/api/docs` (mirrored under `/api/v1/`) | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                                                                                                                                           | `spec.ts` + `v1.ts`; 24-test suite; bidirectional drift test                                   |
+| C3 `/api/v1/*` versioned surface (52 ops), legacy unchanged                         | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                                                                                                                                           | "v1 mirrors the legacy surface" describe; legacy tests untouched                               |
+| C4 tokens: create/list/enable/revoke, scopes, hash-only                             | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                                                                                                                                           | "token lifecycle", "enforced auth mode" describes                                              |
+| C4 per-token rate limiting                                                          | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                                                                                                                                           | "per-token rate limiting" describe (429 + `retryAfterSeconds` + audit)                         |
+| C4 audit trail (append-only, token-attributed, no secrets)                          | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                                                                                                                                           | "audit trail" describe; `api_audit_log` table                                                  |
+| C5 idempotent job creation (`Idempotency-Key`, token-scoped)                        | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                                                                                                                                           | "idempotent job creation" describe                                                             |
+| C5 correlation IDs (`x-correlation-id`)                                             | IMPLEMENTED_AND_VERIFIED (Unit/Integration/E2E-mock)                                                                                                                                                                           | "correlation ids" describe                                                                     |
+| C6 cURL + TypeScript + Python examples hitting the real API                         | IMPLEMENTED_AND_VERIFIED (**executed** in the live acceptance: production-smoke cURL on s52 + TS/Python clients against deployed code with mock provider; live-NotebookLM NOT performed — see `PHASE_C_LIVE_ACCEPTANCE.md` §8) | `docs/api/README.md`, `docs/api/examples/client.ts`, `docs/reports/PHASE_C_LIVE_ACCEPTANCE.md` |
+| Webhooks                                                                            | NOT_IMPLEMENTED (Phase G, by plan)                                                                                                                                                                                             | —                                                                                              |
+| External publishing / TLS / domain                                                  | NOT_IMPLEMENTED (Phase F, by plan)                                                                                                                                                                                             | —                                                                                              |
 
 ## 4. New/changed files (by purpose)
 
@@ -253,7 +253,11 @@ Describes in `apps/server/test/openapi-v1.test.ts`:
 ## 12. Known limitations (honest)
 
 - Examples in `docs/api/` were validated against the verified in-process
-  shapes (tests), not executed against live s52 — that is a Phase D check.
+  shapes (tests); they were **executed** in the subsequent live acceptance
+  (`docs/reports/PHASE_C_LIVE_ACCEPTANCE.md` §8: production-smoke cURL on s52
+  - TS/Python clients against deployed code with mock provider). Live-
+    NotebookLM execution was NOT performed (session re-verify failed at the
+    region/anti-abuse gate — report §8.2, F7).
 - No live (`NLO_LIVE_TESTS`) run this phase; live behavior of v1 routes
   under the python-worker provider is untested (mock provider E2E covers the
   full request path).
@@ -261,6 +265,13 @@ Describes in `apps/server/test/openapi-v1.test.ts`:
   no idempotency for non-job POSTs (jobs only, by design for C5).
 - Swagger UI uses CDN assets; on air-gapped s52 the UI shell loads but
   swagger-ui assets may not (the JSON contract is unaffected).
+- Live-acceptance findings (F1–F7 in `docs/reports/PHASE_C_LIVE_ACCEPTANCE.md`
+  §10), in brief: F1 legacy spec `servers[0].url` points at `/api/v1`
+  (cosmetic); F2 no first-admin-token bootstrap mechanism; F3/F6 provider
+  exceptions surface as 500 `internal_error` instead of structured results
+  (pre-existing); F4 job create with no `content-type` → 406; **F7
+  NotebookLM region gate blocks live egress from s52 via both proxy nodes**
+  (environmental, blocks live session verify and live jobs).
 
 ## 13. Next phase input (Phase D — deployment packaging)
 
@@ -294,3 +305,16 @@ prepared/done, no push, no deploy. Two real product bugs (v1 hook deadlock —
 critical; config overrides ignored) were found by the new tests and fixed.
 
 **Awaiting approval to start Phase D (deployment packaging).**
+
+## 16. Addendum (2026-10-28) — live acceptance executed
+
+After this report was committed, the user-directed mission **"Phase C Live
+Acceptance — Safe Release, Production Deployment and API Verification"** was
+executed: `b5e9ad3` pushed to `origin/main` and deployed to s52 at
+2026-10-28T13:43Z (rollback `80a9e667b283f440cf7e69de159b91251b28df15`).
+OpenAPI/Swagger, token auth (enforced mode on deployed-code sandbox),
+idempotency/correlation, third-party client examples (cURL production-smoke +
+TypeScript/Python sandbox-mock), and full regression (152/152) all **passed**;
+the controlled live audio-to-text job was **not** performed (no valid session
+— region gate, F7). Full evidence and honest status labels:
+[`docs/reports/PHASE_C_LIVE_ACCEPTANCE.md`](PHASE_C_LIVE_ACCEPTANCE.md).

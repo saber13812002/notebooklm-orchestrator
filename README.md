@@ -19,7 +19,11 @@
 - استقرار: [`docs/deployment/s52-deploy.md`](docs/deployment/s52-deploy.md)
 - امنیت (threat model): [`docs/security/threat-model.md`](docs/security/threat-model.md)
 - برنامه توسعه: [`docs/development/plan.md`](docs/development/plan.md)
-- گزارش‌های بازرسی: [`docs/reports/`](docs/reports/)
+- گزارش‌های بازرسی: [`docs/reports/`](docs/reports/) — شامل
+  [`PHASE_C_LIVE_ACCEPTANCE.md`](docs/reports/PHASE_C_LIVE_ACCEPTANCE.md)
+  (پذیرش زنده‌ی فاز C: استقرار `b5e9ad3` روی s52 در ۲۰۲۶-۱۰-۲۸T13:43Z؛
+  OpenAPI/Swagger + auth + idempotency + نمونه‌های cURL/TS/Python تأیید شدند؛
+  **شغل زنده‌ی NotebookLM انجام نشد** — دروازه‌ی region خروجی، گزارش §8.2/F7)
 - مستندات مشتری (Wiki): [`docs/wiki/`](docs/wiki/)
 - مستندات API (OpenAPI/Swagger/`/api/v1`/Token Auth):
   [`docs/api/README.md`](docs/api/README.md) — spec روی `/api/openapi.json`،
@@ -169,22 +173,22 @@ Token Auth روی `/api/v1` (اختیاری یا اجباری) از فاز C م�
 
 ## وضعیت واقعی قابلیت‌ها (صادقانه)
 
-| قابلیت                                                            | وضعیت                                                        |
-| ----------------------------------------------------------------- | ------------------------------------------------------------ |
-| Job audio + prompt → پاسخ (provider واقعی)                        | implemented + **live-verified**                              |
-| Mock provider (توسعه آفلاین)                                      | implemented + tested                                         |
-| مدیریت حساب گوگل (cookie/storage-state)                           | implemented + live-verified                                  |
-| Nودهای VLESS + پروکسی Xray + fail-closed egress                   | implemented + live-verified (egress guard: unit-tested)      |
-| آرشیو job (manifest/timeline/artifacts) + دانلود                  | implemented + tested                                         |
-| Docker (اجرای محلی)                                               | implemented (image self-contained)                           |
-| استقرار git-based + rollback (s52)                                | implemented + verified on s52                                |
-| OpenAPI / Swagger / `/api/v1`                                     | implemented + tested (Phase C؛ spec↔live drift-checked)      |
-| Token Auth برای مصرف‌کنندگان بیرونی (scopes + rate limit + audit) | implemented + tested (Phase C؛ optional/enforced)            |
-| Idempotency-Key / Correlation IDs                                 | implemented + tested (Phase C)                               |
-| Webhooks                                                          | **planned** (Phase G)                                        |
-| انتشار API به بیرون (`nlo.ai.ismc.ir` + TLS)                      | **planned** (Phase F؛ DNS A record وجود دارد، مسیر proxy نه) |
-| انتشار مستندات در Wiki.js                                         | **in progress** (محتوای Markdown در `docs/wiki/`)            |
-| Google Drive / DOCX / خروجی‌های Studio / Download Manager         | **planned** (Phase G)                                        |
+| قابلیت                                                            | وضعیت                                                                                                                      |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Job audio + prompt → پاسخ (provider واقعی)                        | implemented + **live-verified**                                                                                            |
+| Mock provider (توسعه آفلاین)                                      | implemented + tested                                                                                                       |
+| مدیریت حساب گوگل (cookie/storage-state)                           | implemented + live-verified                                                                                                |
+| Nودهای VLESS + پروکسی Xray + fail-closed egress                   | implemented + live-verified (egress guard: unit-tested)                                                                    |
+| آرشیو job (manifest/timeline/artifacts) + دانلود                  | implemented + tested                                                                                                       |
+| Docker (اجرای محلی)                                               | implemented (image self-contained)                                                                                         |
+| استقرار git-based + rollback (s52)                                | implemented + verified on s52                                                                                              |
+| OpenAPI / Swagger / `/api/v1`                                     | implemented + tested + production-smoke-verified (Phase C؛ spec↔live drift-checked؛ پذیرش زنده ۲۰۲۶-۱۰-۲۸ روی s52)         |
+| Token Auth برای مصرف‌کنندگان بیرونی (scopes + rate limit + audit) | implemented + tested + verified on deployed code (Phase C؛ optional/enforced؛ حالت اجباری روی نسخه‌ی استقرارشده آزمایش شد) |
+| Idempotency-Key / Correlation IDs                                 | implemented + tested + verified on deployed code (Phase C)                                                                 |
+| Webhooks                                                          | **planned** (Phase G)                                                                                                      |
+| انتشار API به بیرون (`nlo.ai.ismc.ir` + TLS)                      | **planned** (Phase F؛ DNS A record وجود دارد، مسیر proxy نه)                                                               |
+| انتشار مستندات در Wiki.js                                         | **in progress** (محتوای Markdown در `docs/wiki/`)                                                                          |
+| Google Drive / DOCX / خروجی‌های Studio / Download Manager         | **planned** (Phase G)                                                                                                      |
 
 محدودیت‌های شناخته‌شده و وضعیت دقیق پیاده‌سازی:
 [`docs/architecture/provider-evaluation.md`](docs/architecture/provider-evaluation.md) (بخش ۵).

@@ -1,7 +1,12 @@
 # API Documentation
 
-Status: **implemented + tested** (Phase C). The machine-readable contract is
-served at **`/api/openapi.json`** and browsable at **`/api/docs`** (Swagger UI;
+Status: **implemented + tested + production-smoke-verified** (Phase C,
+2026-10-28 live acceptance — see
+[`docs/reports/PHASE_C_LIVE_ACCEPTANCE.md`](../reports/PHASE_C_LIVE_ACCEPTANCE.md)).
+Live-NotebookLM execution was **not** performed in the acceptance (session
+re-verify failed at a region/anti-abuse gate); nothing below is mock-as-live.
+The machine-readable contract is served at **`/api/openapi.json`** and
+browsable at **`/api/docs`** (Swagger UI;
 the same documents are mirrored at `/api/v1/openapi.json` and
 `/api/v1/docs`). A contract test
 (`apps/server/test/openapi-v1.test.ts`) asserts that the spec and the live
@@ -257,4 +262,9 @@ for art in requests.get(f"{BASE}/jobs/{job['id']}/artifacts", headers=h).json():
   (24 tests; bidirectional spec↔live drift check).
 - Legacy surface regression: [`apps/server/test/api.test.ts`](../../apps/server/test/api.test.ts).
 - Verification level: **Unit/Integration/E2E (in-process, mock provider)
-  passed.** Live (`NLO_LIVE_TESTS`) remains a manual gate only.
+  passed**, plus **production-smoke + deployed-code feature checks** from the
+  2026-10-28 live acceptance (OpenAPI/Swagger live on s52; enforced auth,
+  idempotency and correlation on a deployed-code sandbox with mock provider;
+  cURL examples read-only on production). Live (`NLO_LIVE_TESTS`) remains a
+  manual gate only and was **not** run (region gate — see the acceptance
+  report §8.2).
