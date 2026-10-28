@@ -1,16 +1,24 @@
 # راهنمای API با مثال‌های واقعی
 
 Base URL (وضعیت فعلی): `http://127.0.0.1:4870` — فقط روی میزبان/شبکه‌ی
-داخلی. همه‌ی روت‌ها تحت `/api` هستند (بدون نسخه؛ `/api/v1` در فاز بعدی).
+داخلی. دو سطح داریم:
+
+- **قدیمی (loopback):** همه‌ی روت‌ها تحت `/api` — این بخش راهنما همین سطح
+  را نشان می‌دهد و بدون تغییر کار می‌کند.
+- **نسخه‌بندی‌شده (Phase C):** همان منابع تحت `/api/v1` + احراز هویت
+  توکنی اختیاری + idempotency + correlation id. OpenAPI روی
+  `/api/openapi.json` و Swagger UI روی `/api/docs` (و کپی‌های `/api/v1/...`).
 
 Envelope خطا (یکنواخت در همه‌ی روت‌ها):
 
 ```json
-{ "error": { "code": "validation", "message": "prompt is required" } }
+{ "error": { "code": "validation_error", "message": "prompt is required" } }
 ```
 
-کدهای رایج: `validation` (400)، `notFound` (404)، `conflict` (409)،
-`rateLimited` (429)، `tooLarge` (413).
+کدهای رایج: `validation_error` (400)، `unauthorized` (401)، `forbidden`
+(403)، `not_found` (404)، `conflict` (409)، `rate_limited` (429، همراه با
+`details.retryAfterSeconds`)، `invalid_state_transition`،
+`ssrf_blocked`، `internal_error` (500).
 
 ## 1) سلامت
 
@@ -98,5 +106,20 @@ curl -s $BASE/api/jobs/$ID/artifacts
 
 ## OpenAPI / Swagger
 
-**planned** (Phase C): `/api/openapi.json` + Swagger UI روی `/api/docs`.
-تا آن زمان، قرارداد رسمی = کد روت‌ها + تست‌های `apps/server/test/api.test.ts`.
+`/api/openapi.json` (OpenAPI 3.x) + Swagger UI روی `/api/docs` — هر دو
+(و کپی‌های `/api/v1/...`) بدون احراز هویت سرو می‌شوند. قرارداد رسمی =
+این spec، که با تست قرارداد (`openapi-v1.test.ts`) در هر دو جهت با روت‌های
+زنده مقایسه می‌شود.
+
+## سطح `/api/v1` (Phase C) — احراز هویت + idempotency
+
+- توکن: `Authorization: Bearer nlo_...` (در حالت پیش‌فرض اختیاری؛ با
+  `NLO_API_AUTH=1` اجباری برای روت‌های غیرمعاف).
+- ساخت job با idempotency: هدر `Idempotency-Key` (فقط با توکن معتبر) —
+  replay همان job اولیه را با `200` + `x-idempotent-replay: true` برمی‌گرداند.
+- هر پاسخ `/api/v1` هدر `x-correlation-id` دارد (اشاره‌شده یا
+  `cr_<32hex>` تولیدشده).
+- مدیریت توکن‌ها: `POST/GET /api/v1/tokens`، `PATCH /api/v1/tokens/:id`
+  (disable/enable)، `DELETE /api/v1/tokens/:id` (revoke) + audit روی
+  `GET /api/v1/audit` — همه با scope `admin`.
+- مثال‌های کامل cURL / TypeScript / Python: [`docs/api/README.md`](../api/README.md).

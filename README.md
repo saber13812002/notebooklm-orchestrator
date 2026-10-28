@@ -21,8 +21,9 @@
 - برنامه توسعه: [`docs/development/plan.md`](docs/development/plan.md)
 - گزارش‌های بازرسی: [`docs/reports/`](docs/reports/)
 - مستندات مشتری (Wiki): [`docs/wiki/`](docs/wiki/)
-- مستندات API (OpenAPI/Swagger): **در دست ساخت** — فاز بعدی (Phase C). تا آن
-  زمان، قرارداد عملی = کد روت‌ها + تست‌ها در `apps/server/test/api.test.ts`.
+- مستندات API (OpenAPI/Swagger/`/api/v1`/Token Auth):
+  [`docs/api/README.md`](docs/api/README.md) — spec روی `/api/openapi.json`،
+  Swagger UI روی `/api/docs`، مثال‌های cURL/TypeScript/Python.
 - Wiki.js سازمانی: **در دست ساخت** — صفحات Markdown در `docs/wiki/` آماده
   هستند و پس از صدور دسترسی API منتشر می‌شوند (لینک واقعی پس از انتشار در
   همین فایل ثبت می‌شود).
@@ -84,19 +85,22 @@ npm run dev          # server روی 127.0.0.1:4870 + web روی 127.0.0.1:5173 
 فایل نمونه: [`.env.example`](.env.example) (کپی به `.env` برای override).
 مهم‌ترین‌ها:
 
-| متغیر                          | پیش‌فرض                | توضیح                                                          |
-| ------------------------------ | ---------------------- | -------------------------------------------------------------- |
-| `NLO_HOST`                     | `127.0.0.1`            | binding؛ غیر-loopback فقط پشت reverse proxy با احراز هویت      |
-| `NLO_PORT`                     | `4870`                 | پورت HTTP                                                      |
-| `NLO_DATA_DIR`                 | `./data`               | SQLite + آرشیو jobها + vault + sessionها                       |
-| `NLO_PROVIDER`                 | `mock`                 | `mock` (پیش‌فرض امن) یا `python-worker` (live، صریح)           |
-| `NLO_PROXY_RUNTIME`            | `mock`                 | `mock` یا `xray` (نیاز به `data/vendor/xray`)                  |
-| `NLO_PYTHON_BIN`               | `python3`              | python venv کارگر برای حالت زنده                               |
-| `NLO_VAULT_KEY`                | —                      | کلید vault (hex 64 کاراکتر)؛ در نبودش فایل `0600` ساخته می‌شود |
-| `NLO_MAX_UPLOAD_BYTES`         | `209715200`            | سقف حجم آپلود صوت                                              |
-| `NLO_ALLOWED_AUDIO_EXTENSIONS` | `wav,mp3,m4a,ogg,flac` | whitelist پسوند                                                |
-| `NLO_LIVE_TESTS`               | `0`                    | درگه تست‌های زنده (فقط توسعه)                                  |
-| `NLO_ALLOW_DIRECT_EGRESS`      | `0`                    | **فقط توسعه**: رفع fail-closed — در عملیات نگه‌دارید           |
+| متغیر                          | پیش‌فرض                | توضیح                                                              |
+| ------------------------------ | ---------------------- | ------------------------------------------------------------------ |
+| `NLO_HOST`                     | `127.0.0.1`            | binding؛ غیر-loopback فقط پشت reverse proxy با احراز هویت          |
+| `NLO_PORT`                     | `4870`                 | پورت HTTP                                                          |
+| `NLO_DATA_DIR`                 | `./data`               | SQLite + آرشیو jobها + vault + sessionها                           |
+| `NLO_PROVIDER`                 | `mock`                 | `mock` (پیش‌فرض امن) یا `python-worker` (live، صریح)               |
+| `NLO_PROXY_RUNTIME`            | `mock`                 | `mock` یا `xray` (نیاز به `data/vendor/xray`)                      |
+| `NLO_PYTHON_BIN`               | `python3`              | python venv کارگر برای حالت زنده                                   |
+| `NLO_VAULT_KEY`                | —                      | کلید vault (hex 64 کاراکتر)؛ در نبودش فایل `0600` ساخته می‌شود     |
+| `NLO_MAX_UPLOAD_BYTES`         | `209715200`            | سقف حجم آپلود صوت                                                  |
+| `NLO_ALLOWED_AUDIO_EXTENSIONS` | `wav,mp3,m4a,ogg,flac` | whitelist پسوند                                                    |
+| `NLO_LIVE_TESTS`               | `0`                    | درگه تست‌های زنده (فقط توسعه)                                      |
+| `NLO_ALLOW_DIRECT_EGRESS`      | `0`                    | **فقط توسعه**: رفع fail-closed — در عملیات نگه‌دارید               |
+| `NLO_API_AUTH`                 | `0`                    | `1` = اجبار توکن برای روت‌های غیرمعاف `/api/v1` (پیش‌فرض: اختیاری) |
+| `NLO_API_RATE_LIMIT_MAX`       | `120`                  | سقف درخواست هر توکن در هر پنجره (per-token)                        |
+| `NLO_API_RATE_LIMIT_WINDOW_MS` | `60000`                | طول پنجره‌ی rate limit (ms)                                        |
 
 هیچ مقدار واقعی Secret نباید در `.env` commit شده یا در کد قرار بگیرد.
 
@@ -136,8 +140,20 @@ bash deploy/deploy.sh origin/main
 
 ## API
 
-Base: `http://127.0.0.1:4870/api` — REST، بدون نسخه (نسخه‌بندی `/api/v1` در
-فاز بعدی)، envelope خطای یکنواخت `{"error":{"code","message"}}`.
+دو سطح:
+
+- **Legacy (loopback):** Base `http://127.0.0.1:4870/api` — بدون تغییر.
+- **Versioned (Phase C):** Base `http://127.0.0.1:4870/api/v1` — همان منابع +
+  **OpenAPI 3.x** روی `/api/openapi.json` (و `/api/v1/openapi.json`) +
+  **Swagger UI** روی `/api/docs` + **Token Auth** (اختیاری؛ با `NLO_API_AUTH=1`
+  اجباری) + **per-token rate limit** + **Idempotency-Key** (روی `POST /jobs`)
+  - **`x-correlation-id`** + **audit trail** (`GET /api/v1/audit`).
+
+Envelope خطای یکنواخت: `{"error":{"code","message","details?"}}` (کدها:
+`validation_error`، `unauthorized`، `forbidden`، `not_found`، `conflict`،
+`rate_limited`، … در `packages/shared/src/api-error.ts`).
+
+مستندات کامل + مثال‌های cURL/TypeScript/Python: [`docs/api/README.md`](docs/api/README.md).
 
 | گروه    | روت‌ها                                                                                                                                                                                                                                                                                                                                                                                           |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -147,26 +163,28 @@ Base: `http://127.0.0.1:4870/api` — REST، بدون نسخه (نسخه‌بن�
 | دیگه    | `GET/PUT /api/settings`، `GET /api/secrets` (redacted)، `GET /api/provider`، `GET /api/health`، `GET /api/health/ready`، `POST /api/health/account`، `POST /api/health/egress`                                                                                                                                                                                                                   |
 
 عملیات طولانی **async** هستند: ایجاد job شناسه‌ی قابل‌پیگیری `j_<hex32>`
-می‌دهد و وضعیت/رودیدار/خروجی‌ها از API قابل‌دسترسی‌اند. Webhook، Token Auth و
-OpenAPI: **planned** (Phase C) — فعلاً مدل اعتماد loopback-only است.
+می‌دهد و وضعیت/رودیدار/خروجی‌ها از API قابل‌دسترسی‌اند. Webhook: **planned**
+(Phase G). مدل اعتماد پیش‌فرض هنوز loopback است؛ برای مصرف‌کننده‌های بیرونی،
+Token Auth روی `/api/v1` (اختیاری یا اجباری) از فاز C موجود است.
 
 ## وضعیت واقعی قابلیت‌ها (صادقانه)
 
-| قابلیت                                                    | وضعیت                                                        |
-| --------------------------------------------------------- | ------------------------------------------------------------ |
-| Job audio + prompt → پاسخ (provider واقعی)                | implemented + **live-verified**                              |
-| Mock provider (توسعه آفلاین)                              | implemented + tested                                         |
-| مدیریت حساب گوگل (cookie/storage-state)                   | implemented + live-verified                                  |
-| Nودهای VLESS + پروکسی Xray + fail-closed egress           | implemented + live-verified (egress guard: unit-tested)      |
-| آرشیو job (manifest/timeline/artifacts) + دانلود          | implemented + tested                                         |
-| Docker (اجرای محلی)                                       | implemented (image self-contained)                           |
-| استقرار git-based + rollback (s52)                        | implemented + verified on s52                                |
-| OpenAPI / Swagger / `/api/v1`                             | **planned** (Phase C)                                        |
-| Token Auth برای مصرف‌کنندگان بیرونی                       | **planned** (Phase C)                                        |
-| Webhooks / Idempotency / Correlation IDs                  | **planned** (Phase C/G)                                      |
-| انتشار API به بیرون (`nlo.ai.ismc.ir` + TLS)              | **planned** (Phase F؛ DNS A record وجود دارد، مسیر proxy نه) |
-| انتشار مستندات در Wiki.js                                 | **in progress** (محتوای Markdown در `docs/wiki/`)            |
-| Google Drive / DOCX / خروجی‌های Studio / Download Manager | **planned** (Phase G)                                        |
+| قابلیت                                                            | وضعیت                                                        |
+| ----------------------------------------------------------------- | ------------------------------------------------------------ |
+| Job audio + prompt → پاسخ (provider واقعی)                        | implemented + **live-verified**                              |
+| Mock provider (توسعه آفلاین)                                      | implemented + tested                                         |
+| مدیریت حساب گوگل (cookie/storage-state)                           | implemented + live-verified                                  |
+| Nودهای VLESS + پروکسی Xray + fail-closed egress                   | implemented + live-verified (egress guard: unit-tested)      |
+| آرشیو job (manifest/timeline/artifacts) + دانلود                  | implemented + tested                                         |
+| Docker (اجرای محلی)                                               | implemented (image self-contained)                           |
+| استقرار git-based + rollback (s52)                                | implemented + verified on s52                                |
+| OpenAPI / Swagger / `/api/v1`                                     | implemented + tested (Phase C؛ spec↔live drift-checked)      |
+| Token Auth برای مصرف‌کنندگان بیرونی (scopes + rate limit + audit) | implemented + tested (Phase C؛ optional/enforced)            |
+| Idempotency-Key / Correlation IDs                                 | implemented + tested (Phase C)                               |
+| Webhooks                                                          | **planned** (Phase G)                                        |
+| انتشار API به بیرون (`nlo.ai.ismc.ir` + TLS)                      | **planned** (Phase F؛ DNS A record وجود دارد، مسیر proxy نه) |
+| انتشار مستندات در Wiki.js                                         | **in progress** (محتوای Markdown در `docs/wiki/`)            |
+| Google Drive / DOCX / خروجی‌های Studio / Download Manager         | **planned** (Phase G)                                        |
 
 محدودیت‌های شناخته‌شده و وضعیت دقیق پیاده‌سازی:
 [`docs/architecture/provider-evaluation.md`](docs/architecture/provider-evaluation.md) (بخش ۵).

@@ -8,6 +8,69 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-10-28] — Phase C (API productization)
+
+### Added
+
+- OpenAPI 3.x contract: `/api/openapi.json` (and `/api/v1/openapi.json`) +
+  Swagger UI at `/api/docs` (and `/api/v1/docs`), auth-exempt. Spec lives in
+  `apps/server/src/api/openapi/spec.ts` and is asserted against the live
+  route table in **both directions** by `apps/server/test/openapi-v1.test.ts`
+  (no spec↔live drift in either direction).
+- Versioned surface `/api/v1/*` mirroring the legacy resource model (52
+  operations); the legacy `/api/*` surface is unchanged and un-gated.
+- API tokens (C4): create/list/enable/disable/revoke at `/api/v1/tokens`,
+  scopes (`jobs:read`, `jobs:write`, `jobs:cancel`, `jobs:download`,
+  `meta:read`, `admin`), SHA-256-only storage, plaintext shown exactly once.
+  Optional by default (loopback keeps working); `NLO_API_AUTH=1` enforces
+  tokens on non-exempt v1 routes (401 + `auth_required`/`auth_failed` audit
+  rows). Token management is always `admin`-gated (defense in depth).
+- Per-token sliding-window rate limiting
+  (`NLO_API_RATE_LIMIT_MAX`, `NLO_API_RATE_LIMIT_WINDOW_MS`) →
+  `429 rate_limited` with `details.retryAfterSeconds` + audit row.
+- Append-only audit trail (`api_audit_log`) queryable via
+  `GET /api/v1/audit` (admin); anonymous traffic is never audited; token
+  plaintexts never appear in the log.
+- Idempotent job creation (C5): `Idempotency-Key` honored only with a
+  resolved token (per-token scoped); replay → `200` +
+  `x-idempotent-replay: true`, no duplicate job/archive.
+- Correlation IDs: every `/api/v1` response carries `x-correlation-id`
+  (echoed or generated `cr_<32hex>`).
+- Docs: `docs/api/README.md` rewritten (auth model, scopes, cURL +
+  runnable TypeScript client `docs/api/examples/client.ts` + Python
+  example), `docs/wiki/08-api-authentication.md` and
+  `docs/wiki/09-api-guide.md` updated, `.env.example` + root README
+  updated.
+- Migration `0005_api_tokens.sql` (api_tokens + api_audit_log tables).
+
+### Fixed
+
+- **Production bug (found by the new tests):** the v1 child-encapsulation
+  `onRequest`/`onResponse` hooks were synchronous 2-arg functions;
+  Fastify 5's hook runner only advances on a returned Promise or an explicit
+  `next` call, so **every `/api/v1` request deadlocked** on a live server.
+  Hooks are now async.
+- `loadConfig(overrides)`: `NLO_*` integer/boolean vars were read from
+  `process.env` directly, silently ignoring overrides (tests and any
+  programmatic config injection were bypassed). `intEnv`/`boolEnv` now
+  honor the override map.
+
+### Verified
+
+- `npm test` all workspaces green (152 tests: shared 44, server 83 incl. 24
+  new, web 25); `npm run typecheck`, `npm run lint`,
+  `npm run format:check`, `npm run build` all clean.
+- Verification level: **Unit/Integration/E2E (in-process, mock provider)
+  passed.** Live (`NLO_LIVE_TESTS`) remains a manual gate only.
+- No push, no deploy: s52 continues serving from its current commit until
+  a reviewed deploy is requested (Phase D territory).
+
+### Unchanged
+
+- Legacy `/api/*` behavior, loopback trust model, queue/provider/proxy
+  internals, docker/compose, deploy scripts.
+- Webhooks remain **planned** (Phase G).
+
 ## [Unreleased]
 
 ### Added (governance & documentation)
