@@ -8,8 +8,17 @@ rules for agents are in [`AGENTS.md`](AGENTS.md) §7.
 ## 1. Trust model (current)
 
 - **Local single-user.** The server binds to `127.0.0.1` by default. The
-  trust boundary is the machine; there is **no user system and no API token**
-  in the current release.
+  trust boundary is the machine; there is **no user system**.
+- **Scoped API tokens for `/api/v1`.** Token auth is optional by default
+  (loopback trust preserved) and enforced with `NLO_API_AUTH=1` (401 for
+  non-exempt v1 routes; health/openapi/docs GETs stay open). The legacy
+  `/api` surface is never gated. The **first** (bootstrap) token can only be
+  minted by an **offline host CLI**
+  (`npm run bootstrap:admin --workspace @nlo/server`); there is no
+  unauthenticated — or any — network endpoint that can create it, and the
+  CLI refuses to run while any active token exists (one-shot; recovery =
+  revoke all active tokens, re-run). See
+  [`docs/api/README.md`](docs/api/README.md) § "First token (bootstrap)".
 - **The frontend only talks to `/api/*`.** It never reaches the database,
   the Python worker, MCP, or provider internals.
 - **Fail-closed egress.** Provider traffic goes out only through a verified

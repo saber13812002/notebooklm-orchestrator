@@ -152,6 +152,10 @@ bash deploy/deploy.sh origin/main
   **Swagger UI** روی `/api/docs` + **Token Auth** (اختیاری؛ با `NLO_API_AUTH=1`
   اجباری) + **per-token rate limit** + **Idempotency-Key** (روی `POST /jobs`)
   - **`x-correlation-id`** + **audit trail** (`GET /api/v1/audit`).
+  - **توکن اول (bootstrap — Phase 2):** فقط با CLI آفلاین روی هاست ساخته
+    می‌شود (`npm run bootstrap:admin --workspace @nlo/server`) — هیچ
+    endpoint عمومی (حتی احراز‌شده) برای صدور توکن اول وجود ندارد؛ یک‌بار
+    مصرف و با لغو همه‌ی توکن‌های فعال قابل‌اجرای مجدد است.
 
 Envelope خطای یکنواخت: `{"error":{"code","message","details?"}}` (کدها:
 `validation_error`، `unauthorized`، `forbidden`، `not_found`، `conflict`،
@@ -184,6 +188,7 @@ Token Auth روی `/api/v1` (اختیاری یا اجباری) از فاز C م�
 | استقرار git-based + rollback (s52)                                | implemented + verified on s52                                                                                              |
 | OpenAPI / Swagger / `/api/v1`                                     | implemented + tested + production-smoke-verified (Phase C؛ spec↔live drift-checked؛ پذیرش زنده ۲۰۲۶-۱۰-۲۸ روی s52)         |
 | Token Auth برای مصرف‌کنندگان بیرونی (scopes + rate limit + audit) | implemented + tested + verified on deployed code (Phase C؛ optional/enforced؛ حالت اجباری روی نسخه‌ی استقرارشده آزمایش شد) |
+| First-admin bootstrap (CLI آفلاین، بدون endpoint عمومی)           | implemented + tested (Phase 2؛ فعال‌سازی اجباری auth روی s52 هنوز انجام نشده — مقرر در Phase بعد)                          |
 | Idempotency-Key / Correlation IDs                                 | implemented + tested + verified on deployed code (Phase C)                                                                 |
 | Webhooks                                                          | **planned** (Phase G)                                                                                                      |
 | انتشار API به بیرون (`nlo.ai.ismc.ir` + TLS)                      | **planned** (Phase F؛ DNS A record وجود دارد، مسیر proxy نه)                                                               |

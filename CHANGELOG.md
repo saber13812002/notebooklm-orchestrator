@@ -88,6 +88,56 @@ only with a recorded live run; otherwise "planned".
   internals, docker/compose, deploy scripts.
 - Webhooks remain **planned** (Phase G).
 
+## [2026-10-29] — Phase 2 (API Authentication — first-admin bootstrap)
+
+### Added
+
+- **First-admin bootstrap (closes F2):** the token chicken-and-egg
+  (`POST /api/v1/tokens` requires an `admin` token, so the first token
+  could not be created through the API) is solved by an **offline,
+  host-only CLI** — deliberately with **no** unauthenticated (or any)
+  network endpoint:
+  `npm run bootstrap:admin --workspace @nlo/server`
+  (`apps/server/src/domain/first-admin.ts` +
+  `apps/server/scripts/bootstrap-first-admin.ts`).
+- One-shot: refuses while ANY active (enabled, not-revoked) token exists;
+  documented recovery = revoke all active tokens → re-run the CLI (name is
+  auto-suffixed `first-admin-2`, … if a revoked row still holds the name).
+- Secret hygiene: plaintext (`nlo_<slug>_<64hex>`, 32-byte CSPRNG) shown
+  exactly once to the operator; only the SHA-256 hash is stored (same as
+  `ApiTokensRepo.create`).
+- Attributable, secret-free audit row `first_admin_bootstrapped`
+  (`method: CLI`, token id only).
+- Tests: `apps/server/test/first-admin.test.ts` — unit (format,
+  hash-only storage, one-shot gate, rejection with an active API-created
+  token, recovery, name collision/suffix, custom name+scopes, audit row)
+  - integration/API-level with `NLO_API_AUTH=true` (chicken-and-egg
+    proven: even `POST /api/v1/tokens` is 401 anonymously; bootstrap
+    unblocks enforced auth; admin creates scoped tokens via API; revocation
+    invalidates the token and re-opens recovery; legacy `/api` untouched).
+- Docs: root README (API section + feature-status table),
+  `docs/api/README.md` (new "First token (bootstrap)" section),
+  `docs/wiki/08-api-authentication.md`, `SECURITY.md` (§1 trust model —
+  replaced the stale "no API token" statement), `.env.example`.
+
+### Fixed
+
+- (Found by the new tests) the documented "revoke all → re-run" recovery
+  would have failed on the UNIQUE `api_tokens.name` constraint once a
+  revoked row still held the name; the bootstrap now auto-suffixes the
+  name.
+
+### Verified
+
+- `npx vitest run test/first-admin.test.ts` → 12/12 passing (unit +
+  integration, in-process, mock provider). Full gate (`npm test`,
+  `typecheck`, `lint`, `format:check`, `build`) green.
+- Verification level: **Unit/Integration passed.** No deploy, no
+  production restart, and **no** enforced auth activation on s52 in this
+  phase (production activation procedure is in
+  `docs/reports/PHASE_2_API_AUTHENTICATION.md` and awaits explicit
+  approval).
+
 ## [Unreleased]
 
 ### Added (governance & documentation)

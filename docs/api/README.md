@@ -84,6 +84,37 @@ deploy enforce mode behind an auth-capable reverse proxy for external access.
 Token management (`POST /tokens`, …) is additionally **always**
 token-gated with the `admin` scope, even in optional mode (defense in depth).
 
+### First token (bootstrap) — offline, host-only
+
+Creating a token requires an `admin` token, so the **first** token cannot
+come through the API. It is minted by an **offline CLI on the host**
+(Phase 2) — there is deliberately **no** network endpoint, authenticated or
+otherwise, that can mint it:
+
+```bash
+npm run bootstrap:admin --workspace @nlo/server
+# --name <token-name> is optional (default: "first-admin")
+```
+
+Properties (see `apps/server/src/domain/first-admin.ts`, tested in
+`apps/server/test/first-admin.test.ts`):
+
+- **One-shot:** refuses to run while ANY active (enabled, not-revoked)
+  token exists. From then on, token lifecycle is exclusively the
+  admin-scoped API.
+- **Recovery (documented):** revoke all active tokens
+  (`DELETE /api/v1/tokens/:id` for each), then re-run the CLI. If the
+  original name is still taken by a revoked row, the CLI auto-suffixes
+  (`first-admin-2`, …).
+- **Secret hygiene:** the plaintext (`nlo_<slug>_<64hex>`) is printed to
+  the operator terminal exactly once; only the SHA-256 hash is stored.
+- **Attributable:** an audit row `first_admin_bootstrapped`
+  (`method: CLI`, token id only — never the plaintext) is appended.
+
+To go from bootstrap to enforced auth: store the token securely, set
+`NLO_API_AUTH=1`, restart the service. Rollback: `NLO_API_AUTH=0`,
+restart.
+
 ### Scopes
 
 | Scope           | Grants                                                                         |
