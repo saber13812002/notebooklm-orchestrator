@@ -294,7 +294,9 @@ for art in requests.get(f"{BASE}/jobs/{job['id']}/artifacts", headers=h).json():
 - Legacy surface regression: [`apps/server/test/api.test.ts`](../../apps/server/test/api.test.ts).
 - Verification level: **Unit/Integration/E2E (in-process, mock provider)
   passed**, plus **production-smoke + deployed-code feature checks** from the
-  2026-10-28 live acceptance (OpenAPI/Swagger live on s52; enforced auth,
+  2026-10-28 live acceptance (OpenAPI/Swagger live on the then-production
+  host s52 — since decommissioned 2026-11-01, see
+  `docs/reports/SERVER_ENDPOINT_MIGRATION_AUDIT.md`; enforced auth,
   idempotency and correlation on a deployed-code sandbox with mock provider;
   cURL examples read-only on production). Live (`NLO_LIVE_TESTS`) remains a
   manual gate only and was **not** run (region gate — see the acceptance

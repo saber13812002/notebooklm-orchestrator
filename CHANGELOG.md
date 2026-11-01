@@ -8,6 +8,45 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-01] — Endpoint-migration addendum, Phase D (documentation migration)
+
+### Changed
+
+- Migrated all **current operational** references to the legacy production
+  host s52 (`172.20.1.52`) in: [`AGENTS.md`](AGENTS.md),
+  [`README.md`](README.md), [`docs/operations/README.md`](docs/operations/README.md),
+  [`docs/deployment/s52-deploy.md`](docs/deployment/s52-deploy.md),
+  [`docs/wiki/13-developer-guide.md`](docs/wiki/13-developer-guide.md),
+  [`docs/wiki/14-deployment-operations.md`](docs/wiki/14-deployment-operations.md),
+  [`CONTRIBUTING.md`](CONTRIBUTING.md), [`docs/api/README.md`](docs/api/README.md)
+  (annotated), [`deploy/deploy.sh`](deploy/deploy.sh) (comment),
+  [`deploy/systemd/nlo.service`](deploy/systemd/nlo.service) (comment).
+- Phrased honestly per the migration state: legacy host s52 decommissioned
+  (unreachable); **NLO is not yet running on the new host `172.30.0.133`**
+  (re-deployment pending, addendum Phase G); GitLab/Wiki.js already re-homed;
+  LiteLLM (`172.30.0.133:4000`) is the internal LLM proxy, **not** NLO.
+- Dead guidance removed: standing s52 SSH tunnel (port 14870) no longer
+  presented as working access.
+
+### Unchanged (explicit non-goals)
+
+- All `docs/reports/*` + historical CHANGELOG entries (class ② — verbatim
+  historical records).
+- Other-service references (class ③): `git.ai.ismc.ir`, `docs.ai.ismc.ir`,
+  edge `80.191.92.189`, jump53.
+- Every `4870` that is the **app's own port** (config default, Dockerfile,
+  compose, CI smoke, vite, scripts) — untouched.
+- `docs/deployment/s52-deploy.md` **filename kept** (links from
+  `docs/operations/README.md`, wiki 14, README, CONTRIBUTING stay valid);
+  content notes the filename is historical.
+- No code, config, or runtime behavior change — docs/comments only.
+
+### Notes
+
+- Report + evidence:
+  [`docs/reports/SERVER_ENDPOINT_MIGRATION_PHASE_D.md`](docs/reports/SERVER_ENDPOINT_MIGRATION_PHASE_D.md).
+- Phase C commit `3f796a6` pushed to `origin/main` 2026-11-01 (approved).
+
 ## [2026-11-01] — Endpoint-migration addendum, Phase C (centralized config)
 
 ### Added

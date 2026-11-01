@@ -3,8 +3,10 @@
 اپلیکیشن **تک‌کاربر** (loopback) برای مدیریت درخواست‌های «صوت + دستور» به NotebookLM،
 مدیریت حساب‌های گوگل و نودهای VLESS، اجرای نوبتی کارها، آرشیو و نمایش فارسی RTL.
 
-سرویس عملیاتی روی سرور داخلی s52 (`172.20.1.52`، سرویس `nlo`، پورت `4870`) با
-اتصال واقعی NotebookLM و پردازش واقعی صوت به متن **live-verify شده** است.
+سرویس عملیاتی (سرویس `nlo`، پورت `4870`) با اتصال واقعی NotebookLM و
+پردازش واقعی صوت به متن **live-verify شده** است. **وضعیت (۲۰۲۶-۱۱-۰۱):**
+هاست قدیمی s52 (`172.20.1.52`) از سرویس خارج شده (دسترسی‌ناپذیر)؛
+استقرار مجدد NLO روی هاست جدید `172.30.0.133` هنوز انجام نشده (فاز G).
 هدف: محصول **API-First**، قابل‌استقرار، مستند و قابل‌اتصال به سامانه‌های ثالث.
 
 ## مستندات
@@ -127,12 +129,17 @@ npm run build        # build وب + typecheck سرور
 CI: GitHub Actions (lint → typecheck → test → build) و `.gitlab-ci.yml`
 آماده برای GitLab داخلی.
 
-## استقرار روی s52 (عملیات)
+## استقرار روی سرور production (عملیات)
 
-مسیر رسمی: git-based deploy از روی commitهای review‌شده‌ی `origin/main`:
+**وضعیت (۲۰۲۶-۱۱-۰۱):** هاست قدیمی s52 (`172.20.1.52`) از سرویس خارج
+شده است؛ سرویس NLO روی هاست جدید `172.30.0.133` هنوز استقرار نشده
+(فاز G). GitLab و Wiki.js روی هاست جدید فعال‌اند.
+
+مسیر رسمی (هاست-مستقل): git-based deploy از روی commitهای review‌شده‌ی
+`origin/main`:
 
 ```bash
-# روی s52
+# روی سرور production
 cd /home/saber/saberprojects/notebooklm-orchestrator
 bash deploy/deploy.sh origin/main
 # rollback: ROLLBACK=1 bash deploy/deploy.sh <commit-قبلی>
@@ -186,7 +193,7 @@ Token Auth روی `/api/v1` (اختیاری یا اجباری) از فاز C م�
 | Nودهای VLESS + پروکسی Xray + fail-closed egress                   | implemented + live-verified (egress guard: unit-tested)                                                                    |
 | آرشیو job (manifest/timeline/artifacts) + دانلود                  | implemented + tested                                                                                                       |
 | Docker (اجرای محلی)                                               | implemented (image self-contained)                                                                                         |
-| استقرار git-based + rollback (s52)                                | implemented + verified on s52                                                                                              |
+| استقرار git-based + rollback                                      | implemented + verified on s52 (۲۰۲۶-۱۰-۲۸)؛ هاست قدیمی — استقرار مجدد روی هاست جدید در فاز G                               |
 | OpenAPI / Swagger / `/api/v1`                                     | implemented + tested + production-smoke-verified (Phase C؛ spec↔live drift-checked؛ پذیرش زنده ۲۰۲۶-۱۰-۲۸ روی s52)         |
 | Token Auth برای مصرف‌کنندگان بیرونی (scopes + rate limit + audit) | implemented + tested + verified on deployed code (Phase C؛ optional/enforced؛ حالت اجباری روی نسخه‌ی استقرارشده آزمایش شد) |
 | First-admin bootstrap (CLI آفلاین، بدون endpoint عمومی)           | implemented + tested (Phase 2؛ فعال‌سازی اجباری auth روی s52 هنوز انجام نشده — مقرر در Phase بعد)                          |

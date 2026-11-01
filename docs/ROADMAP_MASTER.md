@@ -111,8 +111,8 @@ numeric similarity. Proof: [`SERVER_ENDPOINT_CONNECTIVITY.md`](reports/SERVER_EN
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | A     | Read-only audit of all legacy references (classify: ① change / ② historical-keep / ③ other-service-do-not-change)                                                                              | ✅ done                                                            |
 | B     | Read-only connectivity + service identification of the new endpoint                                                                                                                            | ✅ done                                                            |
-| C     | Centralized config: new env var `NLO_INTERNAL_API_BASE_URL` (default `http://172.30.0.133:4000`) documented as the **internal LLM proxy (OpenAI-compatible)**; config.ts + .env.example + docs | ⏸ **awaiting approval**                                            |
-| D     | Documentation migration (① change-list items; phrased honestly — NLO host deployment still pending until G)                                                                                    | pending                                                            |
+| C     | Centralized config: new env var `NLO_INTERNAL_API_BASE_URL` (default `http://172.30.0.133:4000`) documented as the **internal LLM proxy (OpenAI-compatible)**; config.ts + .env.example + docs | ✅ done (commit `3f796a6`, pushed 2026-11-01)                      |
+| D     | Documentation migration (① change-list items; phrased honestly — NLO host deployment still pending until G)                                                                                    | ✅ done (see `SERVER_ENDPOINT_MIGRATION_PHASE_D.md`)               |
 | E     | Integration tests: no requests to old IP; new endpoint used; clean errors when down; secret redaction                                                                                          | pending (needs an LLM key via secret store for `/v1/models` check) |
 | F     | Local verification (4871)                                                                                                                                                                      | pending                                                            |
 | G     | Production migration (NLO deploy on new host + domain vhost)                                                                                                                                   | pending — **hard approval gate**                                   |
@@ -125,7 +125,9 @@ numeric similarity. Proof: [`SERVER_ENDPOINT_CONNECTIVITY.md`](reports/SERVER_EN
 
 - Local dev server: port **4871** (`NLO_PORT=4871`), keep running.
 - Stale pre-Phase-C instance on 4870 (PID 8380) — **do not kill** without approval.
-- 14870 SSH-tunnel guidance is **dead** (s52 gone) — remove in Phase D.
+- ~~14870 SSH-tunnel guidance is dead (s52 gone) — remove in Phase D.~~
+  Removed in Phase D (s52-deploy.md, wiki 14) — historical reports keep the
+  record verbatim.
 - Docker absent on the Windows workstation.
 
 ## 6. Status of known blockers (carried into Phases 2–3)

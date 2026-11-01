@@ -4,17 +4,19 @@ This file is the **standing instruction set for every AI coding agent** (and hum
 contributor) working on the NotebookLM Orchestrator (NLO) repository. It is
 binding for all future sessions; it is not a one-phase checklist.
 
-Mission context: NLO is an **operational service** on `172.20.1.52` (service
-`nlo`, port `4870`) with verified real NotebookLM connectivity and real
-audio→text processing. The target state is an **API-first, deployable,
-documented, testable product** consumable by the current frontend, internal
-systems, and third-party applications.
+Mission context: NLO is an **operational service** (service `nlo`, port
+`4870`) with verified real NotebookLM connectivity and real audio→text
+processing. The legacy production host **s52** (`172.20.1.52`) was
+decommissioned 2026-11-01 (unreachable); re-deployment on the new host
+`172.30.0.133` is pending (endpoint-migration addendum, Phase G). The target
+state is an **API-first, deployable, documented, testable product** consumable
+by the current frontend, internal systems, and third-party applications.
 
 ## 1. Protect the operational system (before ANY change)
 
 1. **Inspect before touching.** Check the local repository, the GitHub remote,
-   and s52: branch, commit SHA, uncommitted changes, untracked files.
-   Report them before proceeding.
+   and the production host: branch, commit SHA, uncommitted changes,
+   untracked files. Report them before proceeding.
 2. **Inspect live state.** `systemctl status nlo`, `/api/health`,
    `/api/health/ready`, port binding, DB (`data/nlo.sqlite`), sessions,
    worker. Preserve existing working behavior.
@@ -24,8 +26,8 @@ systems, and third-party applications.
    already backs up DB + `.env` on every deploy; manual steps require an
    equivalent backup first).
 5. **After every significant change:** run the regression suite
-   (`npm test`), the health checks, and (on s52) verify the service is
-   still active and ready.
+   (`npm test`), the health checks, and (on the production host) verify the
+   service is still active and ready.
 6. **Ask, don't guess.** If access or information is missing (tokens,
    credentials, DNS, proxy ownership), request exactly that item from the
    user. Never invent an address, token, or setting.
@@ -141,13 +143,14 @@ A change without tests or docs is **not complete**.
 
 ## 8. Deployment rules
 
-- Production path on s52: **git-based** via `deploy/deploy.sh` (systemd
-  service `nlo`). Only commits reachable from `origin/main` are deployed.
-- Never `git reset --hard` on s52 to a foreign tree; never delete `data/`.
+- Production path: **git-based** via `deploy/deploy.sh` (systemd service
+  `nlo`). Only commits reachable from `origin/main` are deployed.
+- Never `git reset --hard` on the production host to a foreign tree; never
+  delete `data/`.
 - `data/` (DB, archives, vault, sessions, vendor binaries, venv) is
   git-ignored and must survive any container recreate / checkout.
-- Docker Compose is for **local single-user** runs; s52 stays on
-  systemd unless a migration is explicitly approved.
+- Docker Compose is for **local single-user** runs; the production host stays
+  on systemd unless a migration is explicitly approved.
 - Rollback must always be possible: previous-good commit is printed by the
   deploy script; DB restore is from `data/backups/`.
 
@@ -173,4 +176,4 @@ A change without tests or docs is **not complete**.
 - [ ] Docs updated where behavior changed
 - [ ] CHANGELOG updated for user-visible changes
 - [ ] Commit message states goal + scope
-- [ ] Regression + health checks pass (on s52, after deploy)
+- [ ] Regression + health checks pass (on the production host, after deploy)

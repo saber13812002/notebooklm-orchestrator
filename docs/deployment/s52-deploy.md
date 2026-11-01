@@ -1,8 +1,15 @@
 # NLO Deployment Procedure (Git-based, reproducible)
 
-Target: the single-user server **s52** (`172.20.1.52`), service **`nlo`**
-(systemd), loopback port **4870**. Everything in this document has been
-executed and verified; it is the canonical deployment path.
+Target: the single-user production server, service **`nlo`** (systemd),
+loopback port **4870**. This procedure was executed and verified on the
+legacy host s52 (`172.20.1.52`); it is the canonical, **host-agnostic**
+deployment path.
+
+> **Status (2026-11-01):** the legacy host s52 is decommissioned
+> (unreachable). NLO is **not yet running on the new host** `172.30.0.133` —
+> re-deployment is pending (endpoint-migration addendum, Phase G). GitLab and
+> Wiki.js are already live on the new host. The filename is kept for
+> historical continuity; the procedure itself does not depend on the host.
 
 ## Principles
 
@@ -21,7 +28,7 @@ executed and verified; it is the canonical deployment path.
    commit restores the application code; runtime data is never rolled back
    (DB restore is a separate manual step from the backups).
 
-## Normal deploy (on s52)
+## Normal deploy (on the production host)
 
 ```bash
 cd /home/saber/saberprojects/notebooklm-orchestrator
@@ -60,7 +67,10 @@ bash deploy/deploy.sh <previous-commit>     # e.g. from data/deployed-commit
 #   sudo systemctl start nlo
 ```
 
-## First-time host setup (already done on s52 — reference only)
+## First-time host setup (reference only)
+
+_Executed on the legacy host s52; repeat the equivalent steps on any new
+production host._
 
 1. Node 22 + repo clone at `/home/saber/saberprojects/notebooklm-orchestrator`.
 2. `npm ci --omit=dev`.
@@ -82,8 +92,9 @@ bash deploy/deploy.sh <previous-commit>     # e.g. from data/deployed-commit
 - `.env`, `data/` (DB, vault, session cookies, job audio), `node_modules`,
   `data/vendor`, `data/venv` are git-ignored and never part of any commit.
 - The deploy script reads no credentials and prints none.
-- The server binds `127.0.0.1` only; access from the workstation is via the
-  standing SSH port-forward (`ssh -N -L 4870:127.0.0.1:4870 s52`).
+- The server binds `127.0.0.1` only; access from the workstation is via an
+  SSH port-forward (`ssh -N -L 4870:127.0.0.1:4870 <host>`). _The standing
+  s52 tunnel (port 14870) is dead — s52 is decommissioned._
 - Live egress to Google goes exclusively through the xray tunnels
   (`NLO_ALLOW_DIRECT_EGRESS=false`, fail-closed health checks).
 

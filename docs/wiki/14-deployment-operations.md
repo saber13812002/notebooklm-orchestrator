@@ -1,7 +1,10 @@
 # راهنمای استقرار و عملیات
 
-این صفحه خلاصه‌ای عملیاتی از استقرار NLO روی سرور production (s52) و کارهای
-روزمره‌ی Day-2 است. جزئیات کامل در
+این صفحه خلاصه‌ای عملیاتی از استقرار NLO روی سرور production و کارهای
+روزمره‌ی Day-2 است. **وضعیت (۲۰۲۶-۱۱-۰۱):** هاست قدیمی s52
+(`172.20.1.52`) از سرویس خارج شده (دسترسی‌ناپذیر)؛ سرویس NLO روی هاست جدید
+`172.30.0.133` هنوز استقرار نشده (فاز G). GitLab و Wiki.js روی هاست جدید
+فعال‌اند. همه‌ی دستورات زیر هاست-مستقل‌اند. جزئیات کامل در
 [`docs/deployment/s52-deploy.md`](https://github.com/saber13812002/notebooklm-orchestrator/blob/main/docs/deployment/s52-deploy.md)
 و [`docs/operations/README.md`](https://github.com/saber13812002/notebooklm-orchestrator/blob/main/docs/operations/README.md)
 در ریپوزیتوری است.
@@ -10,7 +13,7 @@
 
 | ویژگی          | وضعیت                                                                                          |
 | -------------- | ---------------------------------------------------------------------------------------------- |
-| سرور           | s52 (`172.20.1.52`) — تک‌کاربر                                                                 |
+| سرور           | هاست جدید: `172.30.0.133` — تک‌کاربر (استقرار NLO در فاز G؛ s52 قدیمی)                         |
 | سرویس          | systemd: `nlo`                                                                                 |
 | bind           | فقط `127.0.0.1:4870` (loopback)                                                                |
 | روش deploy     | git-based: `deploy/deploy.sh` — فقط commitهای `origin/main`                                    |
@@ -18,7 +21,7 @@
 | Docker Compose | فقط برای اجرای **محلی تک‌کاربر**؛ production روی systemd است                                   |
 | دامنه/TLS      | **planned** (`nlo.ai.ismc.ir` — رکورد DNS هست، vhost/TLS هنوز)                                 |
 
-## استقرار معمول (روی s52)
+## استقرار معمول (روی سرور production)
 
 ```bash
 cd /home/saber/saberprojects/notebooklm-orchestrator
@@ -50,15 +53,15 @@ port، journal) → اجرای regression testها.
 
 ## عملیات روزمره (Day-2)
 
-| نیاز                  | فرمان / راه                                                       |
-| --------------------- | ----------------------------------------------------------------- |
-| سلامت                 | `curl http://127.0.0.1:4870/api/health`                           |
-| readiness             | `curl http://127.0.0.1:4870/api/health/ready`                     |
-| لاگ                   | `journalctl -u nlo -f`                                            |
-| restart               | `sudo systemctl restart nlo`                                      |
-| commit فعلی           | `cat data/deployed-commit`                                        |
-| بکاپ                  | `data/backups/` (DB + `.env`، ۵ مورد آخر)                         |
-| دسترسی از workstatioN | `ssh -N -L 4870:127.0.0.1:4870 s52` و بعد `http://127.0.0.1:4870` |
+| نیاز                  | فرمان / راه                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| سلامت                 | `curl http://127.0.0.1:4870/api/health`                                                         |
+| readiness             | `curl http://127.0.0.1:4870/api/health/ready`                                                   |
+| لاگ                   | `journalctl -u nlo -f`                                                                          |
+| restart               | `sudo systemctl restart nlo`                                                                    |
+| commit فعلی           | `cat data/deployed-commit`                                                                      |
+| بکاپ                  | `data/backups/` (DB + `.env`، ۵ مورد آخر)                                                       |
+| دسترسی از workstation | `ssh -N -L 4870:127.0.0.1:4870 <host>` و بعد `http://127.0.0.1:4870` (تانل s52/14870 منسوخ است) |
 
 ### حساب گوگل منقضی شد
 
@@ -89,4 +92,5 @@ AUTHENTICATED. jobهای در صف با حساب بعدی یا پس از باز�
 - دسترسی بیرونی (domain + TLS + reverse proxy + token auth) هنوز فعال نیست.
 - CI روی GitLab داخلی منتظر runner و token است (پروسیجر در
   `docs/operations/gitlab-sync.md` در ریپوزیتوری).
-- تک‌نکوهه: s52؛ HA/backup بین‌سروری هنوز برنامه‌ریزی نشده است.
+- تک‌نکوهه: سرور production (هاست جدید `172.30.0.133`، استقرار در فاز G)؛
+  HA/backup بین‌سروری هنوز برنامه‌ریزی نشده است.

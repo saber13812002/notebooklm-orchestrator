@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================================
-# NLO — reproducible Git-based deployment (run on the server, e.g. s52)
+# NLO — reproducible Git-based deployment (run on the production host;
+# host-agnostic — the legacy host s52 was decommissioned 2026-11-01)
 #
 # Usage:
 #   bash deploy/deploy.sh <commit-ish>   # deploy a reviewed commit

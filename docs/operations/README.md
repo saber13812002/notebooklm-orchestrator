@@ -1,7 +1,13 @@
 # Operations
 
-The production service runs on **s52** (`172.20.1.52`) as systemd unit
-`nlo.service`, port `4870` (loopback).
+The production service runs as systemd unit `nlo.service`, port `4870`
+(loopback) on the production host.
+
+> **Status (2026-11-01):** the legacy host s52 (`172.20.1.52`) is
+> decommissioned (unreachable). NLO is **not yet running on the new host**
+> `172.30.0.133` — re-deployment is pending (endpoint-migration addendum,
+> Phase G). GitLab and Wiki.js are already live on the new host. All
+> procedures below are host-agnostic and apply once NLO is deployed.
 
 ## Canonical docs
 
@@ -30,8 +36,8 @@ files (0700), `data/vendor/xray` (proxy binary + geo data), `data/venv`
 
 ## Environment notes
 
-- Node is at `/home/saber/.local/node22/bin` on s52 (systemd unit +
-  deploy.sh harden `PATH` for non-interactive shells).
+- On the current production host, Node is at `/home/saber/.local/node22/bin`
+  (the systemd unit + deploy.sh harden `PATH` for non-interactive shells).
 - The Xray binary is a vendored drop-in in `data/vendor/xray/` (not in the
   repo — it is a binary).
 - `NLO_LIVE_TESTS` gates live _tests_ (off by default). The live _provider_

@@ -51,8 +51,10 @@ Plus:
 
 ## Deployment
 
-Production (s52) deploys **only** from reviewed commits on `origin/main` via
-`deploy/deploy.sh` — see [`docs/deployment/s52-deploy.md`](docs/deployment/s52-deploy.md).
+Production deploys **only** from reviewed commits on `origin/main` via
+`deploy/deploy.sh` (host-agnostic; see
+[`docs/deployment/s52-deploy.md`](docs/deployment/s52-deploy.md) — filename
+kept for historical continuity).
 Contributors do not deploy; maintainers do, with the script's built-in
 backup/verify/rollback.
 

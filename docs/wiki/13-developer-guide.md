@@ -15,7 +15,7 @@
 | `apps/server`     | سرور Fastify 5 — API، صف job، providerها، proxy/egress، SQLite                                |
 | `apps/web`        | فرانت‌اند React 19 + Vite + Tailwind (فارسی، RTL)                                             |
 | `packages/shared` | منطق مشترک: state machine، error envelope، redaction، SSRF guard، safe-name، retry، VLESS URI |
-| `deploy/`         | اسکریپت استقرار s52 + unit فایلی systemd                                                      |
+| `deploy/`         | اسکریپت استقرار (هاست-مستقل) + unit فایلی systemd                                             |
 | `docs/`           | مستندات: architecture، development، deployment، security، testing، operations، reports        |
 
 ### معماری کلیدی (خلاصه)
@@ -101,8 +101,8 @@ npm run build          # build همه
 - **هیچ secret** (`.env`، کوکی، توکن، VLESS UUID) در git نمی‌آید.
 - commit message: Conventional Commits + goal/scope.
 - تغییرات مستندات/CI نباید سرویس production را restart کنند.
-- استقرار production فقط با `deploy/deploy.sh` روی s52 و فقط از commitهای
-  `origin/main`.
+- استقرار production فقط با `deploy/deploy.sh` روی سرور production و فقط از
+  commitهای `origin/main`.
 
 ## CI
 
@@ -118,4 +118,4 @@ npm run build          # build همه
 - OpenAPI/Swagger هنوز تولید نمی‌شود؛ قرارداد = کد روت‌ها + `api.test.ts`.
 - Webhook، Google Drive/DOCX، خروجی‌های Studio: **planned**.
 - دسترسی بیرونی (domain/TLS/reverse proxy) هنوز فعال نیست؛ تا آن زمان سرویس
-  فقط روی loopbackِ s52 و از طریق SSH port-forward در دسترس است.
+  فقط روی loopbackِ سرور production و از طریق SSH port-forward در دسترس است.

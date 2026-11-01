@@ -1,4 +1,6 @@
-# NotebookLM Orchestrator — s52 deployment (single-user, loopback only)
+# NotebookLM Orchestrator — production deployment (single-user, loopback
+# only; host-agnostic — adjust paths/user per host; legacy host s52 was
+# decommissioned 2026-11-01)
 #
 # Install:  sudo install -m 644 /tmp/nlo.service /etc/systemd/system/nlo.service
 #           sudo systemctl daemon-reload
