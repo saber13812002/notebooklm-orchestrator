@@ -8,6 +8,48 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-01] — Endpoint-migration addendum, Phase E (integration tests)
+
+### Added
+
+- New module
+  [`apps/server/src/internal-llm.ts`](apps/server/src/internal-llm.ts):
+  minimal client for the internal LLM proxy (LiteLLM, OpenAI-compatible).
+  Every request targets `config.internalApiBaseUrl`
+  (`NLO_INTERNAL_API_BASE_URL`) — no hardcoded host; only `/v1/...` paths are
+  accepted; Bearer key sent only when provided; error messages contain only
+  the target host, HTTP status, and the upstream `error.message` — never the
+  key, never a stack.
+- New tests
+  [`apps/server/test/internal-llm.test.ts`](apps/server/test/internal-llm.test.ts)
+  (6 tests, in-process `node:http` mock on 127.0.0.1 ephemeral ports):
+  default base URL is the new host with no reference to the legacy
+  `172.20.1.52` (string-level, no network); `GET /v1/models` with correct
+  Bearer header + parsed 200 body; proxy down → `llm_unreachable` (clean
+  message, no stack, no key); exact LiteLLM 401 envelope → `llm_error` with
+  upstream message but no key/header leak; accept-but-never-respond →
+  `llm_timeout` (AbortController); non-`/v1` paths (incl. traversal) rejected
+  before any network call.
+
+### Tests
+
+- Level: **Unit/Integration — in-process mock HTTP, NOT live.** Full suite
+  175/175 (shared 44 + server 106 + web 25).
+- Live `/v1/models` against the real proxy remains a manual gate pending an
+  LLM API key via secret store (carried to Phase F/G).
+
+### Unchanged (explicit non-goals)
+
+- No route/API surface, provider, DB, or deployment change — the client is a
+  standalone module not yet wired into any route.
+- No network traffic to any real endpoint from CI.
+
+### Notes
+
+- Report + evidence:
+  [`docs/reports/SERVER_ENDPOINT_MIGRATION_PHASE_E.md`](docs/reports/SERVER_ENDPOINT_MIGRATION_PHASE_E.md).
+- Phase D commit `30b03cd` pushed to `origin/main` 2026-11-01 (approved).
+
 ## [2026-11-01] — Endpoint-migration addendum, Phase D (documentation migration)
 
 ### Changed
