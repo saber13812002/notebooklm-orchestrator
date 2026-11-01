@@ -8,6 +8,31 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-01] — Endpoint-migration addendum, Phase F (local verification)
+
+### Verified
+
+- 4871 dev server restarted onto the full addendum tree
+  (`3f796a6` + `30b03cd` + `6b9a3ab`, all on `origin/main`):
+  `/api/health` and `/api/health/ready` pass (`ready:true`, provider
+  `python-worker` configured, proxy runtime `xray` available, live tests
+  disabled); web UI served (HTTP 200).
+- Full regression on the final tree: **175/175** (shared 44 + server 106 +
+  web 25).
+
+### Notes
+
+- Level: **local process verification + Unit/Integration — NOT live.** No
+  live provider/egress or real `/v1/models` calls (LLM key still pending).
+- Diagnostic: per-readiness worker `spawn → SIGTERM` in the 4871 log was
+  investigated and confirmed as the designed transient-probe lifecycle of
+  `validateConfiguration()` (clean exit, empty stderr) — not a regression.
+- No deployment, DB, or runtime-config change; Phase G (production
+  migration on `172.30.0.133`) remains a hard approval gate.
+- Report + evidence:
+  [`docs/reports/SERVER_ENDPOINT_MIGRATION_PHASE_F.md`](docs/reports/SERVER_ENDPOINT_MIGRATION_PHASE_F.md).
+- Phase E commit `6b9a3ab` pushed to `origin/main` 2026-11-01 (approved).
+
 ## [2026-11-01] — Endpoint-migration addendum, Phase E (integration tests)
 
 ### Added
