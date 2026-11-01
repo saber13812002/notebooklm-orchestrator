@@ -38,6 +38,13 @@ export interface AppConfig {
   apiRateLimitMax: number;
   /** Rate limit window duration. */
   apiRateLimitWindowMs: number;
+  /**
+   * Base URL of the internal LLM proxy (LiteLLM, OpenAI-compatible format)
+   * — e.g. for prompt-engine features. Verified 2026-11-01: this is an LLM
+   * API endpoint, NOT the NLO web address, SSH host, or reverse proxy.
+   * Trailing slashes are normalized; http/https only.
+   */
+  internalApiBaseUrl: string;
 }
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..", "..");
@@ -137,6 +144,13 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     .map((s) => s.trim())
     .filter(Boolean);
 
+  const internalApiBaseUrl = (env("NLO_INTERNAL_API_BASE_URL") ?? "http://172.30.0.133:4000")
+    .trim()
+    .replace(/\/+$/, "");
+  if (!/^https?:\/\/[^\s/]+$/.test(internalApiBaseUrl)) {
+    throw new Error(`invalid NLO_INTERNAL_API_BASE_URL (expected http(s)://host[:port])`);
+  }
+
   return {
     host,
     port: intEnv(env, "NLO_PORT", 4870),
@@ -155,6 +169,7 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     apiAuthEnforced: boolEnv(env, "NLO_API_AUTH", false),
     apiRateLimitMax: intEnv(env, "NLO_API_RATE_LIMIT_MAX", 120),
     apiRateLimitWindowMs: intEnv(env, "NLO_API_RATE_LIMIT_WINDOW_MS", 60_000),
+    internalApiBaseUrl,
   };
 }
 

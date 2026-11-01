@@ -89,22 +89,23 @@ npm run dev          # server روی 127.0.0.1:4870 + web روی 127.0.0.1:5173 
 فایل نمونه: [`.env.example`](.env.example) (کپی به `.env` برای override).
 مهم‌ترین‌ها:
 
-| متغیر                          | پیش‌فرض                | توضیح                                                              |
-| ------------------------------ | ---------------------- | ------------------------------------------------------------------ |
-| `NLO_HOST`                     | `127.0.0.1`            | binding؛ غیر-loopback فقط پشت reverse proxy با احراز هویت          |
-| `NLO_PORT`                     | `4870`                 | پورت HTTP                                                          |
-| `NLO_DATA_DIR`                 | `./data`               | SQLite + آرشیو jobها + vault + sessionها                           |
-| `NLO_PROVIDER`                 | `mock`                 | `mock` (پیش‌فرض امن) یا `python-worker` (live، صریح)               |
-| `NLO_PROXY_RUNTIME`            | `mock`                 | `mock` یا `xray` (نیاز به `data/vendor/xray`)                      |
-| `NLO_PYTHON_BIN`               | `python3`              | python venv کارگر برای حالت زنده                                   |
-| `NLO_VAULT_KEY`                | —                      | کلید vault (hex 64 کاراکتر)؛ در نبودش فایل `0600` ساخته می‌شود     |
-| `NLO_MAX_UPLOAD_BYTES`         | `209715200`            | سقف حجم آپلود صوت                                                  |
-| `NLO_ALLOWED_AUDIO_EXTENSIONS` | `wav,mp3,m4a,ogg,flac` | whitelist پسوند                                                    |
-| `NLO_LIVE_TESTS`               | `0`                    | درگه تست‌های زنده (فقط توسعه)                                      |
-| `NLO_ALLOW_DIRECT_EGRESS`      | `0`                    | **فقط توسعه**: رفع fail-closed — در عملیات نگه‌دارید               |
-| `NLO_API_AUTH`                 | `0`                    | `1` = اجبار توکن برای روت‌های غیرمعاف `/api/v1` (پیش‌فرض: اختیاری) |
-| `NLO_API_RATE_LIMIT_MAX`       | `120`                  | سقف درخواست هر توکن در هر پنجره (per-token)                        |
-| `NLO_API_RATE_LIMIT_WINDOW_MS` | `60000`                | طول پنجره‌ی rate limit (ms)                                        |
+| متغیر                          | پیش‌فرض                    | توضیح                                                                                   |
+| ------------------------------ | -------------------------- | --------------------------------------------------------------------------------------- |
+| `NLO_HOST`                     | `127.0.0.1`                | binding؛ غیر-loopback فقط پشت reverse proxy با احراز هویت                               |
+| `NLO_PORT`                     | `4870`                     | پورت HTTP                                                                               |
+| `NLO_DATA_DIR`                 | `./data`                   | SQLite + آرشیو jobها + vault + sessionها                                                |
+| `NLO_PROVIDER`                 | `mock`                     | `mock` (پیش‌فرض امن) یا `python-worker` (live، صریح)                                    |
+| `NLO_PROXY_RUNTIME`            | `mock`                     | `mock` یا `xray` (نیاز به `data/vendor/xray`)                                           |
+| `NLO_PYTHON_BIN`               | `python3`                  | python venv کارگر برای حالت زنده                                                        |
+| `NLO_VAULT_KEY`                | —                          | کلید vault (hex 64 کاراکتر)؛ در نبودش فایل `0600` ساخته می‌شود                          |
+| `NLO_MAX_UPLOAD_BYTES`         | `209715200`                | سقف حجم آپلود صوت                                                                       |
+| `NLO_ALLOWED_AUDIO_EXTENSIONS` | `wav,mp3,m4a,ogg,flac`     | whitelist پسوند                                                                         |
+| `NLO_LIVE_TESTS`               | `0`                        | درگه تست‌های زنده (فقط توسعه)                                                           |
+| `NLO_ALLOW_DIRECT_EGRESS`      | `0`                        | **فقط توسعه**: رفع fail-closed — در عملیات نگه‌دارید                                    |
+| `NLO_API_AUTH`                 | `0`                        | `1` = اجبار توکن برای روت‌های غیرمعاف `/api/v1` (پیش‌فرض: اختیاری)                      |
+| `NLO_API_RATE_LIMIT_MAX`       | `120`                      | سقف درخواست هر توکن در هر پنجره (per-token)                                             |
+| `NLO_API_RATE_LIMIT_WINDOW_MS` | `60000`                    | طول پنجره‌ی rate limit (ms)                                                             |
+| `NLO_INTERNAL_API_BASE_URL`    | `http://172.30.0.133:4000` | پراکسی LLM داخلی (LiteLLM، سازگار با OpenAI؛ مسیرها زیر `/v1`) — **نه** آدرس وب/SSH NLO |
 
 هیچ مقدار واقعی Secret نباید در `.env` commit شده یا در کد قرار بگیرد.
 

@@ -8,6 +8,27 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-01] — Endpoint-migration addendum, Phase C (centralized config)
+
+### Added
+
+- `NLO_INTERNAL_API_BASE_URL` (default `http://172.30.0.133:4000`) in
+  [`apps/server/src/config.ts`](apps/server/src/config.ts) →
+  `config.internalApiBaseUrl`. Documented as the **internal LLM proxy
+  (LiteLLM, OpenAI-compatible)** — verified 2026-11-01 (read-only) to be an
+  LLM API endpoint, not the NLO web address/SSH/proxy. Normalized (trailing
+  slashes stripped) and validated (http/https scheme required, fail fast).
+- Unit tests: `apps/server/test/config-internal-api.test.ts` (default value,
+  override + normalization, https, scheme validation).
+- `.env.example` + README env-var table updated.
+
+### Notes
+
+- No runtime consumer yet — the prompt-engine phase (roadmap Phase 9) will
+  read `config.internalApiBaseUrl`; no requests are made in this change.
+- Audit + connectivity evidence: `docs/reports/SERVER_ENDPOINT_MIGRATION_AUDIT.md`,
+  `docs/reports/SERVER_ENDPOINT_CONNECTIVITY.md`; mission: `docs/ROADMAP_MASTER.md`.
+
 ## [2026-10-28] — Phase C (API productization)
 
 ### Added
