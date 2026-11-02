@@ -8,6 +8,56 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-02] — Endpoint-migration addendum, Phases G1+G2 (live endpoint verification + production readiness)
+
+### Verified (read-only)
+
+- **G1 — live probes from the authorized company network:** TCP
+  `172.30.0.133:4000` connected (112 ms); `GET /` 200 (LiteLLM Swagger UI);
+  `GET /openapi.json` 200 (1,517,449 B; `info.version = "1.101.0"`);
+  `/health/liveliness` 200 (3 ms); `/health/readiness` 200
+  (`{"status":"healthy","db":"connected"}`, 2–6 ms over 5 calls);
+  `GET /v1/models` without key → deterministic **401** `auth_error`
+  ("No api key passed in.") — i.e. **TCP and unauthenticated HTTP are
+  live-verified; authenticated `/v1/models` is NOT verified** (LLM key not
+  provisioned; no inference request sent).
+- **G1 negative control:** `172.30.0.133:4870` refused (NLO still not on the
+  new host); DNS `nlo.ai.ismc.ir` A → `172.30.0.133` (TTL 600).
+- **G2:** SSH port 22 open (`SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.20`,
+  15 ms; banner only, **no login attempted**); local ssh config/known_hosts
+  audited (only legacy s52/jump53 entries — no new-host entry); deploy path
+  (`deploy.sh` + `nlo.service`) host-agnostic and ready; `data/` + backups
+  absent locally (fresh-host scenario).
+- **G2 config sweep:** `NLO_INTERNAL_API_BASE_URL` default
+  `http://172.30.0.133:4000` equals the live-verified endpoint; local `.env`
+  does not set it; Docker/CI unaffected; client not yet wired into routes
+  (Phase E scope). No configuration change made.
+- **Regression:** `npm test` on `0e5b8b8` — **175/175** (shared 44 + server
+  106 + web 25), including `config-internal-api` (5) and `internal-llm` (6,
+  in-process mock — NOT live).
+
+### Added
+
+- Reports:
+  [`docs/reports/PHASE_G1_ENDPOINT_LIVE_VERIFICATION.md`](docs/reports/PHASE_G1_ENDPOINT_LIVE_VERIFICATION.md)
+  and
+  [`docs/reports/PHASE_G2_PRODUCTION_READINESS.md`](docs/reports/PHASE_G2_PRODUCTION_READINESS.md)
+  (initial state, commands+results, connectivity evidence, auth status
+  without secrets, deployment SHA, config findings, missing credentials,
+  backup/rollback readiness, risks, next action).
+- [`docs/ROADMAP_MASTER.md`](docs/ROADMAP_MASTER.md) addendum table: G split
+  into G1/G2 (done) + G3 (pending, hard approval gate).
+
+### Notes
+
+- Level: **Live (unauthenticated) + Unit/Integration** — mock suite 175/175;
+  the live part never sent credentials or inference.
+- **Mandatory STOP honored:** no production change, no restart, no `.env`
+  change, no deployment, no DNS/proxy/TLS change. G3 is blocked on:
+  (1) SSH access to `172.30.0.133` (user + credential, secure channel),
+  (2) LLM API key via secret store, (3) on-host fact confirmation
+  (paths, Node/Python, `data/` continuity). Awaiting explicit approval.
+
 ## [2026-11-01] — Endpoint-migration addendum, Phase F (local verification)
 
 ### Verified
