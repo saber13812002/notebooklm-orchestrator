@@ -8,6 +8,59 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-02] — Endpoint-migration addendum, Phase G3-A (new production host secure access + read-only audit)
+
+### Verified (read-only)
+
+- **SSH access to the new production host `172.30.0.133` (`AI-TOOLS`) is
+  provisioned and verified:** publickey login as `saber` (local `id_ed25519`),
+  host key `ssh-ed25519 SHA256:BP+9ekCAA+LaalRmqt84JQydR+PUwx0GQ8a33t4U7WY`
+  pinned; OpenSSH 9.6p1 (host) ↔ OpenSSH_for_Windows 9.5p2 (client), KEX
+  `curve25519-sha256`. Passwordless sudo: **no** (firewall state therefore
+  unverified — recorded limitation).
+- **Host:** Ubuntu 24.04.4 LTS, kernel 6.8.0-147-generic, 20× Xeon Gold 6458Q,
+  78 GiB RAM, 686 GiB disk (37 % used), uptime 2 days; Node v22.23.4 at
+  `/home/saber/.local/node22/bin` (not on default PATH), Python 3.12.3,
+  Docker 29.1.3, ffmpeg 6.1.1, git 2.43.0; systemd `degraded` due to one
+  unrelated failed unit (`llmhub-feedback.service`).
+- **NLO is already deployed and running on the new host** (found, not assumed):
+  `nlo.service` active since 2026-10-31 07:10 UTC, bound **loopback-only**
+  `127.0.0.1:4870`, deployed commit `b5e9ad3` (clean ancestor of `50b31e7`),
+  `/api/health` + `/api/health/ready` OK (python-worker configured, xray
+  runtime available, live egress disabled).
+- **LiteLLM on `127.0.0.1:4000` (on-host, read-only):** liveliness + readiness
+  healthy, `info.version = 1.101.0`, `/v1/models` 401 without key; **LLM key
+  not provisioned** (no key/token/secret lines in the on-host `.env`); no
+  inference sent.
+- **Legacy s52 data already migrated and intact:** `data/` with `nlo.sqlite`
+  (164 K), 5 DB + 5 `.env` backups (0600), `vault.key` (0600), `sessions/`
+  (0700, 1 account), `vendor/xray` (40 M), `venv` (198 M, Python 3.12.3),
+  3 historical job dirs. No copy/delete/migrate performed; no cookie or
+  session contents printed.
+- **Deployment prep:** `deploy.sh` (host-agnostic, already prepends
+  `node22/bin`) and `nlo.service` (paths + Node PATH verified identical on
+  host) require **no adaptation**; advancing to `50b31e7` is a clean
+  fast-forward from `b5e9ad3`. On-host `.env`: loopback host/port,
+  `NLO_ALLOW_DIRECT_EGRESS=1`, `NLO_INTERNAL_API_BASE_URL` absent (compiled
+  default is correct).
+- **Security findings (read-only):** live `.env` perms `0664` (recommend
+  `0600` in G3-B); firewall unverified (no sudo); LiteLLM binds `0.0.0.0`
+  (property of the LLM-proxy service, not NLO); no secrets in repo or on-host
+  `.env`.
+
+### Added
+
+- `docs/reports/PHASE_G3A_NEW_HOST_AUDIT.md` — full audit: SSH verification +
+  fingerprint, host inventory, running NLO state, LiteLLM verification,
+  legacy data inventory (sizes/ownership/permissions only), deploy-file
+  review, security findings, and the G3-B deploy/backup/rollback plan.
+
+### Notes
+
+- **Mandatory STOP honored:** no install, deploy, restart, `.env` change, DB
+  migration, or firewall/proxy/TLS change was made. Awaiting explicit
+  approval for G3-B (deploy to `50b31e7`).
+
 ## [2026-11-02] — Endpoint-migration addendum, Phases G1+G2 (live endpoint verification + production readiness)
 
 ### Verified (read-only)
