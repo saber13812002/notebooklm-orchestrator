@@ -8,6 +8,53 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-02] — Phase T0 (stuck files & jobs audit on the live new-host deployment, read-only)
+
+### Verified (read-only)
+
+- **Live deployment identity on `172.30.0.133`:** `nlo.service` active
+  (running ~2 days) at commit `b5e9ad3`, loopback-only `127.0.0.1:4870`,
+  `/api/health` + `/api/health/ready` OK, python-worker provider configured
+  (not mock), xray runtime available, no resident worker process (spawned per
+  job), DB `data/nlo.sqlite` (migrations 1–5), per-job layout `data/jobs/<jobId>/`.
+- **Job inventory (API cross-checked with read-only DB, `mode=ro`):** exactly
+  3 jobs, **all terminal** — `j_34ba…` SUCCEEDED (real provenance; 502
+  `ADD_SOURCE_FILE` on attempt 1, auto-recovered on attempt 2), `j_6568…`
+  SUCCEEDED (real provenance, clean run), `j_290f…` FAILED in 0.24 s at
+  validation (`auth` — "session not verified"; 2026-10-26 E2E-P2, superseded
+  by the two successful runs). No QUEUED / RUNNING / RETRY_WAIT /
+  NEEDS_ATTENTION / CANCELLED jobs exist.
+- **Stuck detection: nothing stuck.** All 3 source files present with
+  sha256-matching checksums; no notebook-created-but-no-result cases;
+  `artifacts` table empty (correct — text-answer jobs only); both delivered
+  `answer.md` outputs present; the 3 identical-input jobs are the
+  intentional 2026-10-26 E2E-P2 test trio, not accidental duplicates.
+- **Account/session (no contents printed):** `acc_5a03a60bbda24085` ACTIVE
+  + default; session `AUTHENTICATED` but last verified
+  2026-10-26T17:27:11Z (≈ 7 days stale → freshness re-check required before
+  the first live job); proxies: `france1-SeyedSaber` healthy (608 ms,
+  2026-10-28, stale → re-check), `England_1` failing (`curl exited 35`) —
+  manual review recommended; 1 secret ref (metadata only).
+- **Retry table:** both SUCCEEDED jobs = keep as-is (terminal, real);
+  `j_290f…` FAILED = **manual review, do NOT auto-retry** (7 days old,
+  superseded, side-effect-free in principle but no API retry for terminal
+  FAILED — only `NEEDS_ATTENTION` requeue).
+
+### Added
+
+- `docs/reports/PHASE_T0_STUCK_JOBS_AUDIT.md` — 12-section audit: live
+  deployment identity, job inventory by state, stuck detection, missing files,
+  existing artifacts, notebook relationships, account/session status,
+  recovery actions, one recommended safe test candidate, retry table, STOP.
+
+### Notes
+
+- **Mandatory STOP honored:** no restart, deploy, job retry, file
+  move/rename/delete, DB record change, session change, or config change.
+  Recommended next step (awaiting approval): Scenario-1 live test — one small
+  Persian audio file, end-to-end with per-step approval (new job, not a retry
+  of `j_290f…`).
+
 ## [2026-11-02] — Endpoint-migration addendum, Phase G3-A (new production host secure access + read-only audit)
 
 ### Verified (read-only)
