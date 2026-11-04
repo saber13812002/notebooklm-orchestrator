@@ -15,13 +15,13 @@ from **authenticated API connectivity**.
 
 ## 2. Initial state
 
-| Item | State |
-| --- | --- |
-| Repo | `0e5b8b8`, in sync with `origin/main`; untracked: `$out`, `HTTP`, `tmp/` (scratch, never staged) |
-| Local dev server | `127.0.0.1:4871` running (python-worker, xray; log `tmp/dev4871-repro.log`) — untouched this phase |
-| Stale 4870 instance | still present locally (per standing note: do not kill without approval) |
-| LLM API key | **not available** on this workstation (no key variable in local `.env`; none documented) |
-| Old host `172.20.1.52` | not probed (decommissioned; Phase B evidence stands) |
+| Item                   | State                                                                                              |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| Repo                   | `0e5b8b8`, in sync with `origin/main`; untracked: `$out`, `HTTP`, `tmp/` (scratch, never staged)   |
+| Local dev server       | `127.0.0.1:4871` running (python-worker, xray; log `tmp/dev4871-repro.log`) — untouched this phase |
+| Stale 4870 instance    | still present locally (per standing note: do not kill without approval)                            |
+| LLM API key            | **not available** on this workstation (no key variable in local `.env`; none documented)           |
+| Old host `172.20.1.52` | not probed (decommissioned; Phase B evidence stands)                                               |
 
 ## 3. Actual commands and results
 
@@ -31,25 +31,25 @@ on the company network (the authorized company environment).
 
 ### 3.1 TCP connectivity — port 4000
 
-| Check | Command (abbrev.) | Result |
-| --- | --- | --- |
-| TCP `172.30.0.133:4000` | `TcpClient.BeginConnect` (5 s budget) | **connected = true, 112 ms** |
-| TCP `172.30.0.133:22` (SSH) | same, 5 s budget | **connected = true, 15 ms**, banner `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.20` |
-| Negative control TCP `172.30.0.133:4870` | same, 5 s budget | **refused/timeout (2193 ms)** → NLO is **not** running on the new host (re-confirms Phase B) |
+| Check                                    | Command (abbrev.)                     | Result                                                                                       |
+| ---------------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------- |
+| TCP `172.30.0.133:4000`                  | `TcpClient.BeginConnect` (5 s budget) | **connected = true, 112 ms**                                                                 |
+| TCP `172.30.0.133:22` (SSH)              | same, 5 s budget                      | **connected = true, 15 ms**, banner `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.20`              |
+| Negative control TCP `172.30.0.133:4870` | same, 5 s budget                      | **refused/timeout (2193 ms)** → NLO is **not** running on the new host (re-confirms Phase B) |
 
 **Verdict: TCP-level reachability = VERIFIED (port 4000 and 22; 4870 closed).**
 
 ### 3.2 HTTP probes — service identification
 
-| Probe | Status | Latency | Evidence |
-| --- | --- | --- | --- |
-| `GET /` | **200** | 60 ms | Swagger UI page, `<title>LiteLLM API - Swagger UI</title>` |
-| `GET /openapi.json` | **200** | 222 ms | 1,517,449 bytes; `info.title = "LiteLLM API"`; **`info.version = "1.101.0"`**; description: "Proxy Server to call 100+ LLMs in the OpenAI format" |
-| `GET /health/liveliness` | **200** | 3 ms | body `"I'm alive!"` (unauthenticated) |
-| `GET /health/readiness` | **200** | 5 ms | body `{"status":"healthy","db":"connected"}` (unauthenticated) |
-| `GET /health` | **401** | 23 ms | `{"error":{"message":"Authentication Error, No api key passed in.","type":"auth_error","param":"None","code":"401"}}` |
-| `GET /v1/models` (no key) | **401** | 64 ms | identical 401 auth envelope |
-| `GET /v1/models` (no key, repeat) | **401** | 48 ms | identical — deterministic |
+| Probe                             | Status  | Latency | Evidence                                                                                                                                          |
+| --------------------------------- | ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /`                           | **200** | 60 ms   | Swagger UI page, `<title>LiteLLM API - Swagger UI</title>`                                                                                        |
+| `GET /openapi.json`               | **200** | 222 ms  | 1,517,449 bytes; `info.title = "LiteLLM API"`; **`info.version = "1.101.0"`**; description: "Proxy Server to call 100+ LLMs in the OpenAI format" |
+| `GET /health/liveliness`          | **200** | 3 ms    | body `"I'm alive!"` (unauthenticated)                                                                                                             |
+| `GET /health/readiness`           | **200** | 5 ms    | body `{"status":"healthy","db":"connected"}` (unauthenticated)                                                                                    |
+| `GET /health`                     | **401** | 23 ms   | `{"error":{"message":"Authentication Error, No api key passed in.","type":"auth_error","param":"None","code":"401"}}`                             |
+| `GET /v1/models` (no key)         | **401** | 64 ms   | identical 401 auth envelope                                                                                                                       |
+| `GET /v1/models` (no key, repeat) | **401** | 48 ms   | identical — deterministic                                                                                                                         |
 
 Readiness latency over 5 consecutive calls: **6, 3, 2, 2, 3 ms** (stable, sub-10 ms;
 well inside the client's 15 s default timeout in
@@ -57,26 +57,26 @@ well inside the client's 15 s default timeout in
 
 ### 3.3 Determinations (G1 checklist)
 
-| # | Requirement | Status |
-| --- | --- | --- |
-| 1 | Network reachability from authorized company environment | ✅ **VERIFIED** (TCP + HTTP 200) |
-| 2 | TCP connectivity on port 4000 | ✅ **VERIFIED** (112 ms) |
-| 3 | HTTP response from `/v1` surface | ✅ **VERIFIED** (auth-gated 401 envelope; `/` + `/openapi.json` open) |
-| 4 | `GET /v1/models` if supported | ⚠️ **Path exists (LiteLLM OpenAI surface) but requires an API key** — model list **not** retrievable unauthenticated. 401 `auth_error` is the documented "no key" case, not a missing route. |
-| 5 | Service is LiteLLM or another compatible API | ✅ **LiteLLM v1.101.0** — OpenAI-compatible proxy (version from its own `/openapi.json` `info.version`; matches the Phase C doc claim) |
-| 6 | Required authentication method | ✅ **`Authorization: Bearer <api-key>`** (HTTP 401 `auth_error` "No api key passed in" on all `/v1/*` and `/health` without a key) |
-| 7 | Model listing / response format | ⚠️ **Format confirmed (OpenAI-compatible JSON), listing blocked** pending key — see §4 |
-| 8 | Response time / timeout behavior | ✅ **VERIFIED** (readiness 2–6 ms; openapi 222 ms; no timeouts at 15 s) |
-| 9 | API keys never printed/stored in reports | ✅ **VERIFIED** — no key was sent or received; all captured bodies re-checked for key material before writing; none present |
-| 10 | If credentials unavailable → request secure provisioning | ✅ **Requested below (§4)** — no key is requested in chat |
+| #   | Requirement                                              | Status                                                                                                                                                                                       |
+| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Network reachability from authorized company environment | ✅ **VERIFIED** (TCP + HTTP 200)                                                                                                                                                             |
+| 2   | TCP connectivity on port 4000                            | ✅ **VERIFIED** (112 ms)                                                                                                                                                                     |
+| 3   | HTTP response from `/v1` surface                         | ✅ **VERIFIED** (auth-gated 401 envelope; `/` + `/openapi.json` open)                                                                                                                        |
+| 4   | `GET /v1/models` if supported                            | ⚠️ **Path exists (LiteLLM OpenAI surface) but requires an API key** — model list **not** retrievable unauthenticated. 401 `auth_error` is the documented "no key" case, not a missing route. |
+| 5   | Service is LiteLLM or another compatible API             | ✅ **LiteLLM v1.101.0** — OpenAI-compatible proxy (version from its own `/openapi.json` `info.version`; matches the Phase C doc claim)                                                       |
+| 6   | Required authentication method                           | ✅ **`Authorization: Bearer <api-key>`** (HTTP 401 `auth_error` "No api key passed in" on all `/v1/*` and `/health` without a key)                                                           |
+| 7   | Model listing / response format                          | ⚠️ **Format confirmed (OpenAI-compatible JSON), listing blocked** pending key — see §4                                                                                                       |
+| 8   | Response time / timeout behavior                         | ✅ **VERIFIED** (readiness 2–6 ms; openapi 222 ms; no timeouts at 15 s)                                                                                                                      |
+| 9   | API keys never printed/stored in reports                 | ✅ **VERIFIED** — no key was sent or received; all captured bodies re-checked for key material before writing; none present                                                                  |
+| 10  | If credentials unavailable → request secure provisioning | ✅ **Requested below (§4)** — no key is requested in chat                                                                                                                                    |
 
 ### 3.4 Connectivity verdict — explicit distinction
 
-| Level | State |
-| --- | --- |
-| TCP to `172.30.0.133:4000` | **PROVEN** (112 ms) |
-| Unauthenticated HTTP API | **PROVEN** (200 on public routes; deterministic 401 on `/v1/*`) |
-| **Authenticated** API (`/v1/models` with Bearer key) | **NOT PROVEN — blocked solely by missing API key** |
+| Level                                                | State                                                           |
+| ---------------------------------------------------- | --------------------------------------------------------------- |
+| TCP to `172.30.0.133:4000`                           | **PROVEN** (112 ms)                                             |
+| Unauthenticated HTTP API                             | **PROVEN** (200 on public routes; deterministic 401 on `/v1/*`) |
+| **Authenticated** API (`/v1/models` with Bearer key) | **NOT PROVEN — blocked solely by missing API key**              |
 
 ## 4. Authentication status (without secrets)
 
@@ -111,11 +111,11 @@ well inside the client's 15 s default timeout in
 
 ## 6. Current deployment SHA
 
-| Where | SHA |
-| --- | --- |
-| Local `main` / `origin/main` | `0e5b8b8` |
-| Production (legacy s52, decommissioned) | last known `b5e9ad3` (historical) |
-| New host `172.30.0.133` (NLO) | **no deployment** (`:4870` refused this run) |
+| Where                                   | SHA                                          |
+| --------------------------------------- | -------------------------------------------- |
+| Local `main` / `origin/main`            | `0e5b8b8`                                    |
+| Production (legacy s52, decommissioned) | last known `b5e9ad3` (historical)            |
+| New host `172.30.0.133` (NLO)           | **no deployment** (`:4870` refused this run) |
 
 ## 7. Outstanding risks (G1)
 

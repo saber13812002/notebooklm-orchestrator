@@ -30,11 +30,11 @@ only with a recorded live run; otherwise "planned".
   `answer.md` outputs present; the 3 identical-input jobs are the
   intentional 2026-10-26 E2E-P2 test trio, not accidental duplicates.
 - **Account/session (no contents printed):** `acc_5a03a60bbda24085` ACTIVE
-  + default; session `AUTHENTICATED` but last verified
-  2026-10-26T17:27:11Z (≈ 7 days stale → freshness re-check required before
-  the first live job); proxies: `france1-SeyedSaber` healthy (608 ms,
-  2026-10-28, stale → re-check), `England_1` failing (`curl exited 35`) —
-  manual review recommended; 1 secret ref (metadata only).
+  - default; session `AUTHENTICATED` but last verified
+    2026-10-26T17:27:11Z (≈ 7 days stale → freshness re-check required before
+    the first live job); proxies: `france1-SeyedSaber` healthy (608 ms,
+    2026-10-28, stale → re-check), `England_1` failing (`curl exited 35`) —
+    manual review recommended; 1 secret ref (metadata only).
 - **Retry table:** both SUCCEEDED jobs = keep as-is (terminal, real);
   `j_290f…` FAILED = **manual review, do NOT auto-retry** (7 days old,
   superseded, side-effect-free in principle but no API retry for terminal

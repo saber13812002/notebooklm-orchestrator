@@ -11,7 +11,7 @@ service. Only read-only SSH commands and local git inspection were executed.
 > **Scope note.** The mission premise for G3 was "NLO is not yet on the new host"
 > (per G1/G2 negative control: `:4870` refused on 2026-11-02). This audit found
 > that **NLO was deployed on the new host on 2026-10-31**, at commit `b5e9ad3`,
-> **before** G1/G2 were executed. G3-A therefore audits the *already-present*
+> **before** G1/G2 were executed. G3-A therefore audits the _already-present_
 > deployment rather than a fresh install, and confirms exactly what is live,
 > what is legacy, and what must change to reach the current baseline `50b31e7`.
 > No change was made to that running service in this phase.
@@ -23,19 +23,19 @@ service. Only read-only SSH commands and local git inspection were executed.
 **Status: AUTHENTICATED (read-only).** Public-key login is available and was
 used for every command in this audit.
 
-| Item | Value |
-| --- | --- |
-| Host | `AI-TOOLS` (`172.30.0.133`) |
-| Remote SSH | `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.20` |
-| Local client | `OpenSSH_for_Windows_9.5p2` |
-| KEX negotiated | `curve25519-sha256` |
-| Ciphers | `chacha20-poly1305@openssh.com` (both directions), no compression |
-| Host key algorithm | `ssh-ed25519` |
-| **Host key fingerprint** | `SHA256:BP+9ekCAA+LaalRmqt84JQydR+PUwx0GQ8a33t4U7WY` |
-| Authorized user | `saber` |
-| Auth method | `publickey` (no password) |
-| Client key | local `id_ed25519` → `SHA256:97MEQ0f1L/bHr49fXQf1leXELZmzkczmgCsv5d5qvOQ` |
-| Authorized-key line | `/home/saber/.ssh/authorized_keys:5` (options: `agent-forwarding port-forwarding pty user-rc x11-forwarding`) |
+| Item                     | Value                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Host                     | `AI-TOOLS` (`172.30.0.133`)                                                                                   |
+| Remote SSH               | `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.20`                                                                   |
+| Local client             | `OpenSSH_for_Windows_9.5p2`                                                                                   |
+| KEX negotiated           | `curve25519-sha256`                                                                                           |
+| Ciphers                  | `chacha20-poly1305@openssh.com` (both directions), no compression                                             |
+| Host key algorithm       | `ssh-ed25519`                                                                                                 |
+| **Host key fingerprint** | `SHA256:BP+9ekCAA+LaalRmqt84JQydR+PUwx0GQ8a33t4U7WY`                                                          |
+| Authorized user          | `saber`                                                                                                       |
+| Auth method              | `publickey` (no password)                                                                                     |
+| Client key               | local `id_ed25519` → `SHA256:97MEQ0f1L/bHr49fXQf1leXELZmzkczmgCsv5d5qvOQ`                                     |
+| Authorized-key line      | `/home/saber/.ssh/authorized_keys:5` (options: `agent-forwarding port-forwarding pty user-rc x11-forwarding`) |
 
 **Sudo:** `sudo -n true` → `sudo: a password is required` (rc=1). The `saber`
 user is **not** passwordless-sudo, so root-only checks (`ufw status`,
@@ -58,24 +58,24 @@ report or to any repo file. The host key fingerprint above is public by design.
 
 ## 2. Host audit
 
-| Item | Value |
-| --- | --- |
-| OS | `Ubuntu 24.04.4 LTS` (`VERSION_ID=24.04`) |
-| Kernel | `6.8.0-147-generic` |
-| CPU | 20 cores — `Intel(R) Xeon(R) Gold 6458Q` |
-| RAM | 78 GiB total, 17 GiB used, 60 GiB available |
-| Root disk | `/dev/mapper/ubuntu--vg-ubuntu--lv`, 686 GiB, 241 GiB used (37%), 417 GiB free |
-| Uptime | 2 days 7 h, load avg 2.03 / 2.16 / 2.22 |
-| Primary NIC | `ens33` → `172.30.0.133/20` |
-| Docker bridges | many `br-*` + `docker0` = `10.240.255.1/24` |
-| Node.js (PATH) | **not on default PATH** for non-interactive shell |
-| Node.js (custom) | `/home/saber/.local/node22/bin/node` → **v22.23.4**; `node22/bin` also has `npm`, `npx`, `corepack` |
-| npm | present at `node22/bin`; `npm -v` failed under bare `env` (no `node` on PATH) — works only with `node22/bin` prepended |
-| Python | `/usr/bin/python3` → **3.12.3**; `data/venv` Python **3.12.3** |
-| Docker | **29.1.3** |
-| FFmpeg | **6.1.1-3ubuntu5** |
-| Git | **2.43.0** |
-| systemd state | `degraded` (see failed unit below) |
+| Item             | Value                                                                                                                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| OS               | `Ubuntu 24.04.4 LTS` (`VERSION_ID=24.04`)                                                                              |
+| Kernel           | `6.8.0-147-generic`                                                                                                    |
+| CPU              | 20 cores — `Intel(R) Xeon(R) Gold 6458Q`                                                                               |
+| RAM              | 78 GiB total, 17 GiB used, 60 GiB available                                                                            |
+| Root disk        | `/dev/mapper/ubuntu--vg-ubuntu--lv`, 686 GiB, 241 GiB used (37%), 417 GiB free                                         |
+| Uptime           | 2 days 7 h, load avg 2.03 / 2.16 / 2.22                                                                                |
+| Primary NIC      | `ens33` → `172.30.0.133/20`                                                                                            |
+| Docker bridges   | many `br-*` + `docker0` = `10.240.255.1/24`                                                                            |
+| Node.js (PATH)   | **not on default PATH** for non-interactive shell                                                                      |
+| Node.js (custom) | `/home/saber/.local/node22/bin/node` → **v22.23.4**; `node22/bin` also has `npm`, `npx`, `corepack`                    |
+| npm              | present at `node22/bin`; `npm -v` failed under bare `env` (no `node` on PATH) — works only with `node22/bin` prepended |
+| Python           | `/usr/bin/python3` → **3.12.3**; `data/venv` Python **3.12.3**                                                         |
+| Docker           | **29.1.3**                                                                                                             |
+| FFmpeg           | **6.1.1-3ubuntu5**                                                                                                     |
+| Git              | **2.43.0**                                                                                                             |
+| systemd state    | `degraded` (see failed unit below)                                                                                     |
 
 **Failed units:** exactly one — `llmhub-feedback.service` (LLM Hub Feedback
 Synchronization). This is an unrelated LLM-Hub service, **not** NLO. NLO's own
@@ -91,13 +91,13 @@ them.
 
 **Listening ports (relevant):**
 
-| Port | Bind | Service |
-| --- | --- | --- |
-| 4870 | `127.0.0.1` | **NLO (loopback-only)** ✓ |
-| 4000 | `0.0.0.0` | LiteLLM (container `learn-lite-llm-litellm-1`) |
-| 4010 | `0.0.0.0` | LiteLLM Prometheus metrics |
-| 22 | `0.0.0.0` | sshd |
-| 8443, 8888, 9090, 9100, 9001, 9187–9189, 6379, 7575, 7777, 7779, 7810, 8000, 8050, 8087, 8088, 8099, 5433, 5435, 5678, 2222, 3002, 3006, 4101, 4102, 8100 | `0.0.0.0` | other org services (not NLO) |
+| Port                                                                                                                                                      | Bind        | Service                                        |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ---------------------------------------------- |
+| 4870                                                                                                                                                      | `127.0.0.1` | **NLO (loopback-only)** ✓                      |
+| 4000                                                                                                                                                      | `0.0.0.0`   | LiteLLM (container `learn-lite-llm-litellm-1`) |
+| 4010                                                                                                                                                      | `0.0.0.0`   | LiteLLM Prometheus metrics                     |
+| 22                                                                                                                                                        | `0.0.0.0`   | sshd                                           |
+| 8443, 8888, 9090, 9100, 9001, 9187–9189, 6379, 7575, 7777, 7779, 7810, 8000, 8050, 8087, 8088, 8099, 5433, 5435, 5678, 2222, 3002, 3006, 4101, 4102, 8100 | `0.0.0.0`   | other org services (not NLO)                   |
 
 **Multiple LiteLLM processes** are visible (PIDs `12130`, `176211`, `598274`,
 `177505`), all under `/app/.venv/...` (container paths) — i.e. the host runs
@@ -145,12 +145,12 @@ and loopback-bound on the new host.**
 
 Read-only probes from **on-host** (loopback), no inference, no key:
 
-| Probe | Result |
-| --- | --- |
-| `GET /health/liveliness` | `200` `"I'm alive!"` |
-| `GET /health/readiness` | `200` `{"status":"healthy","db":"connected"}` |
-| `GET /v1/models` (no key) | `401` (auth required) |
-| `GET /openapi.json` → `info.version` | **`1.101.0`** |
+| Probe                                | Result                                        |
+| ------------------------------------ | --------------------------------------------- |
+| `GET /health/liveliness`             | `200` `"I'm alive!"`                          |
+| `GET /health/readiness`              | `200` `{"status":"healthy","db":"connected"}` |
+| `GET /v1/models` (no key)            | `401` (auth required)                         |
+| `GET /openapi.json` → `info.version` | **`1.101.0`**                                 |
 
 **Auth config:** `/v1/*` requires `Authorization: Bearer <key>` (deterministic
 401 with no key). **The LLM API key is NOT provisioned** in the on-host NLO
@@ -172,14 +172,14 @@ A full NLO checkout already exists at
 
 ### 5.1 Git state on host
 
-| Item | Value |
-| --- | --- |
-| HEAD | **`b5e9ad30e1f87b0a9ee95575d43f9ab503505cd9`** |
-| `data/deployed-commit` | **`b5e9ad3`** |
-| `origin` | `https://github.com/saber13812002/notebooklm-orchestrator.git` |
-| host `origin/main` | `b5e9ad3` (**not** synced to `50b31e7`) |
-| `b5e9ad3` vs local HEAD | **ancestor** of `50b31e7` (verified `git merge-base --is-ancestor`) |
-| Untracked (host) | `apps/server/src/proxy/connect-proxy.ts.bak-curlfix`, `apps/server/src/queue/job-runner.ts.bak-e2efix`, `nul` |
+| Item                    | Value                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| HEAD                    | **`b5e9ad30e1f87b0a9ee95575d43f9ab503505cd9`**                                                                |
+| `data/deployed-commit`  | **`b5e9ad3`**                                                                                                 |
+| `origin`                | `https://github.com/saber13812002/notebooklm-orchestrator.git`                                                |
+| host `origin/main`      | `b5e9ad3` (**not** synced to `50b31e7`)                                                                       |
+| `b5e9ad3` vs local HEAD | **ancestor** of `50b31e7` (verified `git merge-base --is-ancestor`)                                           |
+| Untracked (host)        | `apps/server/src/proxy/connect-proxy.ts.bak-curlfix`, `apps/server/src/queue/job-runner.ts.bak-e2efix`, `nul` |
 
 So the on-host deployment is **10 commits behind** the current `origin/main`
 (`50b31e7`). It is a clean ancestor, so advancing is a fast-forward, not a
@@ -188,20 +188,20 @@ scratch artifacts (not staged, not part of any deploy).
 
 ### 5.2 `data/` inventory (size / ownership / permissions only — **contents not read**)
 
-| Path | Size | Perms / Owner | Note |
-| --- | --- | --- | --- |
-| `data/nlo.sqlite` | 164 K | `-rw-rw-r--` saber | live DB |
-| `data/nlo.sqlite-shm` | 32 K | `-rw-rw-r--` saber | WAL sidecar |
-| `data/nlo.sqlite-wal` | 0 | `-rw-rw-r--` saber | (empty) |
-| `data/deployed-commit` | 4 K | `-rw-rw-r--` saber | `b5e9ad3` |
-| `data/backups/` | 724 K | `drwxrwxr-x` | 5 × `nlo-*.sqlite` (143 360 B) + 5 × `env-*.env` (`-rw-------` 0600) — matches `deploy.sh` retention-5 |
-| `data/jobs/` | 2.0 M | `drwxrwxr-x` | 3 job dirs (`j_290f6f…`, `j_34ba94…`, `j_6568c1…`) — historical artifacts |
-| `data/sessions/` | 16 K | `drwx------` 0700 | 1 account session `nlo-acc_5a03a60bbda24085.json` (`-rw-------` 0600) + lock files |
-| `data/tmp/` | 12 K | `drwxrwxr-x` | scratch |
-| `data/vault/` | (empty) | `drwxrwxr-x` | no secrets currently stored |
-| `data/vault.key` | 64 B | `-rw-------` 0600 | AES-256-GCM key, correct perms |
-| `data/vendor/` | 40 M | `drwxrwxr-x` | `xray` binary + `cfg/`, `geoip.dat`, `geosite.dat`, `LICENSE`, `README.md` — **xray proxy deps present** |
-| `data/venv/` | 198 M | `drwxrwxr-x` | Python **3.12.3** worker venv |
+| Path                   | Size    | Perms / Owner      | Note                                                                                                     |
+| ---------------------- | ------- | ------------------ | -------------------------------------------------------------------------------------------------------- |
+| `data/nlo.sqlite`      | 164 K   | `-rw-rw-r--` saber | live DB                                                                                                  |
+| `data/nlo.sqlite-shm`  | 32 K    | `-rw-rw-r--` saber | WAL sidecar                                                                                              |
+| `data/nlo.sqlite-wal`  | 0       | `-rw-rw-r--` saber | (empty)                                                                                                  |
+| `data/deployed-commit` | 4 K     | `-rw-rw-r--` saber | `b5e9ad3`                                                                                                |
+| `data/backups/`        | 724 K   | `drwxrwxr-x`       | 5 × `nlo-*.sqlite` (143 360 B) + 5 × `env-*.env` (`-rw-------` 0600) — matches `deploy.sh` retention-5   |
+| `data/jobs/`           | 2.0 M   | `drwxrwxr-x`       | 3 job dirs (`j_290f6f…`, `j_34ba94…`, `j_6568c1…`) — historical artifacts                                |
+| `data/sessions/`       | 16 K    | `drwx------` 0700  | 1 account session `nlo-acc_5a03a60bbda24085.json` (`-rw-------` 0600) + lock files                       |
+| `data/tmp/`            | 12 K    | `drwxrwxr-x`       | scratch                                                                                                  |
+| `data/vault/`          | (empty) | `drwxrwxr-x`       | no secrets currently stored                                                                              |
+| `data/vault.key`       | 64 B    | `-rw-------` 0600  | AES-256-GCM key, correct perms                                                                           |
+| `data/vendor/`         | 40 M    | `drwxrwxr-x`       | `xray` binary + `cfg/`, `geoip.dat`, `geosite.dat`, `LICENSE`, `README.md` — **xray proxy deps present** |
+| `data/venv/`           | 198 M   | `drwxrwxr-x`       | Python **3.12.3** worker venv                                                                            |
 
 **Legacy-data verdict:** the s52 `data/` tree (DB, 5 DB+5 env backups,
 `vault.key`, sessions, `vendor/xray`, `venv`) is **already present and intact**
@@ -211,17 +211,17 @@ owners, and permissions.
 
 ### 5.3 On-host `.env` (variable **names** + booleans only — no secret values)
 
-| Var | State (redacted) |
-| --- | --- |
-| `NLO_HOST` | `127.0.0.1` (loopback) ✓ |
-| `NLO_PORT` | `4870` |
-| `NLO_PROVIDER` | set (value not printed) |
-| `NLO_PYTHON_BIN` | set; target **exists and is executable** |
-| `NLO_PROXY_RUNTIME` | `xray` |
-| `NLO_LOGIN_BROWSER` | set (value not printed) |
-| `NLO_ALLOW_DIRECT_EGRESS` | **`1`** (direct egress permitted — matches s52-era behavior; see §7) |
+| Var                         | State (redacted)                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `NLO_HOST`                  | `127.0.0.1` (loopback) ✓                                                                               |
+| `NLO_PORT`                  | `4870`                                                                                                 |
+| `NLO_PROVIDER`              | set (value not printed)                                                                                |
+| `NLO_PYTHON_BIN`            | set; target **exists and is executable**                                                               |
+| `NLO_PROXY_RUNTIME`         | `xray`                                                                                                 |
+| `NLO_LOGIN_BROWSER`         | set (value not printed)                                                                                |
+| `NLO_ALLOW_DIRECT_EGRESS`   | **`1`** (direct egress permitted — matches s52-era behavior; see §7)                                   |
 | `NLO_INTERNAL_API_BASE_URL` | **absent** (0 lines) → falls back to the compiled default `http://172.30.0.133:4000`, which is correct |
-| key/token/secret lines | **0** (no LLM key stored) |
+| key/token/secret lines      | **0** (no LLM key stored)                                                                              |
 
 **Perm note:** the live `.env` is `-rw-rw-r--` (0664) while the backup
 `env-*.env` files are `-rw-------` (0600). The live file is group/world-readable;
@@ -239,7 +239,7 @@ recommend tightening to `0600` (not changed in this phase).
   `data/venv`.
 - **`deploy/systemd/nlo.service`** paths match the host exactly (see §3). No
   path adaptation is required — the s52 `/home/saber/...` + `node22` layout is
-  literally what this host uses. This is *verified* reuse, not blind reuse.
+  literally what this host uses. This is _verified_ reuse, not blind reuse.
 - **`Dockerfile` / `docker-compose.yml`:** unaffected; production path is
   systemd (not Docker) per the deployment rules.
 - **To reach baseline `50b31e7`** (the only deployment work G3-B would do): on
@@ -251,16 +251,16 @@ recommend tightening to `0600` (not changed in this phase).
 
 ## 7. Security findings (read-only)
 
-| # | Finding | Severity | Action (later, with approval) |
-| --- | --- | --- | --- |
-| S1 | NLO bound **loopback-only** (`127.0.0.1:4870`) | OK | none |
-| S2 | LiteLLM on `0.0.0.0:4000`/`0.0.0.0:4010` (LAN-visible) | Info (not NLO) | out of NLO scope; flag to LLM-proxy owner |
-| S3 | Live `.env` is `0664` (group/world readable) | Low | `chmod 600 .env` in G3-B (with DB/.env backup already routine) |
-| S4 | `NLO_ALLOW_DIRECT_EGRESS=1` | Low | keep (matches legacy behavior); re-review if proxy policy changes |
-| S5 | `vault.key` `0600`, `sessions/` `0700`, backups `0600` | OK | none |
-| S6 | Firewall (`ufw`/`iptables`) **unverified** (no passwordless sudo) | Gap | confirm firewall posture separately with a root-capable account |
-| S7 | `vless-proxy` container **unhealthy**; systemd `degraded` via `llmhub-feedback.service` | Info (other services) | out of NLO scope; do not touch |
-| S8 | No secrets in repo or in on-host `.env` (no key/token/secret lines) | OK | none |
+| #   | Finding                                                                                 | Severity              | Action (later, with approval)                                     |
+| --- | --------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------- |
+| S1  | NLO bound **loopback-only** (`127.0.0.1:4870`)                                          | OK                    | none                                                              |
+| S2  | LiteLLM on `0.0.0.0:4000`/`0.0.0.0:4010` (LAN-visible)                                  | Info (not NLO)        | out of NLO scope; flag to LLM-proxy owner                         |
+| S3  | Live `.env` is `0664` (group/world readable)                                            | Low                   | `chmod 600 .env` in G3-B (with DB/.env backup already routine)    |
+| S4  | `NLO_ALLOW_DIRECT_EGRESS=1`                                                             | Low                   | keep (matches legacy behavior); re-review if proxy policy changes |
+| S5  | `vault.key` `0600`, `sessions/` `0700`, backups `0600`                                  | OK                    | none                                                              |
+| S6  | Firewall (`ufw`/`iptables`) **unverified** (no passwordless sudo)                       | Gap                   | confirm firewall posture separately with a root-capable account   |
+| S7  | `vless-proxy` container **unhealthy**; systemd `degraded` via `llmhub-feedback.service` | Info (other services) | out of NLO scope; do not touch                                    |
+| S8  | No secrets in repo or in on-host `.env` (no key/token/secret lines)                     | OK                    | none                                                              |
 
 **Secret-storage posture:** the LLM key, if provisioned, must stay in a
 secret store (vault/secret manager) and be injected at runtime — **never** in
@@ -287,6 +287,7 @@ G3-B (production deploy to baseline `50b31e7`), the exact plan, backup, and
 rollback are:
 
 ### Deployment plan (G3-B)
+
 1. On host, as `saber` (no sudo needed): `git -C <repo> fetch origin` then
    `git -C <repo> checkout main && git -C <repo> merge --ff-only origin/main`
    (clean fast-forward `b5e9ad3` → `50b31e7`).
@@ -300,12 +301,14 @@ rollback are:
    `GET /v1/models` via the internal-LLM client — no inference.
 
 ### Backup plan
+
 - `deploy.sh` automatically snapshots `data/nlo.sqlite` **and** `.env` to
   `data/backups/` (5-generation retention) **before** any change. Current
   backups already exist (§5.2). No manual backup step is required, but the
   existing `data/backups/` generation set is a known-good restore point.
 
 ### Rollback strategy
+
 - `deploy.sh` prints the **previous-good commit** on every run; rollback is
   `git checkout <prev-sha>` + re-run `deploy.sh` (or `ROLLBACK=1` if the script
   exposes it for this tree).
