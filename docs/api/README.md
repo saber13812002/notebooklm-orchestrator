@@ -24,11 +24,13 @@ Base URLs: `http://127.0.0.1:4870/api` (legacy) and
 
 ## Resource overview
 
-52 operations on `/api/v1` (jobs 11, sessions 8, accounts 7, proxies 11,
+54 operations on `/api/v1` (jobs 13, sessions 8, accounts 7, proxies 11,
 health 4, provider 1, settings 3, tokens 4, audit 1, contract 2).
 
-- **Jobs** — `POST /jobs` (multipart), `GET /jobs` (filters
+- **Jobs** — `POST /jobs` (multipart), `POST /notebooks/from-text` (H1, JSON
+  text source), `GET /jobs` (filters
   `status,accountId,nodeId,search` + `limit/offset`), `GET /jobs/:id`,
+  `GET /jobs/:id/result` (H1, consolidated result),
   `GET /jobs/:id/events`, `GET /jobs/:id/attempts`, `GET /jobs/:id/artifacts`,
   `GET /jobs/:id/artifacts/:artifactId` (download),
   `GET /jobs/:id/audio`, `GET /jobs/:id/audio/download`,
@@ -119,8 +121,8 @@ restart.
 
 | Scope           | Grants                                                                         |
 | --------------- | ------------------------------------------------------------------------------ |
-| `jobs:read`     | `GET /jobs*` (list, details, events, attempts, artifacts listing)              |
-| `jobs:write`    | `POST /jobs`, `POST /jobs/:id/requeue`                                         |
+| `jobs:read`     | `GET /jobs*` (list, details, **result**, events, attempts, artifacts listing)  |
+| `jobs:write`    | `POST /jobs`, `POST /notebooks/from-text`, `POST /jobs/:id/requeue`            |
 | `jobs:cancel`   | `POST /jobs/:id/cancel`                                                        |
 | `jobs:download` | `GET /jobs/:id/artifacts/:artifactId`, `…/audio`, `…/audio/download`           |
 | `meta:read`     | provider/health/settings reads + health probes                                 |
@@ -223,6 +225,90 @@ curl -s -o answer.md 'http://127.0.0.1:4870/api/v1/jobs/j_ab12.../artifacts/art_
   -H 'Authorization: Bearer nlo_svc-external_<64hex>'
 ```
 
+## Text-to-notebook (H1) — `POST /notebooks/from-text`
+
+Create a notebook **from a text string** instead of an audio upload (both
+surfaces; scope `jobs:write`). JSON body:
+
+| Field      | Type / rules                                                                                                                                                                                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`     | **required**, non-empty; max `NLO_MAX_TEXT_CHARS` (default **200,000** code points — oversized requests get `400` with `details.maxTextChars`/`details.charCount`; the text is never split) |
+| `title`    | optional, ≤200 chars; when absent a title is **derived from the first non-empty line** of the text (≤80 chars, word-boundary)                                                               |
+| `metadata` | optional `{ language?, customer?, category? }` (each string \| null)                                                                                                                        |
+| `summary`  | optional `{ enabled? (default true), prompt? }`; empty `prompt` ⇒ the **versioned default master prompt (`v1`)** is applied server-side; a caller `prompt` is recorded as version `custom`  |
+
+Response `202`: `{"jobId":"j_<hex32>","status":"CREATED","correlationId":...,"createdAt":"...","statusUrl":"/api/v1/jobs/j_..."}`
+(`correlationId` is `null` on the legacy surface; `cr_<32hex>` on `/api/v1`).
+`Idempotency-Key` behaves exactly like `POST /jobs` (replay → `200` +
+`x-idempotent-replay: true`, token-scoped).
+
+The text is stored in the job archive (`input/text-source.md`, sha256 in
+`input.text`), added to a new NotebookLM notebook via notebooklm-py
+`sources.add_text` (live provider) or simulated (mock provider), and the
+summary prompt is executed. `url`/`shareUrl` are **never fabricated** — they
+stay `null` until a provider actually confirms them (mock ⇒ always `null`).
+
+Retrieval — `GET /jobs/:id/result` (scope `jobs:read`):
+
+```json
+{
+  "jobId": "j_ab12…",
+  "status": "SUCCEEDED",
+  "notebook": { "id": "nb-…", "title": "…", "url": null, "shareUrl": null },
+  "source": { "id": "src-…" },
+  "summary": { "text": "…", "promptVersion": "v1" },
+  "provenance": "mock | real | unknown"
+}
+```
+
+Before `SUCCEEDED` the object is the same shape with `notebook`/`source`/
+`summary` `null` and `provenance` `"unknown"`; unknown job ⇒ `404 not_found`.
+
+```bash
+curl -s -X POST http://127.0.0.1:4870/api/v1/notebooks/from-text \
+  -H 'Authorization: Bearer nlo_svc-external_<64hex>' \
+  -H 'Idempotency-Key: memo-42-abc' \
+  -H 'Content-Type: application/json' \
+  -d '{
+        "title": "جلسه ۱۴۰۴/۰۸/۰۱",
+        "text": "متن جلسه… (تا ۲۰۰ هزار کاراکتر)",
+        "metadata": { "language": "fa" },
+        "summary": { "enabled": true }
+      }'
+# 202 {"jobId":"j_ab12…","status":"CREATED","correlationId":"cr_…","createdAt":"…","statusUrl":"/api/v1/jobs/j_ab12…"}
+
+curl -s http://127.0.0.1:4870/api/v1/jobs/j_ab12…/result \
+  -H 'Authorization: Bearer nlo_svc-external_<64hex>'
+```
+
+```python
+# H1 — compact text-to-notebook client
+import requests
+
+BASE = "http://127.0.0.1:4870/api/v1"
+TOKEN = "nlo_..."  # optional in default (loopback) mode
+h = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
+
+r = requests.post(
+    f"{BASE}/notebooks/from-text",
+    headers={**h, "Content-Type": "application/json", "Idempotency-Key": "memo-42"},
+    json={
+        "title": "جلسه ۱۴۰۴/۰۸/۰۱",
+        "text": open("meeting.txt", encoding="utf-8").read(),
+        "metadata": {"language": "fa"},
+        "summary": {"enabled": True},  # omit "prompt" => default master prompt v1
+    },
+)
+job = r.json()  # 202 {"jobId": "j_...", "status": "CREATED", ...}
+
+while True:
+    res = requests.get(f"{BASE}/jobs/{job['jobId']}/result", headers=h).json()
+    if res["status"] in ("SUCCEEDED", "FAILED", "CANCELLED", "NEEDS_ATTENTION"):
+        break
+    ...
+print(res["notebook"], res["source"], res["summary"]["text"][:200], res["provenance"])
+```
+
 ## TypeScript client (runnable, no SDK dependency)
 
 [`docs/api/examples/client.ts`](examples/client.ts) is a self-contained
@@ -290,7 +376,10 @@ for art in requests.get(f"{BASE}/jobs/{job['id']}/artifacts", headers=h).json():
   (`buildOpenApiDocument`), served verbatim at `/api/openapi.json`.
 - Contract + auth + idempotency tests:
   [`apps/server/test/openapi-v1.test.ts`](../../apps/server/test/openapi-v1.test.ts)
-  (24 tests; bidirectional spec↔live drift check).
+  (30 tests; bidirectional spec↔live drift check).
+- Text-to-notebook (H1): [`apps/server/test/from-text.test.ts`](../../apps/server/test/from-text.test.ts)
+  (11 tests: validation, title fallback, prompt versioning, idempotency,
+  result contract, 2 in-process E2E runs with the mock provider).
 - Legacy surface regression: [`apps/server/test/api.test.ts`](../../apps/server/test/api.test.ts).
 - Verification level: **Unit/Integration/E2E (in-process, mock provider)
   passed**, plus **production-smoke + deployed-code feature checks** from the

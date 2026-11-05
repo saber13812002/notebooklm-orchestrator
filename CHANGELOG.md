@@ -8,6 +8,48 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-05] — Phase H1 (text-to-notebook API)
+
+### Added
+
+- **`POST /notebooks/from-text`** (both `/api` and `/api/v1` surfaces, scope
+  `jobs:write`): create a notebook from a **text string** (JSON body
+  `{ title?, text, metadata?, summary? }`). `text` is required and capped by
+  `NLO_MAX_TEXT_CHARS` (default 200,000 code points — oversized ⇒ 400 with
+  `details.maxTextChars`, reject-don't-split). Missing `title` is derived from
+  the first non-empty line of the text. Empty `summary.prompt` applies the
+  **versioned default master prompt (v1)**; a caller prompt is recorded as
+  version `custom`. `Idempotency-Key` supported (token-scoped replay ⇒ 200 +
+  `x-idempotent-replay`). Returns `202 { jobId, status, correlationId,
+createdAt, statusUrl }`.
+- **`GET /jobs/:id/result`** (scope `jobs:read`): consolidated H1 result —
+  `{ jobId, status, notebook: { id, title, url, shareUrl }, source: { id },
+summary: { text, promptVersion }, provenance: "real"|"mock"|"unknown" }`.
+  `url`/`shareUrl` are **never fabricated** (null until a provider confirms).
+- **Runner/provider wiring:** job-runner stores the text at
+  `input/text-source.md` and passes `textPath` to the provider; python-worker
+  gained the `job_text` op (notebooklm-py `sources.add_text`, verified present
+  in notebooklm-py 0.8.5); mock provider extended deterministically
+  (`mock_nb_*`/`mock_src_*`/`mock_conv_*`, text-only).
+- **OpenAPI:** spec documents both new operations + `FromTextRequest`,
+  `FromTextResponse`, `JobResult` schemas (54 ops; bidirectional drift test).
+- **Frontend parity (small):** web create-job page gains a **متن مستقیم
+  (text)** mode that calls the SAME `POST /api/notebooks/from-text` API
+  (legacy surface, no business logic in the frontend); settings response now
+  exposes read-only `defaults.max_text_chars`.
+- `NLO_MAX_TEXT_CHARS` env var (default 200,000).
+
+### Verified (mock level — Live NOT verified)
+
+- Unit: `packages/shared/test/text-source.test.ts` (7 tests).
+- Integration/E2E: `apps/server/test/from-text.test.ts` (11 tests, incl.
+  2 full in-process E2E runs to SUCCEEDED with the mock provider),
+  `apps/server/test/openapi-v1.test.ts` extended (30 tests total), web
+  `create-job.test.tsx` extended (5 tests total). Full `npm test` green.
+- **Live NOT verified:** a real NotebookLM text run requires the user's
+  Google re-login (sessions expired — see Phase P0 report); runbook in
+  `docs/reports/PHASE_H1_TEXT_TO_NOTEBOOK.md`.
+
 ## [2026-11-05] — Phase P0 (audio submission repair: preflight UX + 404 mapping)
 
 ### Fixed
