@@ -166,3 +166,85 @@ completion (see §8).
 
 Commit message: `fix(audio): session preflight on create-job + 404 for unknown
 account ids (P0 audio submission recovery)`.
+
+## 10. Live acceptance evidence (2026-11-05) — BLOCKED on re-verify
+
+**Attempt window:** 2026-11-05 20:31–21:13 UTC. Step 0 (verify login) was run
+three times (20:33, 21:00, 21:12 UTC). **Result: the `sas` account is NOT
+authenticated server-side → per the acceptance protocol, NO job was submitted
+(both the P0 audio job and the H1 text job).** No attempts, no retries.
+
+### Evidence (all read-only)
+
+1. `GET /api/accounts` (21:12:16 UTC) — `acc_9ef8fd4d431c49fc` (sas,
+   saber.tabataba@gmail.com): `status: AUTH_REQUIRED`, `hasAuth: false`,
+   `lastSuccessAt: 2026-10-22T05:33:29.745Z`, `updatedAt: 2026-11-03T12:32:35.189Z`.
+2. `GET /api/sessions` (20:33, 21:00, 21:12 UTC — three polls): session
+   `sess_af33bf051ce04892` → `state: AUTH_REQUIRED`,
+   `lastVerifiedAt: 2026-10-23T02:52:36.745Z` (13 days old),
+   `sessionUsable: false`, `hasStoredFile: true`.
+3. DB `auth_sessions` (queried 21:0x UTC): sas row
+   `updated_at = 2026-11-04T22:12:34.070Z` — i.e. **no write at all after the
+   4871 server started (20:16 local / 19:46 UTC), and none after the reported
+   ~20:31 UTC login**.
+4. Session file `data/sessions/nlo-acc_9ef8fd4d431c49fc.json`: 12,139 bytes,
+   last written **2026-10-23** — no new storage-state was written by today's
+   login.
+5. Server log `tmp/dev4871-h1.log` (pid 12088): after the two startup-time
+   worker spawns (both `SIGTERM`), no login/verify worker was spawned; no
+   `auth op routed` line. The log contains no record of any login request.
+6. Process forensics: chrome processes that appeared 00:25–00:28 local
+   (20:55–20:58 UTC) are from `C:\Program Files\Google\Chrome` (the user's
+   regular browser), not a Playwright Chromium launch — **no NLO login
+   browser window was opened by the server**.
+7. `query session` (20:35 UTC): session 2 = **Disc** (disconnected) — the
+   0xC0000142 (3221225794) spawn hazard is in play; both proxy nodes' health
+   checks today failed with `xray exited early (code=3221225794)`
+   (16:24:46 and 16:35:03 UTC rows in `proxy_health`).
+
+### Interpretation
+
+The ~20:31 UTC login reached neither the server nor the provider: no
+`AUTH_IN_PROGRESS` transition, no login worker spawn, no session-file
+rewrite, and the account has stayed `AUTH_REQUIRED` since 2026-11-04
+22:12:34 UTC. The UI's success badge renders only for
+`state === "AUTHENTICATED" && usable`, which the server does not currently
+report — so the "AUTHENTICATED with fresh timestamp" seen in the UI cannot be
+derived from current server state. Most likely the sign-in was completed in a
+browser context that never called `POST /api/sessions/{id}/login` (or
+`browser-import`) against the 4871 server, or targeted the stale 4870
+instance that was killed ~20:25 UTC.
+
+### PASS/FAIL — P0 audio live acceptance
+
+| Criterion                                   | Status                              |
+| ------------------------------------------- | ----------------------------------- |
+| SUCCEEDED job                               | **FAIL** — not executed (Step 0 precondition not met) |
+| Real notebook id (not `mock_*`)             | N/A                                 |
+| Real source id (not `mock_*`)               | N/A                                 |
+| Real answer (non-empty, genuine)            | N/A                                 |
+| `provenance == "real"`                      | N/A                                 |
+| IDs persisted to DB                         | N/A                                 |
+| Retrievable via the UI's GET endpoints      | N/A                                 |
+
+**Verdict: P0 audio live = NOT verified (BLOCKED on re-verify).**
+Server itself is healthy: `/api/health` + `/api/health/ready` both
+`ok/ready: true` (provider configured, xray runtime available), so the
+blocker is purely the missing authentication, plus the session-2 `Disc`
+environmental hazard for worker/xray spawns.
+
+### Unblocking (user actions, then re-run)
+
+1. From the 4871 UI `/accounts`, trigger a **fresh** login (or
+   `POST /api/sessions/sess_af33bf051ce04892/…` login / browser-import) and
+   wait for the server-side `AUTHENTICATED` transition — confirm via
+   `GET /api/sessions` (state + fresh `lastVerifiedAt`), not the badge alone.
+2. Check `query session` — session 2 should ideally be `Conn` before live
+   runs, to avoid xray/worker `0xC0000142` spawn failures (see proxy_health
+   rows above).
+3. Re-run both acceptances on 4871: P0 audio (fresh 15–30 s WAV, multipart
+   `POST /api/jobs`, `preferredAccountId=acc_9ef8fd4d431c49fc`) and H1 text
+   (`POST /api/v1/notebooks/from-text`, Persian text, `summary.enabled=true`).
+   Append evidence to this report and
+   `PHASE_H1_TEXT_TO_NOTEBOOK.md` §11, and flip the CHANGELOG status lines
+   only if verified.

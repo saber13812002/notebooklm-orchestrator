@@ -283,3 +283,65 @@ provider (`NLO_PROVIDER=python-worker`) + a healthy, verified egress proxy node
 Rollback note: nothing about the text endpoint requires a rollback path — it is
 additive; the previous-good commit (P0, `fc54fc45`) remains the rollback
 anchor per AGENTS.md §8.
+
+## 11. Live acceptance evidence (2026-11-05) — BLOCKED on re-verify
+
+**Attempt window:** 2026-11-05 20:31–21:13 UTC. Step 0 (verify the user's
+just-completed login of `sas` = `acc_9ef8fd4d431c49fc`) was checked three
+times (20:33, 21:00, 21:12 UTC). **The account is NOT authenticated
+server-side → the canary text job was NOT submitted** (per the acceptance
+protocol: stop and report evidence, no jobs).
+
+### Evidence (read-only)
+
+1. `GET /api/accounts` (21:12:16 UTC): `acc_9ef8fd4d431c49fc`
+   `status: AUTH_REQUIRED`, `hasAuth: false`,
+   `lastSuccessAt: 2026-10-22T05:33:29.745Z`.
+2. `GET /api/sessions` (3 polls, 20:33 / 21:00 / 21:12 UTC):
+   `sess_af33bf051ce04892` → `state: AUTH_REQUIRED`,
+   `lastVerifiedAt: 2026-10-23T02:52:36.745Z` (13 days old),
+   `sessionUsable: false`.
+3. DB `auth_sessions`: sas row `updated_at = 2026-11-04T22:12:34.070Z` —
+   no write after the 4871 server start (19:46 UTC) or after the reported
+   ~20:31 UTC login.
+4. `data/sessions/nlo-acc_9ef8fd4d431c49fc.json` last written 2026-10-23 —
+   no fresh storage-state from today's sign-in.
+5. `tmp/dev4871-h1.log` (pid 12088, new code `5e28c20`): no login/verify
+   worker spawn after startup; no `auth op routed` line.
+6. Chrome processes that appeared 20:55–20:58 UTC belong to the user's
+   regular `Program Files\Google\Chrome`, not a Playwright Chromium — no
+   NLO login window was opened.
+7. `query session`: session 2 = `Disc` (worker/xray spawn hazard
+   0xC0000142); `proxy_health` rows for both nodes today failed with
+   `xray exited early (code=3221225794)` (16:24:46 / 16:35:03 UTC).
+8. Server is otherwise healthy: `/api/health` and `/api/health/ready` →
+   `ok: true`, `ready: true` (provider configured, xray available).
+
+### Interpretation
+
+The ~20:31 UTC sign-in never reached the 4871 server: no `AUTH_IN_PROGRESS`
+→ `AUTHENTICATED` transition, no worker spawn, no session-file rewrite. The
+UI badge is derived from `state === "AUTHENTICATED" && usable`, which the
+server does not report — so the reported "AUTHENTICATED" view cannot be
+reproduced from server state. Likely a stale tab / sign-in completed in a
+browser context that never called the 4871 login endpoint (or that targeted
+the killed 4870 server).
+
+### PASS/FAIL — H1 text live acceptance
+
+| Criterion                                    | Status                            |
+| -------------------------------------------- | --------------------------------- |
+| Job `SUCCEEDED`                              | **FAIL** — not executed (Step 0 precondition not met) |
+| Real notebook id (not `mock_*`)              | N/A                               |
+| Meaningful Persian title (not Untitled)      | N/A                               |
+| Real source id (not `mock_*`)                | N/A                               |
+| Genuine summary text, `promptVersion: v1`    | N/A                               |
+| `provenance == "real"`                       | N/A                               |
+| DB persistence (notebook/source/answer, prompt version) | N/A                     |
+
+**Verdict: H1 text live = NOT verified (BLOCKED on re-verify).** Status of
+this feature remains **implemented + tested (mock level)**; the §10 runbook
+applies unchanged. Re-run after the user re-authenticates through the 4871
+server's login flow (and preferably with session 2 `Conn`); then append the
+captured result JSON here and flip the CHANGELOG line
+"Live NOT verified" → "Live verified".
