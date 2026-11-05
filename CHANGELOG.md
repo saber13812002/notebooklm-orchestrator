@@ -8,6 +8,53 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-05] — Live acceptance attempt #2 (browser-import + P0 audio + H1 text) — BLOCKED
+
+### Status (no flows verified this attempt)
+
+- **Live acceptance NOT completed.** The second attempt to authenticate
+  `sas` (`acc_9ef8fd4d431c49fc`) via `POST /api/sessions/…/browser-import`
+  (`chrome::Profile 3`) was **not fired** because a pre-flight check found the
+  user's Chrome still running (32 `chrome.exe` processes, PID 8392 = the
+  active, visible **Profile 3** window) holding an **exclusive lock** on
+  `Profile 3\Network\Cookies`. Probed with the importer's exact access
+  pattern: `shutil.copyfile`/`sqlite3 ro`/copy+`sqlite3` all fail
+  (`PermissionError [Errno 13]` / `unable to open database file`). Per the
+  acceptance protocol the import was skipped (a guaranteed
+  "browser database is locked") and **no P0 audio or H1 text job was
+  submitted**. Server-side truth at stop: `sas` still `AUTH_REQUIRED`,
+  `lastVerifiedAt 2026-10-23` (13 days old), `hasAuth: false`.
+- **Both live flows remain NOT verified** (status unchanged):
+  - P0 audio live — **NOT verified** (see `docs/reports/PHASE_P0_AUDIO_RECOVERY.md` §11).
+  - H1 text live — **NOT verified** (see `docs/reports/PHASE_H1_TEXT_TO_NOTEBOOK.md` §12).
+- **Latent hazard observed:** while session 2 dropped to `Disc`, a worker
+  spawn on the 4871 dev server exited `0xC0000142` (3221225794) — the known
+  RDP-disconnect spawn hazard.
+
+### Known limitation (UI Login button removed — follow-up needed)
+
+- `f8a9ba4` ("single-user local app — remove admin token + auth gate") removed
+  the interactive **Login** button (`doLogin`/`sessionLogin`, `LogIn` icon)
+  from `apps/web/src/features/accounts/accounts.tsx` **without a
+  replacement**. The accounts page no longer offers the browser-based
+  sign-in flow, leaving **browser-import** as the only in-UI path to
+  authenticate an account — which now also surfaces (correctly, thanks to
+  this release's worker fix) a hard dependency on Chrome being fully closed.
+  A follow-up commit should restore the Login button (or re-export the same
+  `sessionLogin` flow). **Documented as a known limitation; fix not yet
+  landed.**
+
+### Re-verify (exact unblock, then re-run)
+
+1. Fully close the user's Chrome (esp. the visible Profile 3 window);
+   verify `tasklist | findstr /I chrome` shows no Profile 3 holder.
+2. Re-attach RDP (session 2 → `Conn`) to avoid the 0xC0000142 spawn hazard.
+3. Re-run browser-import → confirm `GET /api/sessions` shows `AUTHENTICATED`
+   + fresh `lastVerifiedAt` → immediately submit both acceptance jobs
+   (10-min session TTL).
+4. On success, flip the P0 + H1 "Live NOT verified" lines to
+   "Live verified" here and in the two phase reports.
+
 ## [2026-11-05] — Worker protocol encoding fix (auth)
 
 ### Fixed

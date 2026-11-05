@@ -345,3 +345,56 @@ applies unchanged. Re-run after the user re-authenticates through the 4871
 server's login flow (and preferably with session 2 `Conn`); then append the
 captured result JSON here and flip the CHANGELOG line
 "Live NOT verified" → "Live verified".
+
+## 12. Second live-acceptance attempt (2026-11-05 23:32–23:42 UTC) — BLOCKED: cookie DB lock
+
+**Outcome: canary text job NOT submitted** — the Step 0 precondition
+(browser-import + server-side `AUTHENTICATED`) could not be reached.
+Detailed evidence and the same-day P0 attempt are recorded in
+`PHASE_P0_AUDIO_RECOVERY.md` §11 (both attempts share the same blocker);
+summary:
+
+- The user believed all Chrome windows were closed, but
+  `tasklist | findstr /I chrome` (23:32 UTC) showed **32 `chrome.exe`
+  processes**, including PID 8392 — the **active, visible Profile 3 window**
+  (`chrome.exe --profile-directory="Profile 3"`) that holds an **exclusive
+  lock** on `Profile 3\Network\Cookies`.
+- Probe with the importer's exact access pattern (`tmp/probe_cookie_lock.py`):
+  `shutil.copyfile` → `PermissionError [Errno 13]`; `sqlite3 ro` →
+  `unable to open database file`; copy+`sqlite3` → `PermissionError [Errno
+  13]`. A browser-import attempt would have failed with
+  "browser database is locked" — per the acceptance protocol the import was
+  **not fired** (no wasted 3-minute worker spawn) and no job was submitted.
+- Server-side truth at stop (23:40 UTC, read-only): `sas`
+  `state: AUTH_REQUIRED`, `lastVerifiedAt: 2026-10-23T02:52:36.745Z`
+  (13-day-old), `sessionUsable: false`, `hasAuth: false`; session file
+  `data/sessions/nlo-acc_9ef8fd4d431c49fc.json` last written 2026-10-23.
+- Latent hazard: session 2 dropped to `Disc` at ~23:40 UTC and a worker
+  spawn on the 4871 server exited with `0xC0000142` (3221225794) — the known
+  RDP-disconnect spawn hazard (P0 report §11).
+
+### PASS/FAIL — H1 text live acceptance (attempt 2)
+
+| Criterion                                    | Status                                    |
+| -------------------------------------------- | ----------------------------------------- |
+| Job `SUCCEEDED`                              | **NOT executed** (Step 0 precondition not met) |
+| Real notebook id (not `mock_*`)              | N/A                                       |
+| Meaningful Persian title (not Untitled)      | N/A                                       |
+| Real source id (not `mock_*`)                | N/A                                       |
+| Genuine summary text, `promptVersion: v1`    | N/A                                       |
+| `provenance == "real"`                       | N/A                                       |
+| DB persistence (notebook/source/answer, prompt version) | N/A                     |
+
+**Verdict (unchanged): H1 text live = NOT verified.**
+
+### Known limitation discovered (UI Login button removed)
+
+`f8a9ba4` ("single-user local app — remove admin token + auth gate") removed
+the interactive **Login** button (`doLogin`/`sessionLogin`, `LogIn` icon)
+from `apps/web/src/features/accounts/accounts.tsx` without a replacement —
+the accounts page no longer offers the browser-based sign-in flow, leaving
+**browser-import** as the only in-UI path to authenticate an account. This
+makes the (rare) "browser database is locked" failure a full auth dead-end
+until the user closes Chrome. A follow-up commit should restore the Login
+button (or a re-export of the same `sessionLogin` flow); documented in
+CHANGELOG as a known limitation.

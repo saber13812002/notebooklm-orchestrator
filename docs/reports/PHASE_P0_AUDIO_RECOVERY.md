@@ -248,3 +248,113 @@ environmental hazard for worker/xray spawns.
    Append evidence to this report and
    `PHASE_H1_TEXT_TO_NOTEBOOK.md` §11, and flip the CHANGELOG status lines
    only if verified.
+
+## 11. Second live-acceptance attempt (2026-11-05 23:32–23:42 UTC) — BLOCKED: Chrome held the cookie DB lock
+
+**Outcome: import NOT fired, no job submitted (both P0 audio and H1 text).**
+The pre-flight gate in the acceptance protocol ("proceed only if no Chrome
+process holds the cookie DB lock") was not satisfied; per the protocol we
+stopped and captured evidence instead of burning a 3-minute import on a
+guaranteed failure.
+
+### Pre-flight (all healthy)
+
+- `GET /api/health` + `/api/health/ready` → `200` (server pid 18492,
+  HEAD `19fba24`, the non-ASCII worker-protocol fix).
+- Worker round-trip on this server verified clean earlier (verify op:
+  tunnel `france1-SeyedSaber`, clean spawn/SIGTERM).
+- `query session`: session 2 (`s.tabatabaei`) = `Conn` — RDP hazard NOT in
+  play at 23:32 UTC.
+- Git: clean index (no pre-staged files); untracked `$out`, `HTTP`,
+  `2026-11-05`, `tmp/` only.
+
+### Blocker 1 — the user's Chrome is (partially) still open; Profile 3 is locked
+
+`tasklist | findstr /I chrome` at 23:32 UTC showed **32 `chrome.exe`
+processes** in session 2 — Chrome had NOT been fully closed.
+
+- **Lock holder:** `chrome.exe` PID 8392 (~371 MB, ~2 h 04 m CPU time),
+  command line `chrome.exe --profile-directory="Profile 3"` — i.e. the
+  **active Profile 3 browser**, and `tasklist /v` shows a **visible top-level
+  window** (title `admin panel cpanel pardisania …`), so this is a live
+  window the user can close — not a hidden/background process.
+- `User Data\lockfile` mtime 2026-11-04 09:25 (local) confirms a
+  long-running Chrome instance.
+
+Direct probe with the exact access pattern the importer uses
+(`shutil.copyfile` + `sqlite3 read`, `tmp/probe_cookie_lock.py`):
+
+| Method                                                        | Result                          |
+| ------------------------------------------------------------- | ------------------------------- |
+| `shutil.copyfile(Profile 3\Network\Cookies)`                  | `PermissionError [Errno 13]`    |
+| `sqlite3.connect("file:<Cookies>?mode=ro")` (in place)        | `OperationalError: unable to open database file` |
+| `shutil.copyfile` + `sqlite3` read on the copy                | `PermissionError [Errno 13]`    |
+
+Even a **shared-read** open is denied → the cookie DB is held with an
+exclusive lock → browser-import would fail with
+"browser database is locked. Close your browser and try again." (the error
+`19fba24` now surfaces correctly).
+
+Profile scan (`tmp/probe_all_profiles.py`, copy-test):
+
+| Profile   | Cookie DB (Network\Cookies) |
+| --------- | --------------------------- |
+| Default   | **LOCKED** (exclusive)      |
+| Profile 1 | unlocked (118,784 B)        |
+| **Profile 3** | **LOCKED** (exclusive) — the target |
+| Profile 4 | unlocked (77,824 B)         |
+| Profile 5 | unlocked (32,768 B)         |
+
+### Blocker 2 (latent) — session 2 dropped to `Disc`, worker 0xC0000142
+
+`query session` at 23:41 UTC: session 2 = **Disc** (disconnected). The dev
+log (`tmp/dev4871-h1.log`, pid 18492) ends with:
+
+```
+[nlo:worker] worker spawned pid=49144 python=...\data\venv\Scripts\python.exe
+[nlo:worker] worker exited code=3221225794 signal=none stderrTail=
+```
+
+`3221225794 = 0xC0000142` — the known RDP-disconnect spawn hazard. Any live
+job run while session 2 is `Disc` would face this on worker spawn.
+
+### Server-side truth at stop (read-only)
+
+- `GET /api/sessions` (23:40 UTC): `sas` → `sess_af33bf051ce04892`
+  `state: AUTH_REQUIRED`, `lastVerifiedAt: 2026-10-23T02:52:36.745Z`
+  (13 days old), `sessionUsable: false`; session `updatedAt`
+  `2026-11-05T23:29:13.756Z` (a failed-verify write — not a fresh login).
+- `GET /api/accounts` (23:40 UTC): `sas` → `status: AUTH_REQUIRED`,
+  `hasAuth: false`, `lastSuccessAt: 2026-10-22T05:33:29.745Z`.
+- Session file `data/sessions/nlo-acc_9ef8fd4d431c49fc.json`: 12,139 B,
+  last written **2026-10-23** — no storage-state written by today's sign-in.
+- Log: no `auth op routed` / no import worker for this attempt (only the
+  earlier startup/verify spawns listed above).
+
+### PASS/FAIL — second attempt (P0 audio + H1 text)
+
+| Criterion                                   | Status                                    |
+| ------------------------------------------- | ----------------------------------------- |
+| browser-import fired                        | **NOT fired** — gate not met (cookie DB locked) |
+| Server-side `AUTHENTICATED` + fresh `lastVerifiedAt` | **FAIL** — still `AUTH_REQUIRED`, 13-day-old verify |
+| P0 audio job / H1 text job executed         | **NOT executed** (precondition not met)    |
+| Real notebook/source ids, provenance, DB    | N/A                                       |
+
+**Verdict (unchanged): P0 audio live = NOT verified; H1 text live =
+NOT verified.** Both remain BLOCKED, now with the exact blocker identified.
+
+### Unblock (exact, minimal)
+
+1. **Fully close the user's Chrome** — in particular the visible Profile 3
+   window (`admin panel cpanel pardisania …`). Closing tabs/windows is not
+   enough if any `chrome.exe` remains; verify with
+   `tasklist | findstr /I chrome` (expect zero or only non-Profile-3
+   processes that don't hold `Profile 3\Network\Cookies` — the probe above
+   re-verifies in <1 s: `python tmp/probe_all_profiles.py`).
+2. Re-attach the RDP session (session 2 must be `Conn`) to avoid the
+   0xC0000142 worker-spawn hazard (Blocker 2).
+3. Re-run: `POST /api/sessions/acc_9ef8fd4d431c49fc/browser-import`
+   (`browser: "chrome::Profile 3"`, `account: saber.tabataba@gmail.com`,
+   `timeoutSec: 180`) → verify `GET /api/sessions` shows `AUTHENTICATED`
+   with a fresh `lastVerifiedAt` → immediately submit both acceptance jobs
+   (session TTL is 10 min).
