@@ -5,9 +5,11 @@ import {
   accountsList,
   jobCreate,
   proxiesList,
+  sessionsList,
   settingsGet,
   type Account,
   type MaskedProxyNode,
+  type SessionAccountView,
 } from "@/lib/api";
 import { faFileSize } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +41,8 @@ export function CreateJobPage() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [nodes, setNodes] = useState<MaskedProxyNode[]>([]);
+  const [sessions, setSessions] = useState<SessionAccountView[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [accountId, setAccountId] = useState("");
   const [nodeId, setNodeId] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -53,6 +57,16 @@ export function CreateJobPage() {
       .catch(() => undefined);
     proxiesList()
       .then(setNodes)
+      .catch(() => undefined);
+    // Preflight for the account picker: the job runner only accepts accounts
+    // whose session is AUTHENTICATED and verified within the TTL, so surface
+    // the unusable state HERE instead of letting the job fail in the queue
+    // with errorClass "auth".
+    sessionsList()
+      .then((o) => {
+        setSessions(o.sessions);
+        setSessionsLoaded(true);
+      })
       .catch(() => undefined);
   }, []);
 
@@ -72,7 +86,12 @@ export function CreateJobPage() {
     setFile(f);
   };
 
-  const canSubmit = prompt.trim().length > 0 && !submitting;
+  const sessionByAccount = new Map(sessions.map((s) => [s.accountId, s]));
+  const selectedUsable = accountId
+    ? (sessionByAccount.get(accountId)?.sessionUsable ?? false)
+    : sessions.some((s) => s.sessionUsable);
+  const sessionBlocked = sessionsLoaded && accounts.length > 0 && !selectedUsable;
+  const canSubmit = prompt.trim().length > 0 && !submitting && !sessionBlocked;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -230,6 +249,27 @@ export function CreateJobPage() {
                 />
               </Field>
             </div>
+
+            {sessionBlocked && (
+              <div
+                role="alert"
+                className="rounded-field border border-warning/40 bg-warning/10 px-3 py-2 text-xs leading-6"
+              >
+                <span className="font-medium">
+                  {accountId
+                    ? `حساب انتخابی (${accounts.find((a) => a.id === accountId)?.label ?? ""})`
+                    : "هیچ‌کدام از حساب‌های ثبت‌شده"}
+                </span>{" "}
+                جلسه‌ی معتبر و تأییدشده ندارند؛ درخواست با خطای احراز هویت شکست می‌خورد.{" "}
+                <Link
+                  to="/accounts"
+                  className="font-medium underline underline-offset-2 hover:text-foreground"
+                >
+                  رفتن به صفحه‌ی حساب‌ها
+                </Link>{" "}
+                و ابتدا وارد شوید یا جلسه را تأیید کنید.
+              </div>
+            )}
 
             {submitError && (
               <p

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Db } from "../db/db.js";
-import type { AccountStatus } from "@nlo/shared";
+import { ApiError, ApiCodes, type AccountStatus } from "@nlo/shared";
 
 export interface AccountRow {
   id: string;
@@ -64,7 +64,7 @@ export class AccountsRepo {
 
   getOrThrow(id: string): AccountRow {
     const row = this.get(id);
-    if (!row) throw new Error(`account not found: ${id}`);
+    if (!row) throw new ApiError(ApiCodes.notFound, `account not found: ${id}`, 404);
     return row;
   }
 

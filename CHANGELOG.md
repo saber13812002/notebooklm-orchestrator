@@ -8,6 +8,37 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-05] — Phase P0 (audio submission repair: preflight UX + 404 mapping)
+
+### Fixed
+
+- **Create-job preflight (web):** the new-job page now loads
+  `GET /api/sessions` and, when the effective account (explicitly selected, or
+  auto mode with no usable account) has no usable session, disables Submit and
+  shows a warning with a link to `/accounts` instead of letting the job fail
+  in the queue with `errorClass "auth"` (mirrors the runner's
+  AUTHENTICATED + 10-min-TTL rule exactly).
+- **404 for unknown account ids (server):** `AccountsRepo.getOrThrow` now
+  throws `ApiError(not_found, 404)`, so session routes (`/verify`,
+  `/refresh`, `/import`, `DELETE /api/sessions/:id`) return the standard 404
+  envelope instead of a generic 500 `internal_error` when an unknown id
+  (e.g. a pasted `sess_…` id) is used.
+
+### Added
+
+- `apps/server/test/sessions-404.test.ts` (6 tests) and
+  `apps/web/src/features/jobs/create-job.test.tsx` (4 tests).
+- `docs/reports/PHASE_P0_AUDIO_RECOVERY.md` — reproduction evidence, root
+  cause (expired Google sessions: all accounts `AUTH_REQUIRED`), fixes, and
+  remaining blockers (user re-login, xray 0xC0000142 environment issue).
+
+### Verified (mock level — Live NOT verified)
+
+- Unit/Integration passed: full `npm test` 185/185 green; typecheck, lint
+  (source tree), format (touched files), and build all clean. No real
+  NotebookLM job was run to completion; live verification remains blocked on
+  the user's re-login and the dev-box xray spawn failure.
+
 ## [2026-11-02] — Phase T0 (stuck files & jobs audit on the live new-host deployment, read-only)
 
 ### Verified (read-only)
