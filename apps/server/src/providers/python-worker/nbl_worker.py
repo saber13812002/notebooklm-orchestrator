@@ -49,7 +49,15 @@ _write_lock = asyncio.Lock()
 
 
 async def emit(obj: dict[str, Any]) -> None:
-    line = json.dumps(obj, ensure_ascii=False)
+    # ensure_ascii=True (the default): protocol frames must stay pure ASCII.
+    # On Windows the worker's stdout is a pipe using the ANSI codepage
+    # (e.g. cp437); a non-ASCII character (Persian account/profile names,
+    # notebook titles, CLI error text) raised UnicodeEncodeError here, killed
+    # the feed loop mid-request, and crashed the interpreter at finalization
+    # (0xC0000005) — swallowing the real error (observed 2026-11-02 and
+    # 2026-11-05 on browser-import). \uXXXX escapes parse identically in the
+    # TypeScript supervisor.
+    line = json.dumps(obj)
     async with _write_lock:
         sys.stdout.write(line + "\n")
         sys.stdout.flush()

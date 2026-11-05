@@ -8,6 +8,29 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-05] — Worker protocol encoding fix (auth)
+
+### Fixed
+
+- **Python worker crashed (exit `0xC0000005`) when any op error contained
+  non-ASCII text** (e.g. Persian account/profile names such as `'صابر'`).
+  `emit()` serialized protocol frames with `ensure_ascii=False`; on Windows
+  the worker's stdout pipe uses the ANSI codepage (cp437), so the write
+  raised `UnicodeEncodeError` inside the feed loop's error path, killed the
+  loop, and the interpreter crashed at finalization — the real error (e.g.
+  the browser-import "browser database is locked. Close your browser and try
+  again.") was never delivered and the API reported a cryptic
+  "python worker exited unexpectedly". Reproduced live on 2026-11-02
+  (account `صابر1404`) and 2026-11-05 (account `sas`); fix is
+  `json.dumps(obj)` (pure-ASCII frames, `\uXXXX` escapes parse identically)
+  with a regression test (`worker-nonascii-protocol.test.ts`) that spawns
+  the real worker and asserts a non-ASCII error is delivered and the worker
+  stays alive (test fails with the pre-fix `0xC0000005` symptom).
+  **Verified: unit/integration passed** (worker test runs locally where the
+  venv exists; skipped otherwise). Note: browser-import on a machine whose
+  Chrome is running still fails with the (now properly surfaced)
+  "browser database is locked" error — close Chrome first.
+
 ## [2026-11-05] — Phase H1 (text-to-notebook API)
 
 ### Added
