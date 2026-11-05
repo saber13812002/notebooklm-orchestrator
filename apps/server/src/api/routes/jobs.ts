@@ -4,6 +4,7 @@ import { ApiError, ApiCodes, resolveWithin, safeName } from "@nlo/shared";
 import type { AppContext } from "../../app-context.js";
 import { dataPaths } from "../../config.js";
 import { createJobFromUpload, parseJobMultipart } from "../job-create.js";
+import { createJobFromText } from "../job-create-text.js";
 import "../request-augment.js";
 
 const listQuery = z.object({
@@ -58,6 +59,65 @@ export function registerJobRoutes(
     return reply.code(201).send({ id: job.id, status: job.status });
   });
 
+  // H1: create a notebook job from pasted text (JSON).
+  //
+  // Returns 202 (accepted for asynchronous processing — not 201, because the
+  // request produces a job, not a finished resource). Idempotency semantics
+  // are identical to POST /jobs (token-scoped; replay -> 200 +
+  // x-idempotent-replay: true). See docs/architecture/h1-text-to-notebook.md.
+  const fromTextBody = z.object({
+    title: z.string().max(200).optional().nullable(),
+    text: z.string().min(1),
+    metadata: z
+      .object({
+        language: z.string().max(32).optional().nullable(),
+        customer: z.string().max(200).optional().nullable(),
+        category: z.string().max(200).optional().nullable(),
+      })
+      .optional()
+      .nullable(),
+    summary: z
+      .object({
+        enabled: z.boolean().optional(),
+        prompt: z.string().max(20_000).optional().nullable(),
+      })
+      .optional()
+      .nullable(),
+  });
+
+  app.post(`${base}/notebooks/from-text`, async (req, reply) => {
+    const body = fromTextBody.parse(req.body);
+    const rawKey = req.headers["idempotency-key"];
+    let idempotencyKey: string | null = null;
+    if (rawKey !== undefined) {
+      const key = Array.isArray(rawKey) ? (rawKey[0] ?? "") : String(rawKey);
+      if (!IDEMPOTENCY_KEY_RE.test(key)) {
+        throw new ApiError(
+          ApiCodes.validation,
+          "Idempotency-Key must be 8-128 chars of [A-Za-z0-9._-]",
+          400,
+        );
+      }
+      idempotencyKey = key;
+    }
+    const { job, idempotentReplay } = await createJobFromText(ctx, body, {
+      idempotencyKey,
+      tokenId: req.apiToken?.id ?? null,
+    });
+    const payload = {
+      jobId: job.id,
+      status: job.status,
+      correlationId: req.correlationId ?? null,
+      createdAt: job.createdAt,
+      statusUrl: `${base}/jobs/${job.id}`,
+    };
+    if (idempotentReplay) {
+      reply.header("x-idempotent-replay", "true");
+      return reply.code(200).send(payload);
+    }
+    return reply.code(202).send(payload);
+  });
+
   // List with filters + pagination.
   app.get(`${base}/jobs`, async (req) => {
     const q = listQuery.parse(req.query);
@@ -78,6 +138,35 @@ export function registerJobRoutes(
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
     return job;
+  });
+
+  // H1: stable result contract for a text (or any) job.
+  // url/shareUrl are NEVER fabricated — null until a provider confirms them.
+  app.get<{ Params: { id: string } }>(`${base}/jobs/:id/result`, async (req) => {
+    const job = ctx.jobs.get(req.params.id);
+    if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
+    const succeeded = job.status === "SUCCEEDED";
+    return {
+      jobId: job.id,
+      status: job.status,
+      notebook:
+        succeeded && job.notebookId
+          ? {
+              id: job.notebookId,
+              title: job.notebookTitle ?? null,
+              url: null,
+              shareUrl: null,
+            }
+          : null,
+      source: succeeded && job.sourceId ? { id: job.sourceId } : null,
+      summary: succeeded
+        ? {
+            text: job.answerMarkdown ?? null,
+            promptVersion: job.input.promptVersion ?? null,
+          }
+        : null,
+      provenance: job.resultProvenance ?? "unknown",
+    };
   });
 
   app.get<{ Params: { id: string } }>(`${base}/jobs/:id/events`, async (req) => {

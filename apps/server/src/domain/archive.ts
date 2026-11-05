@@ -73,6 +73,8 @@ export class JobArchive {
     audioMediaType: string | null;
     configSnapshot: Record<string, unknown>;
     createdAt: string;
+    /** H1: text-source metadata (text jobs only). */
+    text?: { charCount: number; sizeBytes: number; language?: string | null } | null;
   }): void {
     this.ensureDir("input");
     this.ensureDir("execution");
@@ -89,6 +91,14 @@ export class JobArchive {
             audio: input.originalAudioName
               ? { originalName: input.originalAudioName, mediaType: input.audioMediaType }
               : null,
+            text: input.text
+              ? {
+                  file: "input/text-source.md",
+                  charCount: input.text.charCount,
+                  sizeBytes: input.text.sizeBytes,
+                  language: input.text.language ?? null,
+                }
+              : null,
           },
           configSnapshot: input.configSnapshot,
         },
@@ -96,6 +106,14 @@ export class JobArchive {
         2,
       ),
     );
+  }
+
+  /**
+   * H1: store the text source at a fixed server-chosen name
+   * (input/text-source.md). Returns the absolute path.
+   */
+  storeText(content: string): string {
+    return this.writeText("input/text-source.md", content);
   }
 
   /**

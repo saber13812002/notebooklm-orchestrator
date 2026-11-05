@@ -45,6 +45,13 @@ export interface AppConfig {
    * Trailing slashes are normalized; http/https only.
    */
   internalApiBaseUrl: string;
+  /**
+   * H1 (text-to-notebook): maximum text size accepted by
+   * POST /notebooks/from-text, in characters (code points). Oversized
+   * requests are rejected with 400 — the text is NOT split (reject-don't-
+   * split policy; one text = one NotebookLM source).
+   */
+  maxTextChars: number;
 }
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..", "..");
@@ -170,6 +177,7 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     apiRateLimitMax: intEnv(env, "NLO_API_RATE_LIMIT_MAX", 120),
     apiRateLimitWindowMs: intEnv(env, "NLO_API_RATE_LIMIT_WINDOW_MS", 60_000),
     internalApiBaseUrl,
+    maxTextChars: intEnv(env, "NLO_MAX_TEXT_CHARS", 200_000),
   };
 }
 

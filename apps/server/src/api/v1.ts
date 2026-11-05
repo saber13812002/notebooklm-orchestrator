@@ -127,6 +127,7 @@ function requiredScope(method: string, path: string): string {
   }
   if (method === "POST") {
     if (path === "/jobs") return "jobs:write";
+    if (path === "/notebooks/from-text") return "jobs:write";
     if (path.endsWith("/cancel")) return "jobs:cancel";
     if (path.endsWith("/requeue")) return "jobs:write";
     return "admin";

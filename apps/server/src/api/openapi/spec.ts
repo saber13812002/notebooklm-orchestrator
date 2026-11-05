@@ -80,6 +80,29 @@ function jobObject() {
               providerConfirmed: { type: "boolean" },
             },
           },
+          text: {
+            type: ["object", "null"],
+            description: "Present for text-to-notebook jobs (H1): the stored text source.",
+            properties: {
+              sha256: { type: "string" },
+              sizeBytes: { type: "integer" },
+              charCount: { type: "integer" },
+              language: { type: ["string", "null"] },
+            },
+          },
+          promptVersion: {
+            type: ["string", "null"],
+            description:
+              "Master-prompt version used for the summary (`v1`, or `custom` when the caller supplied its own prompt). Null when no summary was requested.",
+          },
+          metadata: {
+            type: ["object", "null"],
+            properties: {
+              language: { type: ["string", "null"] },
+              customer: { type: ["string", "null"] },
+              category: { type: ["string", "null"] },
+            },
+          },
         },
       },
       idempotencyKey: { type: ["string", "null"] },
@@ -171,6 +194,105 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
             status: { type: "integer" },
             detail: { type: ["string", "null"] },
             ip: { type: ["string", "null"] },
+          },
+        },
+        FromTextRequest: {
+          type: "object",
+          required: ["text"],
+          properties: {
+            title: {
+              type: "string",
+              maxLength: 200,
+              description: "Notebook title. When omitted, derived from the first line of the text.",
+            },
+            text: {
+              type: "string",
+              minLength: 1,
+              description:
+                "Source text (non-empty). Must not exceed NLO_MAX_TEXT_CHARS (default 200000).",
+            },
+            metadata: {
+              type: ["object", "null"],
+              properties: {
+                language: { type: "string", maxLength: 32 },
+                customer: { type: "string", maxLength: 200 },
+                category: { type: "string", maxLength: 200 },
+              },
+            },
+            summary: {
+              type: ["object", "null"],
+              properties: {
+                enabled: { type: "boolean", default: true },
+                prompt: {
+                  type: "string",
+                  maxLength: 20000,
+                  description:
+                    "Custom summary prompt. When omitted, the versioned master prompt (default v1) is used.",
+                },
+              },
+            },
+          },
+        },
+        FromTextResponse: {
+          type: "object",
+          required: ["jobId", "status", "createdAt", "statusUrl"],
+          properties: {
+            jobId: { type: "string", example: "j_0123456789abcdef0123456789abcdef" },
+            status: { type: "string" },
+            correlationId: {
+              type: ["string", "null"],
+              description:
+                "Present on /api/v1 (supplied or generated cr_<32hex>); null on the legacy /api surface.",
+            },
+            createdAt: { type: "string", format: "date-time" },
+            statusUrl: { type: "string", description: "URL to poll for job status." },
+          },
+        },
+        JobResult: {
+          type: "object",
+          required: ["jobId", "status", "notebook", "source", "summary", "provenance"],
+          properties: {
+            jobId: { type: "string" },
+            status: { type: "string" },
+            notebook: {
+              type: ["object", "null"],
+              description:
+                "Present (non-null) only for SUCCEEDED jobs with a confirmed notebook id.",
+              properties: {
+                id: { type: "string" },
+                title: { type: ["string", "null"] },
+                url: {
+                  type: ["string", "null"],
+                  description:
+                    "Only when the provider confirmed it; never fabricated (null today).",
+                },
+                shareUrl: {
+                  type: ["string", "null"],
+                  description:
+                    "Only when the provider confirmed it; never fabricated (null today).",
+                },
+              },
+            },
+            source: {
+              type: ["object", "null"],
+              description: "Present only for SUCCEEDED jobs with a confirmed source id.",
+              properties: { id: { type: "string" } },
+            },
+            summary: {
+              type: ["object", "null"],
+              description:
+                "Present for SUCCEEDED jobs; text is null when no summary prompt was run.",
+              properties: {
+                text: { type: ["string", "null"] },
+                promptVersion: { type: ["string", "null"] },
+              },
+            },
+            provenance: {
+              type: "string",
+              enum: ["real", "mock", "unknown"],
+              description:
+                "Where the result came from: a real provider run, the mock provider, or unconfirmed.",
+            },
           },
         },
       },
@@ -270,6 +392,48 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
           },
         },
       },
+      "/notebooks/from-text": {
+        post: {
+          tags: ["jobs"],
+          ...bearerParams(),
+          summary: "Create a text-to-notebook job (H1) from raw text.",
+          description:
+            "Creates an async job that stores the text, creates/reuses a NotebookLM notebook named after the job title, and adds the text as a source (real mechanism: notebooklm-py `sources.add_text`). When `summary.prompt` is omitted, a versioned master prompt (default `v1`) is used; when `summary.enabled` is false, no summary prompt is executed. Text longer than NLO_MAX_TEXT_CHARS (default 200000 characters) is rejected with 400. Send `Idempotency-Key` (8-128 chars of [A-Za-z0-9._-]) with a valid token to make the create replayable; a replay returns the original job with 200 and `x-idempotent-replay: true`.",
+          parameters: [
+            {
+              name: "Idempotency-Key",
+              in: "header",
+              required: false,
+              schema: { type: "string", pattern: "^[A-Za-z0-9._-]{8,128}$" },
+            },
+          ],
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/FromTextRequest" } },
+            },
+          },
+          responses: {
+            "202": {
+              description: "Job accepted and queued; poll via `statusUrl`.",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/FromTextResponse" } },
+              },
+            },
+            "200": {
+              description:
+                "Idempotent replay of an earlier create with the same key (x-idempotent-replay: true).",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/FromTextResponse" } },
+              },
+            },
+            "400": errorResponse("validation"),
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
+            "429": errorResponse("rate_limited"),
+          },
+        },
+      },
       "/jobs/{id}": {
         get: {
           tags: ["jobs"],
@@ -280,6 +444,25 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
             "200": {
               description: "Job.",
               content: { "application/json": { schema: { $ref: "#/components/schemas/Job" } } },
+            },
+            "404": errorResponse("not_found"),
+          },
+        },
+      },
+      "/jobs/{id}/result": {
+        get: {
+          tags: ["jobs"],
+          ...bearerParams(),
+          summary: "Get the structured result of a job (notebook + source + summary + provenance).",
+          description:
+            "Returns the provider-confirmed notebook/source identities, the summary answer with the prompt version used, and the result provenance. `notebook.url`/`shareUrl` are present only when the provider actually confirmed them (never fabricated; null today). For a job that has not SUCCEEDED, the fields are null and `status` reflects the current state.",
+          parameters: [idParam()],
+          responses: {
+            "200": {
+              description: "Job result.",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/JobResult" } },
+              },
             },
             "404": errorResponse("not_found"),
           },

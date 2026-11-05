@@ -409,7 +409,19 @@ export class PythonWorkerProvider implements NotebookLMProvider {
         needsReauth: false,
       });
     }
-    const notebookTitle = `nlo-${req.jobId.slice(0, 16)}`;
+    // H1: the app passes a resolved, meaningful notebook title (user title or
+    // derived from the text). Audio jobs without one keep the legacy fallback.
+    const notebookTitle = req.notebookTitle?.trim() || `nlo-${req.jobId.slice(0, 16)}`;
+    const isText = Boolean(req.textPath);
+    const textPath: string | null = req.textPath ?? null;
+    if (textPath && !existsSync(textPath)) {
+      throw new ProviderFailure({
+        failureClass: "invalid_input",
+        message: "input text is recorded for this job but the stored file is missing",
+        ambiguous: false,
+        needsReauth: false,
+      });
+    }
     const w = new WorkerSupervisor({
       pythonBin: this.opts.pythonBin,
       workerPath: this.opts.workerPath,
@@ -423,8 +435,10 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       selecting_notebook: [20, "selecting/creating notebook"],
       uploading_audio: [30, "uploading audio to NotebookLM"],
       upload_done: [50, "upload complete"],
-      waiting_for_processing: [55, "waiting for NotebookLM to process audio"],
-      processing_done: [75, "audio processed"],
+      adding_text: [30, "adding text source to NotebookLM"],
+      text_added: [50, "text source added"],
+      waiting_for_processing: [55, "waiting for NotebookLM to process source"],
+      processing_done: [75, "source processed"],
       executing_prompt: [80, "executing prompt"],
       prompt_done: [95, "prompt completed"],
     };
@@ -449,20 +463,32 @@ export class PythonWorkerProvider implements NotebookLMProvider {
         references: { sourceId: string | null; quote: string | null }[];
         checkedAt: string;
       }>(
-        "job",
-        {
-          sessionPath,
-          audioPath: audioPath ?? "",
-          audioName: audioPath ? path.basename(audioPath) : "",
-          prompt: req.prompt,
-          notebookTitle,
-          waitSec: 1800,
-          timeoutSec: Math.floor((this.opts.jobTimeoutMs ?? 30 * 60_000) / 1000),
-        },
+        isText ? "job_text" : "job",
+        isText
+          ? {
+              sessionPath,
+              textPath: textPath!,
+              textTitle: req.textTitle?.trim() || "",
+              prompt: req.prompt,
+              notebookTitle,
+              waitSec: 1800,
+              timeoutSec: Math.floor((this.opts.jobTimeoutMs ?? 30 * 60_000) / 1000),
+            }
+          : {
+              sessionPath,
+              audioPath: audioPath ?? "",
+              audioName: audioPath ? path.basename(audioPath) : "",
+              prompt: req.prompt,
+              notebookTitle,
+              waitSec: 1800,
+              timeoutSec: Math.floor((this.opts.jobTimeoutMs ?? 30 * 60_000) / 1000),
+            },
         { signal: req.signal },
       );
 
-      if (!r.answer || r.answer.trim().length === 0) {
+      // An empty prompt (summary disabled) legitimately has no answer; only a
+      // non-empty prompt that came back empty is a provider failure.
+      if (req.prompt.trim() !== "" && (!r.answer || r.answer.trim().length === 0)) {
         throw new ProviderFailure({
           failureClass: "provider",
           message: "provider returned an empty answer; not reporting success",
@@ -470,13 +496,14 @@ export class PythonWorkerProvider implements NotebookLMProvider {
           needsReauth: false,
         });
       }
-      req.onProgress(100, "retrieved real answer");
+      req.onProgress(100, "operation completed");
       return {
-        answerMarkdown: r.answer,
+        answerMarkdown: r.answer.trim() ? r.answer : null,
         providerMeta: {
           simulated: false,
           provider: this.name,
           email: r.email,
+          sourceKind: isText ? "text" : "audio",
           notebookId: r.notebookId,
           notebookTitle: r.notebookTitle,
           sourceId: r.sourceId,

@@ -36,6 +36,20 @@ export interface ProviderJobRequest {
   audioPath: string | null;
   audioMediaType: string | null;
   /**
+   * H1 (text-to-notebook): path to the stored text source (server-side,
+   * fixed name input/text-source.md). `null` for audio jobs. When set, the
+   * provider adds the text as a NotebookLM source (e.g. `sources.add_text`).
+   */
+  textPath?: string | null;
+  /** H1: title used for the text source (idempotency anchor). */
+  textTitle?: string | null;
+  /**
+   * H1: desired notebook title. Providers that reuse-or-create notebooks by
+   * title use this; audio providers without a title keep their legacy
+   * `nlo-<jobId>` fallback.
+   */
+  notebookTitle?: string | null;
+  /**
    * The ONLY network route the provider may use. `null` means "no approved
    * tunnel" — a live provider MUST then refuse (fail-closed). Mock ignores.
    */

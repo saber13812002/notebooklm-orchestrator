@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 import { backoffMs, classifyError, isRetryableError, safeName, resolveWithin } from "@nlo/shared";
 import type { Job, FailureClass } from "@nlo/shared";
@@ -197,6 +198,10 @@ export class JobRunner {
               job.input.audio.size,
             ),
             audioMediaType: job.input.audio.mediaType,
+            // H1 (text-to-notebook): text jobs carry the stored text source.
+            textPath: this.textPathInArchive(jobId),
+            textTitle: job.input.text ? (job.input.title ?? null) : null,
+            notebookTitle: job.input.title ?? `nlo-${jobId.slice(0, 16)}`,
             tunnel: handle,
             egress: this.d.egress,
             signal: controller.signal,
@@ -325,7 +330,10 @@ export class JobRunner {
 
   private validate(jobId: string, archive: JobArchive): boolean {
     const job = this.d.jobs.getOrThrow(jobId);
-    if (!job.input.prompt || !job.input.prompt.trim()) {
+    // H1: a prompt is required for audio jobs; a text job with
+    // summary.enabled=false legitimately has an empty prompt (notebook +
+    // source are still created, no ask step is run).
+    if (!job.input.text && (!job.input.prompt || !job.input.prompt.trim())) {
       this.d.jobs.setStatus(jobId, "FAILED", {
         errorClass: "invalid_input",
         errorMessage: "prompt is empty",
@@ -340,6 +348,13 @@ export class JobRunner {
         audioMediaType: job.input.audio.size > 0 ? job.input.audio.mediaType : null,
         configSnapshot: job.configSnapshot,
         createdAt: job.createdAt,
+        text: job.input.text
+          ? {
+              charCount: job.input.text.charCount,
+              sizeBytes: job.input.text.sizeBytes,
+              language: job.input.text.language ?? null,
+            }
+          : null,
       });
       return true;
     } catch (err) {
@@ -547,6 +562,15 @@ export class JobRunner {
       return null;
     }
     return resolveWithin(this.d.jobsDir, jobId, "input", `audio-${safe}`);
+  }
+
+  /**
+   * H1: text jobs store their source at data/jobs/<id>/input/text-source.md
+   * (fixed server-chosen name, written by the from-text creation route).
+   */
+  private textPathInArchive(jobId: string): string | null {
+    const p = resolveWithin(this.d.jobsDir, jobId, "input", "text-source.md");
+    return existsSync(p) ? p : null;
   }
 
   private storeArtifacts(

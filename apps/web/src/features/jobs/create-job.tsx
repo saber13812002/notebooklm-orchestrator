@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { AudioLines, FileAudio, Upload, X } from "lucide-react";
+import { AudioLines, FileAudio, PenLine, Upload, X } from "lucide-react";
 import {
   accountsList,
   jobCreate,
+  jobCreateFromText,
   proxiesList,
   sessionsList,
   settingsGet,
@@ -14,6 +15,7 @@ import {
 import { faFileSize } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field, Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
@@ -39,6 +41,11 @@ export function CreateJobPage() {
   const [maxPromptChars, setMaxPromptChars] = useState(20_000);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  /** H1: source mode — "audio" (multipart upload) or "text" (from-text API). */
+  const [mode, setMode] = useState<"audio" | "text">("audio");
+  const [text, setText] = useState("");
+  const [summaryEnabled, setSummaryEnabled] = useState(true);
+  const [maxTextChars, setMaxTextChars] = useState(200_000);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [nodes, setNodes] = useState<MaskedProxyNode[]>([]);
   const [sessions, setSessions] = useState<SessionAccountView[]>([]);
@@ -50,7 +57,10 @@ export function CreateJobPage() {
 
   useEffect(() => {
     settingsGet()
-      .then((s) => setMaxPromptChars(s.settings.jobsMaxPromptChars))
+      .then((s) => {
+        setMaxPromptChars(s.settings.jobsMaxPromptChars);
+        if (s.defaults.max_text_chars) setMaxTextChars(s.defaults.max_text_chars);
+      })
       .catch(() => undefined);
     accountsList()
       .then(setAccounts)
@@ -91,7 +101,8 @@ export function CreateJobPage() {
     ? (sessionByAccount.get(accountId)?.sessionUsable ?? false)
     : sessions.some((s) => s.sessionUsable);
   const sessionBlocked = sessionsLoaded && accounts.length > 0 && !selectedUsable;
-  const canSubmit = prompt.trim().length > 0 && !submitting && !sessionBlocked;
+  const sourceOk = mode === "audio" ? prompt.trim().length > 0 : text.trim().length > 0;
+  const canSubmit = sourceOk && !submitting && !sessionBlocked;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,19 +110,32 @@ export function CreateJobPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const res = await jobCreate({
-        title: title.trim() || undefined,
-        prompt: prompt.trim(),
-        audio: file,
-        preferredAccountId: accountId || null,
-        preferredNodeId: nodeId || null,
-      });
+      let jobId: string;
+      if (mode === "text") {
+        // H1: same API contract as /api/v1/notebooks/from-text (legacy surface).
+        // No prompt -> server applies the versioned default master prompt (v1).
+        const res = await jobCreateFromText({
+          title: title.trim() || undefined,
+          text: text.trim(),
+          summary: { enabled: summaryEnabled, prompt: prompt.trim() || null },
+        });
+        jobId = res.jobId;
+      } else {
+        const res = await jobCreate({
+          title: title.trim() || undefined,
+          prompt: prompt.trim(),
+          audio: file,
+          preferredAccountId: accountId || null,
+          preferredNodeId: nodeId || null,
+        });
+        jobId = res.id;
+      }
       toast({
         title: "درخواست ایجاد شد",
         description: "در صف پردازش قرار گرفت.",
         variant: "success",
       });
-      navigate(`/jobs/${res.id}`);
+      navigate(`/jobs/${jobId}`);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "ایجاد درخواست ناموفق بود.");
       setSubmitting(false);
@@ -130,6 +154,28 @@ export function CreateJobPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={submit} className="flex flex-col gap-5">
+            <div className="flex gap-2" role="group" aria-label="نوع منبع">
+              <Button
+                type="button"
+                size="sm"
+                variant={mode === "audio" ? "default" : "outline"}
+                onClick={() => setMode("audio")}
+                aria-pressed={mode === "audio"}
+              >
+                <AudioLines />
+                فایل صوتی
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={mode === "text" ? "default" : "outline"}
+                onClick={() => setMode("text")}
+                aria-pressed={mode === "text"}
+              >
+                <PenLine />
+                متن مستقیم
+              </Button>
+            </div>
             <Field label="عنوان (اختیاری)" htmlFor="title">
               <Input
                 id="title"
@@ -139,68 +185,107 @@ export function CreateJobPage() {
                 onChange={(e) => setTitle(e.target.value)}
               />
             </Field>
-            <Field label="سؤال / دستور" htmlFor="prompt">
+            <Field
+              label={mode === "text" ? "دستور خلاصه‌سازی (اختیاری)" : "سؤال / دستور"}
+              htmlFor="prompt"
+              hint={
+                mode === "text"
+                  ? "در صورت خالی بودن، دستور پیش‌فرض خلاصه‌سازی (نسخه v1) روی سرور اعمال می‌شود."
+                  : undefined
+              }
+            >
               <Textarea
                 id="prompt"
-                rows={5}
+                rows={mode === "text" ? 3 : 5}
                 maxLength={maxPromptChars}
-                showCount
-                placeholder="مثلاً: خلاصه‌ی این گفت‌وگو را در پنج نکته بنویس…"
+                showCount={mode === "audio"}
+                placeholder={
+                  mode === "text"
+                    ? "اختیاری؛ برای مثال: خلاصه را به انگلیسی بنویس…"
+                    : "مثلاً: خلاصه‌ی این گفت‌وگو را در پنج نکته بنویس…"
+                }
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
               />
             </Field>
 
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-foreground/90">فایل صوتی (اختیاری)</span>
-              {file ? (
-                <div className="flex items-center gap-3 rounded-field border-line border-border bg-field px-3 py-2.5">
-                  <FileAudio className="size-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm" dir="ltr">
-                      {file.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{faFileSize(file.size)}</p>
+            {mode === "audio" ? (
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-foreground/90">فایل صوتی (اختیاری)</span>
+                {file ? (
+                  <div className="flex items-center gap-3 rounded-field border-line border-border bg-field px-3 py-2.5">
+                    <FileAudio className="size-4 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm" dir="ltr">
+                        {file.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{faFileSize(file.size)}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="حذف فایل"
+                      type="button"
+                      onClick={() => {
+                        setFile(null);
+                        if (fileRef.current) fileRef.current.value = "";
+                      }}
+                    >
+                      <X />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="حذف فایل"
-                    type="button"
-                    onClick={() => {
-                      setFile(null);
-                      if (fileRef.current) fileRef.current.value = "";
-                    }}
+                ) : (
+                  <label
+                    htmlFor="audio-file"
+                    className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-field border border-dashed border-input bg-field/40 px-4 py-8 text-center transition-colors hover:bg-field"
                   >
-                    <X />
-                  </Button>
-                </div>
-              ) : (
-                <label
-                  htmlFor="audio-file"
-                  className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-field border border-dashed border-input bg-field/40 px-4 py-8 text-center transition-colors hover:bg-field"
+                    <AudioLines className="size-6 text-muted-foreground" />
+                    <span className="text-sm font-medium">انتخاب فایل صوتی</span>
+                    <span className="text-xs text-muted-foreground">
+                      wav, mp3, m4a, ogg, flac — تا {faFileSize(MAX_UPLOAD)}
+                    </span>
+                  </label>
+                )}
+                <input
+                  ref={fileRef}
+                  id="audio-file"
+                  type="file"
+                  accept=".wav,.mp3,.m4a,.ogg,.flac,audio/*"
+                  className="sr-only"
+                  onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+                />
+                {fileError && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {fileError}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-1.5">
+                <Field
+                  label="متن منبع (H1)"
+                  htmlFor="text-source"
+                  hint={`متن مستقیم تا سقف ${maxTextChars.toLocaleString("fa-IR")} کاراکتر. اگر عنوان خالی باشد، از اولین خط متن عنوان گرفته می‌شود.`}
                 >
-                  <AudioLines className="size-6 text-muted-foreground" />
-                  <span className="text-sm font-medium">انتخاب فایل صوتی</span>
-                  <span className="text-xs text-muted-foreground">
-                    wav, mp3, m4a, ogg, flac — تا {faFileSize(MAX_UPLOAD)}
-                  </span>
-                </label>
-              )}
-              <input
-                ref={fileRef}
-                id="audio-file"
-                type="file"
-                accept=".wav,.mp3,.m4a,.ogg,.flac,audio/*"
-                className="sr-only"
-                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
-              />
-              {fileError && (
-                <p role="alert" className="text-xs text-destructive">
-                  {fileError}
-                </p>
-              )}
-            </div>
+                  <Textarea
+                    id="text-source"
+                    rows={10}
+                    maxLength={maxTextChars}
+                    showCount
+                    placeholder="متن را اینجا بچسبانید… (مثلاً متن یک گفت‌وگو، مقاله یا جلسه)"
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                </Field>
+                <Checkbox
+                  id="summary-enabled"
+                  checked={summaryEnabled}
+                  onCheckedChange={(v) => setSummaryEnabled(v)}
+                  label="خلاصه‌سازی خودکار"
+                  description="خروجی: خلاصه‌ی منبع با نسخه‌ی پیش‌فرض دستور (v1) یا دستور سفارشی بالا."
+                />
+              </div>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field

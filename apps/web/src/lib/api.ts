@@ -195,6 +195,32 @@ export function jobCreate(input: {
   return request("/api/jobs", { method: "POST", body: fd });
 }
 
+/** H1: result of POST /api/notebooks/from-text (both surfaces). */
+export interface CreateJobFromTextResult {
+  jobId: string;
+  status: JobStatus;
+  correlationId: string | null;
+  createdAt: string;
+  statusUrl: string;
+}
+
+export function jobCreateFromText(input: {
+  title?: string;
+  text: string;
+  metadata?: {
+    language?: string | null;
+    customer?: string | null;
+    category?: string | null;
+  } | null;
+  summary?: { enabled?: boolean; prompt?: string | null } | null;
+}): Promise<CreateJobFromTextResult> {
+  const body: Record<string, unknown> = { text: input.text };
+  if (input.title) body.title = input.title;
+  if (input.metadata) body.metadata = input.metadata;
+  if (input.summary) body.summary = input.summary;
+  return request("/api/notebooks/from-text", jsonInit("POST", body));
+}
+
 export function jobEvents(id: string): Promise<JobEvent[]> {
   return request(`/api/jobs/${id}/events`);
 }

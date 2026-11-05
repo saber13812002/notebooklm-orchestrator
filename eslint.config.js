@@ -5,7 +5,9 @@ import globals from "globals";
 
 export default tseslint.config(
   {
-    ignores: ["**/dist/**", "**/node_modules/**", "data/**", "**/vendor/**"],
+    // tmp/ is scratch space (probes, repro scripts, evidence dumps) and must
+    // never be committed; it is excluded from lint the same way data/ is.
+    ignores: ["**/dist/**", "**/node_modules/**", "data/**", "**/vendor/**", "tmp/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, rmSync, writeFileSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { FailureClass } from "@nlo/shared";
@@ -57,6 +57,10 @@ export class MockProvider implements NotebookLMProvider {
         note: "only provider-returned files are surfaced; mock returns one sample",
       },
       cancelJob: { level: CapLevel.implementedTested, note: "mock honors cancel" },
+      addTextSource: {
+        level: CapLevel.implementedTested,
+        note: "simulated (H1 text-to-notebook); real mechanism verified in notebooklm-py 0.8.5",
+      },
     });
   }
 
@@ -110,43 +114,63 @@ export class MockProvider implements NotebookLMProvider {
     }
 
     // Simulate the workflow steps.
-    req.onProgress(20, "mock: uploading audio source");
+    const isText = Boolean(req.textPath);
+    const hasPrompt = req.prompt.trim() !== "";
+
+    req.onProgress(20, isText ? "mock: adding text source" : "mock: uploading audio source");
     if (req.audioPath && !existsSync(req.audioPath)) {
       fail("invalid_input", "mock: audio file missing");
+    }
+    if (req.textPath && !existsSync(req.textPath)) {
+      fail("invalid_input", "mock: text file missing");
     }
 
     req.onProgress(45, "mock: indexing source");
     this.checkpoint(req.signal);
 
-    req.onProgress(70, "mock: asking question");
-    this.checkpoint(req.signal);
-    if (this.delayMs > 0) {
-      await new Promise((r) => setTimeout(r, this.delayMs));
+    // summary.enabled=false (empty prompt) -> providers skip the ask step.
+    let answer: string | null = null;
+    if (hasPrompt) {
+      req.onProgress(70, "mock: asking question");
       this.checkpoint(req.signal);
+      if (this.delayMs > 0) {
+        await new Promise((r) => setTimeout(r, this.delayMs));
+        this.checkpoint(req.signal);
+      }
+
+      // The "ask" call goes through the egress boundary, exactly like a real
+      // worker. A null tunnel or a broken scenario throws here (fail-closed);
+      // the runner classifies the raw error (proxy/connectivity/...) and
+      // decides retry vs. terminal.
+      await req.egress.request(req.tunnel, "notebooklm.google.com:443", {
+        method: "POST",
+        path: "/batchexecute",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: req.prompt, simulated: true }),
+      });
+
+      const textEcho =
+        isText && req.textPath
+          ? `\n**Text source (first 200 chars):**\n\n${readFileSync(req.textPath, "utf8").slice(0, 200)}\n`
+          : "";
+      answer = [
+        "# Mock Answer",
+        "",
+        "> This is a **deterministic mock** response. No real NotebookLM request was made.",
+        "",
+        `**Prompt:** ${req.prompt}`,
+        "",
+        isText
+          ? `**Text source:** added (simulated) — ${req.textTitle ?? "text"}`
+          : req.audioPath
+            ? "**Audio source:** uploaded (simulated)"
+            : "**Audio source:** none",
+        textEcho,
+        "The real provider (python-worker) is disabled until explicitly approved.",
+      ]
+        .filter((l) => l !== "")
+        .join("\n");
     }
-
-    // The "ask" call goes through the egress boundary, exactly like a real
-    // worker. A null tunnel or a broken scenario throws here (fail-closed);
-    // the runner classifies the raw error (proxy/connectivity/...) and
-    // decides retry vs. terminal.
-    await req.egress.request(req.tunnel, "notebooklm.google.com:443", {
-      method: "POST",
-      path: "/batchexecute",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ prompt: req.prompt, simulated: true }),
-    });
-
-    const answer = [
-      "# Mock Answer",
-      "",
-      "> This is a **deterministic mock** response. No real NotebookLM request was made.",
-      "",
-      `**Prompt:** ${req.prompt}`,
-      "",
-      req.audioPath ? "**Audio source:** uploaded (simulated)" : "**Audio source:** none",
-      "",
-      "The real provider (python-worker) is disabled until explicitly approved.",
-    ].join("\n");
 
     // Produce ONE sample artifact to exercise the artifact pipeline. Mock
     // artifacts are clearly application-generated in provenance.
@@ -163,13 +187,31 @@ export class MockProvider implements NotebookLMProvider {
     this.checkpoint(req.signal);
     req.onProgress(100, "mock: done");
 
+    const providerMeta: Record<string, unknown> = {
+      provider: "mock",
+      simulated: true,
+      steps: isText
+        ? hasPrompt
+          ? ["add-text", "index", "ask", "artifacts"]
+          : ["add-text", "index"]
+        : hasPrompt
+          ? ["upload", "index", "ask", "artifacts"]
+          : ["upload", "index"],
+    };
+    // Deterministic operation IDs for TEXT jobs only — mirrors the real
+    // provider's notebook/source/conversation reporting. Audio mock jobs keep
+    // reporting none (keeps the audio lifecycle tests honest).
+    if (isText) {
+      const suffix = req.jobId.slice(-16);
+      providerMeta.notebookId = `mock_nb_${suffix}`;
+      providerMeta.notebookTitle = req.notebookTitle ?? null;
+      providerMeta.sourceId = `mock_src_${suffix}`;
+      providerMeta.conversationId = hasPrompt ? `mock_conv_${suffix}` : null;
+    }
+
     return {
       answerMarkdown: answer,
-      providerMeta: {
-        provider: "mock",
-        simulated: true,
-        steps: ["upload", "index", "ask", "artifacts"],
-      },
+      providerMeta,
       artifacts: [{ name: artifactName, mediaType: "text/plain", path: artifactPath }],
     };
   }

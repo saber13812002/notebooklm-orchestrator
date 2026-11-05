@@ -6,3 +6,4 @@ export * from "./redaction.js";
 export * from "./ssrf.js";
 export * from "./retry.js";
 export * from "./api-error.js";
+export * from "./text-source.js";

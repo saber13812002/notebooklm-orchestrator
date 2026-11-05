@@ -492,6 +492,118 @@ async def op_job(p: dict[str, Any]) -> dict[str, Any]:
         await ctx.__aexit__(None, None, None)
 
 
+async def op_job_text(p: dict[str, Any]) -> dict[str, Any]:
+    """H1: run a job from a TEXT source (notebooklm-py `sources.add_text`).
+
+    Mirrors op_job: notebook reused-or-created by title, source reused-or-
+    added by title (idempotency anchor — the library classifies text
+    ADD_SOURCE as NON_IDEMPOTENT_NO_RETRY and recommends client-side
+    dedupe). An empty prompt skips the chat.ask step entirely
+    (summary.enabled=false). Returns the SAME result dict shape as op_job.
+    """
+    session = Path(p["sessionPath"])
+    text_path = Path(p["textPath"])
+    text_title = str(p.get("textTitle") or "text")
+    prompt = str(p.get("prompt") or "")
+    notebook_title = str(p["notebookTitle"])
+    wait_sec = float(p.get("waitSec", 600))
+    timeout_sec = float(p.get("timeoutSec", 1800))
+
+    async def _progress(stage: str, **data: Any) -> None:
+        await emit({"event": "progress", "op": None, "data": {"stage": stage, **data}})
+
+    if not str(text_path).strip() or not text_path.is_file():
+        raise FileNotFoundError(f"text file not found: {text_path}")
+    content = text_path.read_text(encoding="utf-8")
+    if not content.strip():
+        raise ValueError(f"text source is empty: {text_path}")
+
+    await _progress("opening_session")
+    ctx, client = await _client_with(session, min(timeout_sec, 300))
+    try:
+        email = await client.get_account_email(live_fallback=True)
+        await _progress("selecting_notebook")
+        notebooks = await client.notebooks.list()
+        nb = next(
+            (n for n in notebooks if getattr(n, "title", None) == notebook_title), None
+        )
+        if nb is None:
+            nb = await client.notebooks.create(title=notebook_title)
+            await _progress(
+                "notebook_created", notebookId=getattr(nb, "notebook_id", None)
+            )
+        notebook_id = getattr(nb, "notebook_id", None) or getattr(nb, "id", None)
+
+        def _src_id(s: Any) -> str | None:
+            return getattr(s, "source_id", None) or getattr(s, "id", None)
+
+        # Idempotency anchor: reuse an existing source with the same title
+        # instead of double-adding on a safe retry.
+        uploaded = True
+        source = None
+        try:
+            sources = await client.sources.list(notebook_id)
+            source = next(
+                (s for s in sources if getattr(s, "title", None) == text_title), None
+            )
+        except Exception:
+            source = None
+        if source is not None:
+            uploaded = False
+            await _progress("source_reused", sourceId=_src_id(source))
+        else:
+            await _progress("adding_text")
+            source = await client.sources.add_text(notebook_id, text_title, content)
+            await _progress("text_added", sourceId=_src_id(source))
+
+        source_id = _src_id(source)
+        if not source_id:
+            raise RuntimeError(
+                "text add reported success but returned no source id "
+                f"(source={type(source).__name__}); cannot wait for processing"
+            )
+        await _progress("waiting_for_processing")
+        await client.sources.wait_until_ready(notebook_id, source_id, timeout=wait_sec)
+        await _progress("processing_done")
+
+        # An empty prompt means summary.enabled=false: notebook + source are
+        # created, but NO ask step is run (honest nulls in the result).
+        skip_ask = prompt.strip() == ""
+        conversation_id = None
+        turn_number = None
+        answer = ""
+        refs: list[dict[str, Any]] = []
+        if not skip_ask:
+            await _progress("executing_prompt")
+            result = await client.chat.ask(notebook_id, prompt, source_ids=[source_id])
+            await _progress("prompt_done")
+            conversation_id = getattr(result, "conversation_id", None)
+            turn_number = getattr(result, "turn_number", None)
+            answer = getattr(result, "answer", "") or ""
+            for r in getattr(result, "references", None) or []:
+                refs.append(
+                    {
+                        "sourceId": getattr(r, "source_id", None),
+                        "quote": getattr(r, "quote", None),
+                    }
+                )
+
+        return {
+            "email": email,
+            "notebookId": notebook_id,
+            "notebookTitle": notebook_title,
+            "sourceId": source_id,
+            "uploaded": uploaded,
+            "conversationId": conversation_id,
+            "turnNumber": turn_number,
+            "answer": answer,
+            "references": refs,
+            "checkedAt": now_iso(),
+        }
+    finally:
+        await ctx.__aexit__(None, None, None)
+
+
 OPS = {
     "ping": op_ping,
     "validate": op_validate,
@@ -499,6 +611,7 @@ OPS = {
     "login": op_login,
     "browser-import": op_browser_import,
     "job": op_job,
+    "job_text": op_job_text,
 }
 
 

@@ -152,6 +152,27 @@ export interface JobInput {
     /** Supported-ness as verified against the provider (not a guess). */
     providerConfirmed: boolean;
   };
+  /**
+   * H1 (text-to-notebook): present only for text jobs. The text itself is
+   * stored in the job archive at input/text-source.md; this is its metadata.
+   */
+  text?: {
+    sha256: string;
+    sizeBytes: number;
+    charCount: number;
+    language?: string | null;
+  } | null;
+  /**
+   * H1: which prompt produced the result — a versioned master prompt
+   * (e.g. "v1") or "custom" (caller-supplied). Null for audio jobs.
+   */
+  promptVersion?: string | null;
+  /** H1: optional caller-supplied metadata (all optional, non-sensitive). */
+  metadata?: {
+    language?: string | null;
+    customer?: string | null;
+    category?: string | null;
+  } | null;
   preferredAccountId: string | null;
   preferredNodeId: string | null;
 }

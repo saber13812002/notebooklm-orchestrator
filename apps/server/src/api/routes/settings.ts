@@ -42,7 +42,11 @@ export function registerSettingsRoutes(
         jobsMaxPromptChars:
           stored.get("jobs_max_prompt_chars") ?? DEFAULTS["jobs_max_prompt_chars"],
       },
-      defaults: DEFAULTS,
+      defaults: {
+        ...DEFAULTS,
+        /** H1: read-only — max characters accepted by POST /notebooks/from-text (NLO_MAX_TEXT_CHARS). */
+        max_text_chars: ctx.config.maxTextChars,
+      },
       writableKeys: ["jobsMaxAttemptsDefault", "jobsMaxPromptChars"],
     };
   });
