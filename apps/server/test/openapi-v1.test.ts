@@ -788,3 +788,137 @@ describe("audit trail (C4)", () => {
     }
   });
 });
+
+describe("text-to-notebook API (H1)", () => {
+  beforeEach(async () => {
+    rateLimiter.reset();
+    running = await startApp({ NLO_API_AUTH: "true" });
+  });
+
+  it("spec documents POST /notebooks/from-text and GET /jobs/{id}/result", async () => {
+    const doc = buildOpenApiDocument(running!.ctx);
+    const paths = doc.paths as Record<string, Record<string, unknown>>;
+    expect(paths["/notebooks/from-text"]).toBeDefined();
+    expect(paths["/notebooks/from-text"]!.post).toBeDefined();
+    expect(paths["/jobs/{id}/result"]).toBeDefined();
+    expect(paths["/jobs/{id}/result"]!.get).toBeDefined();
+    const schemas = (doc.components as { schemas: Record<string, unknown> }).schemas;
+    expect(schemas["FromTextRequest"]).toBeDefined();
+    expect(schemas["FromTextResponse"]).toBeDefined();
+    expect(schemas["JobResult"]).toBeDefined();
+  });
+
+  it("creates a text job via /api/v1 (202) with the documented payload shape", async () => {
+    const { app } = running!;
+    const admin = createAdminToken(running!);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/notebooks/from-text",
+      headers: { ...bearer(admin.plaintext), "content-type": "application/json" },
+      payload: JSON.stringify({
+        title: "H1 sample",
+        text: "The quick brown fox jumps over the lazy dog.",
+        metadata: { language: "en" },
+        summary: { prompt: "Summarize." },
+      }),
+    });
+    expect(res.statusCode).toBe(202);
+    const body = res.json() as {
+      jobId: string;
+      status: string;
+      correlationId: string | null;
+      createdAt: string;
+      statusUrl: string;
+    };
+    expect(body.jobId).toMatch(/^j_[0-9a-f]{32}$/);
+    expect(body.status).toBe("CREATED");
+    expect(body.correlationId).toMatch(/^cr_[0-9a-f]{32}$/);
+    expect(body.statusUrl).toBe(`/api/v1/jobs/${body.jobId}`);
+    expect(body.createdAt).toBeTruthy();
+  });
+
+  it("same token + Idempotency-Key replays the ORIGINAL job (200 + x-idempotent-replay)", async () => {
+    const { app, ctx } = running!;
+    const { plaintext } = ctx.apiTokens.create({
+      name: "writer",
+      scopes: ["jobs:write", "jobs:read"],
+    });
+    const h = {
+      ...bearer(plaintext),
+      "idempotency-key": `text-${randomUUID()}`,
+      "content-type": "application/json",
+    };
+    const payload = JSON.stringify({ text: "Replayable text body." });
+    const first = await app.inject({
+      method: "POST",
+      url: "/api/v1/notebooks/from-text",
+      headers: h,
+      payload,
+    });
+    expect(first.statusCode).toBe(202);
+    const firstId = (first.json() as { jobId: string }).jobId;
+
+    const replay = await app.inject({
+      method: "POST",
+      url: "/api/v1/notebooks/from-text",
+      headers: h,
+      payload,
+    });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.headers["x-idempotent-replay"]).toBe("true");
+    expect((replay.json() as { jobId: string }).jobId).toBe(firstId);
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/api/v1/jobs",
+      headers: bearer(plaintext),
+    });
+    const ids = (list.json() as { items: { id: string }[] }).items.map((j) => j.id);
+    expect(ids.filter((id) => id === firstId)).toHaveLength(1);
+  });
+
+  it("a jobs:read token cannot create text jobs (403 + missing_scope audit)", async () => {
+    const { app, ctx } = running!;
+    const reader = ctx.apiTokens.create({ name: "reader", scopes: ["jobs:read"] });
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/v1/notebooks/from-text",
+      headers: { ...bearer(reader.plaintext), "content-type": "application/json" },
+      payload: JSON.stringify({ text: "Nope." }),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error.code).toBe("forbidden");
+    expect(res.json().error.message).toContain("jobs:write");
+    const { items } = ctx.apiTokens.auditList({ tokenId: reader.token.id, limit: 10 });
+    expect(
+      items.some((i) => i.action === "forbidden" && i.detail === "missing_scope:jobs:write"),
+    ).toBe(true);
+  });
+
+  it("rejects empty and whitespace-only text with a validation error", async () => {
+    const { app } = running!;
+    const admin = createAdminToken(running!);
+    for (const text of ["", "   "]) {
+      const res = await app.inject({
+        method: "POST",
+        url: "/api/v1/notebooks/from-text",
+        headers: { ...bearer(admin.plaintext), "content-type": "application/json" },
+        payload: JSON.stringify({ text }),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe("validation_error");
+    }
+  });
+
+  it("GET /jobs/{id}/result 404s for an unknown job with the standard envelope", async () => {
+    const { app } = running!;
+    const admin = createAdminToken(running!);
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/v1/jobs/j_doesnotexist/result",
+      headers: bearer(admin.plaintext),
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe("not_found");
+  });
+});

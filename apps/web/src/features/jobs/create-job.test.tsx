@@ -74,7 +74,28 @@ function mockApi(
     else if (u.endsWith("/api/sessions")) payload = data.sessions ?? { sessions: [] };
     else if (u.endsWith("/api/proxies")) payload = [];
     else if (u.endsWith("/api/settings"))
-      payload = { settings: { jobsMaxAttemptsDefault: 3, jobsMaxPromptChars: 20_000 } };
+      payload = {
+        settings: { jobsMaxAttemptsDefault: 3, jobsMaxPromptChars: 20_000 },
+        defaults: {
+          jobs_max_attempts_default: 3,
+          jobs_max_prompt_chars: 20_000,
+          max_text_chars: 200_000,
+        },
+      };
+    else if (u.endsWith("/api/notebooks/from-text"))
+      // H1: 202-shaped creation response (same contract as the real endpoint).
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            jobId: "j_test12345678901234567890123456ab",
+            status: "CREATED",
+            correlationId: null,
+            createdAt: "2026-11-05T00:00:00.000Z",
+            statusUrl: "/api/jobs/j_test12345678901234567890123456ab",
+          }),
+          { status: 202, headers: { "content-type": "application/json" } },
+        ),
+      );
     return Promise.resolve(jsonResponse(payload));
   });
 }
@@ -214,5 +235,52 @@ describe("CreateJobPage session preflight", () => {
     });
     // Now that accounts arrived with no usable sessions, the block kicks in.
     await waitFor(() => expect(submitButton()).toBeDisabled());
+  });
+});
+
+describe("CreateJobPage text mode (H1)", () => {
+  it("submits via POST /api/notebooks/from-text with an empty summary.prompt", async () => {
+    const user = userEvent.setup();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    mockApi(fetchMock, {
+      accounts: [account()],
+      sessions: {
+        provider: "python-worker",
+        interactiveLogin: true,
+        sessions: [sessionView("acc_1", true)],
+      },
+    });
+    renderPage();
+
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+
+    // Switch to text mode: the prompt becomes optional, the text is required.
+    await user.click(screen.getByRole("button", { name: /متن مستقیم/ }));
+    expect(submitButton()).toBeDisabled(); // no text yet
+
+    const textArea = screen.getByLabelText(/متن منبع/);
+    await user.type(textArea, "درود بر شما\nاین یک متن آزمایشی است.");
+    await waitFor(() => expect(submitButton()).toBeEnabled());
+    await user.click(submitButton());
+
+    await waitFor(() => {
+      const fromTextCalls = fetchMock.mock.calls.filter((c) =>
+        String(c[0]).includes("/api/notebooks/from-text"),
+      );
+      expect(fromTextCalls).toHaveLength(1);
+      const init = fromTextCalls[0]?.[1] as RequestInit;
+      expect(init.method).toBe("POST");
+      const body = JSON.parse(String(init.body)) as {
+        text: string;
+        title?: string;
+        summary: { enabled: boolean; prompt: string | null };
+      };
+      expect(body.text).toBe("درود بر شما\nاین یک متن آزمایشی است.");
+      expect(body.summary).toEqual({ enabled: true, prompt: null });
+      // No multipart /api/jobs call in text mode.
+      const jobCalls = fetchMock.mock.calls.filter((c) => String(c[0]).endsWith("/api/jobs"));
+      expect(jobCalls).toHaveLength(0);
+    });
   });
 });
