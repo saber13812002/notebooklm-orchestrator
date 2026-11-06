@@ -8,6 +8,52 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-06] — Live acceptance attempt #3 (سaber, `acc_315776aeb5b74e33`) — BLOCKED: 0xC0000142 at proxy spawn
+
+### Status (no flows verified this attempt)
+
+- **Live acceptance NOT completed.** Browser-import for `سaber`
+  (`acc_315776aeb5b74e33`, `saber.tabatabaee@gmail.com`) via
+  `POST /api/sessions/…/browser-import` (`chrome::Profile 3`, 180 s) was
+  **fired** (unlike attempt #2, which was gated pre-flight) and returned
+  **HTTP 401 in 1.08 s**: `browser import failed: proxy route unhealthy
+(fail-closed): England_1: xray exited early (code=3221225794,
+signal=none)`. The failure occurred at the **xray tunnel spawn** during
+  the staged proxy health check — before any cookie read and before any
+  python worker spawn. No profile-variant retry (the error is not
+  cookie-related). No P0 audio or H1 text job was submitted (auth
+  precondition not met; report + STOP per protocol).
+- **Both live flows remain NOT verified** (status unchanged):
+  - P0 audio live — **NOT verified** (see `docs/reports/PHASE_P0_AUDIO_RECOVERY.md` §12).
+  - H1 text live — **NOT verified** (see `docs/reports/PHASE_H1_TEXT_TO_NOTEBOOK.md` §13).
+- **Hazard confirmed in a new form:** `query session` showed session 2 =
+  `Disc` for the whole attempt (00:34–00:43 UTC) despite a reported
+  re-attach at 00:33 UTC. On that `Disc` session the xray health-check
+  spawn exited `0xC0000142` (3221225794) — the RDP-disconnect spawn
+  hazard, previously observed only on python worker spawns, now also
+  killing **xray spawns**, which trips the fail-closed egress gate and
+  refuses any live op (correct behavior, surfaced as a clean error).
+- **Secondary blocker (would fail next):** the 2026-11-04 Chrome
+  instance (PID 8392) was still running — 32–33 `chrome.exe`, with
+  `Profile 3\Network\Cookies` mtime actively updating at check time — so
+  the cookie DB exclusive lock from attempt #2 was still in place.
+- Server-side truth at stop (00:43 UTC): `سaber` → `AUTH_REQUIRED`,
+  `lastVerifiedAt: null`, `sessionUsable: false`, `hasAuth: false`, no
+  session file.
+
+### Re-verify (exact unblock, then re-run)
+
+1. **Fully close Chrome** (kill the 2026-11-04 instance, PID 8392);
+   verify `tasklist | findstr /I chrome` is empty.
+2. **Re-attach RDP so session 2 = `Conn`/`Active` before firing the
+   import** — attempt #3 proved the proxy gate fails closed at xray
+   spawn (0xC0000142) on a `Disc` session.
+3. Re-run browser-import for `acc_315776aeb5b74e33` → confirm
+   `GET /api/sessions` shows `AUTHENTICATED` + fresh `lastVerifiedAt`
+   → immediately (10-min TTL) submit both acceptance jobs.
+4. On success, flip the P0 + H1 "Live NOT verified" lines to
+   "Live verified" here and in the two phase reports.
+
 ## [2026-11-05] — Live acceptance attempt #2 (browser-import + P0 audio + H1 text) — BLOCKED
 
 ### Status (no flows verified this attempt)
@@ -50,8 +96,8 @@ only with a recorded live run; otherwise "planned".
    verify `tasklist | findstr /I chrome` shows no Profile 3 holder.
 2. Re-attach RDP (session 2 → `Conn`) to avoid the 0xC0000142 spawn hazard.
 3. Re-run browser-import → confirm `GET /api/sessions` shows `AUTHENTICATED`
-   + fresh `lastVerifiedAt` → immediately submit both acceptance jobs
-   (10-min session TTL).
+   - fresh `lastVerifiedAt` → immediately submit both acceptance jobs
+     (10-min session TTL).
 4. On success, flip the P0 + H1 "Live NOT verified" lines to
    "Live verified" here and in the two phase reports.
 

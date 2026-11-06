@@ -1,7 +1,8 @@
 # Phase H1 — Text-to-Notebook API (report)
 
-Status: **implemented + tested (mock level) — Live NOT verified** (blocked on Google
-re-login; runbook in §10)
+Status: **implemented + tested (mock level) — Live NOT verified** (3 attempts
+blocked: cookie DB lock ×2, then 0xC0000142 proxy-spawn hazard on a
+`Disc` RDP session — see §12/§13; unblock runbook in §10)
 Date: 2026-11-05
 Design note: [`docs/architecture/h1-text-to-notebook.md`](../architecture/h1-text-to-notebook.md)
 
@@ -14,17 +15,17 @@ Real NotebookLM execution is **not** verified and is explicitly labeled
 
 ## 1. What was delivered
 
-| # | Deliverable | Status |
-| - | ----------- | ------ |
-| 1 | Design note | done — `docs/architecture/h1-text-to-notebook.md` |
-| 2 | `POST /notebooks/from-text` (both surfaces) | done + tested |
-| 3 | `GET /jobs/{id}/result` (both surfaces) | done + tested |
-| 4 | Job execution: archive text source + `job_text` provider op (python worker) + mock provider text flow | done + tested (mock) / worker path live-untested |
-| 5 | OpenAPI: spec + bidirectional drift test | done (54 operations) |
-| 6 | Frontend parity (small) | done + tested |
-| 7 | Tests (unit / integration / E2E-mock / web) | done — 212/212 green |
-| 8 | Docs (API README, CHANGELOG, `.env.example`) | done |
-| 9 | This report + mock E2E evidence | done |
+| #   | Deliverable                                                                                           | Status                                            |
+| --- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| 1   | Design note                                                                                           | done — `docs/architecture/h1-text-to-notebook.md` |
+| 2   | `POST /notebooks/from-text` (both surfaces)                                                           | done + tested                                     |
+| 3   | `GET /jobs/{id}/result` (both surfaces)                                                               | done + tested                                     |
+| 4   | Job execution: archive text source + `job_text` provider op (python worker) + mock provider text flow | done + tested (mock) / worker path live-untested  |
+| 5   | OpenAPI: spec + bidirectional drift test                                                              | done (54 operations)                              |
+| 6   | Frontend parity (small)                                                                               | done + tested                                     |
+| 7   | Tests (unit / integration / E2E-mock / web)                                                           | done — 212/212 green                              |
+| 8   | Docs (API README, CHANGELOG, `.env.example`)                                                          | done                                              |
+| 9   | This report + mock E2E evidence                                                                       | done                                              |
 
 No production changes, no push, no proxy/auth logic changes (P0 baseline
 `fc54fc45`, 185/185 green — no regressions: suite grew 185 → 212).
@@ -38,14 +39,14 @@ Request (zod-validated):
 ```jsonc
 {
   "title": "optional, ≤200 chars", // absent/empty -> derived from text
-  "text": "required, non-empty",   // ≤ NLO_MAX_TEXT_CHARS (default 200 000, code points)
+  "text": "required, non-empty", // ≤ NLO_MAX_TEXT_CHARS (default 200 000, code points)
   "metadata": { "language": "fa", "customer": "…", "category": "…" }, // all optional
-  "summary": { "enabled": true, "prompt": "optional custom prompt" }  // optional
+  "summary": { "enabled": true, "prompt": "optional custom prompt" }, // optional
 }
 ```
 
 - **202** fresh: `{ jobId: "j_<hex32>", status: "CREATED", correlationId, createdAt,
-  statusUrl }`; **200** + `x-idempotent-replay: true` on replay
+statusUrl }`; **200** + `x-idempotent-replay: true` on replay
   (`Idempotency-Key`, token-scoped, same rules as `POST /jobs`).
 - **400** `validation_error`: missing/empty/whitespace-only text
   (`"text is required"`); oversized text with
@@ -91,7 +92,7 @@ v1 scope: `jobs:read`.
 
 - **Library verified** (venv `data/venv`, notebooklm-py **0.8.5**,
   `notebooklm/_web/sources.py`): `WebSourcesAPI.add_text(notebook_id, title,
-  content, *, wait=False, wait_timeout=120.0, idempotent=False) -> Source` is
+content, *, wait=False, wait_timeout=120.0, idempotent=False) -> Source` is
   fully implemented; no documented hard text-size limit → the app-level
   `NLO_MAX_TEXT_CHARS` + 400 policy is app policy, not a library limit.
 - **Worker** (`apps/server/src/providers/python-worker/nbl_worker.py`,
@@ -104,7 +105,7 @@ v1 scope: `jobs:read`.
   a prompt only for non-text jobs.
 - **Archive**: server-chosen name `input/text-source.md` (never a user path
   component); `manifest.json` records `input.text: {file, charCount,
-  sizeBytes, language}`.
+sizeBytes, language}`.
 - **DB**: **no migration** — `input_json` is free-form JSON; existing columns
   (`notebook_id`, `notebook_title`, `source_id`, `conversation_id`,
   `answer_markdown`, `result_provenance`) carry the result.
@@ -137,11 +138,11 @@ both surfaces) keeps them in lockstep — still green.
 
 `npm test` (repo root): **212/212 passed**, 22 files, 3 workspaces.
 
-| Workspace | Files | Tests | H1 additions |
-| --------- | ----- | ----- | ------------ |
-| `@nlo/shared` | 7 | 53 | `text-source.test.ts` — **9** (prompt resolution, title derivation incl. 80-char cut + fallback) |
-| `@nlo/server` | 11 | 129 | `from-text.test.ts` — **11**: create integration (6: legacy-surface 202 payload + charCount/sha256/promptVersion, title derivation, v1 default prompt + `enabled=false`, custom prompt, 400 empty/whitespace, 400 oversized with limit in details), result integration (2: 404 both surfaces, pre-SUCCEEDED null shape), idempotency (1: replay 200 + header, token-scoped), E2E mock (2: POST→SUCCEEDED full result + archive assertions; `enabled=false` → null summary, no conversation). `openapi-v1.test.ts` **24 → 30** (new H1 describe: spec documents both paths, v1 202 shape, idempotent replay, 403 `jobs:read`, 400 empty text, 404 result) |
-| `@nlo/web` | 4 | 30 | `create-job.test.tsx` **4 → 5** (text mode: switches mode, disables submit without text, submits via `POST /api/notebooks/from-text` with `summary: {enabled: true, prompt: null}`, never calls `/api/jobs`) |
+| Workspace     | Files | Tests | H1 additions                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------- | ----- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@nlo/shared` | 7     | 53    | `text-source.test.ts` — **9** (prompt resolution, title derivation incl. 80-char cut + fallback)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `@nlo/server` | 11    | 129   | `from-text.test.ts` — **11**: create integration (6: legacy-surface 202 payload + charCount/sha256/promptVersion, title derivation, v1 default prompt + `enabled=false`, custom prompt, 400 empty/whitespace, 400 oversized with limit in details), result integration (2: 404 both surfaces, pre-SUCCEEDED null shape), idempotency (1: replay 200 + header, token-scoped), E2E mock (2: POST→SUCCEEDED full result + archive assertions; `enabled=false` → null summary, no conversation). `openapi-v1.test.ts` **24 → 30** (new H1 describe: spec documents both paths, v1 202 shape, idempotent replay, 403 `jobs:read`, 400 empty text, 404 result) |
+| `@nlo/web`    | 4     | 30    | `create-job.test.tsx` **4 → 5** (text mode: switches mode, disables submit without text, submits via `POST /api/notebooks/from-text` with `summary: {enabled: true, prompt: null}`, never calls `/api/jobs`)                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Other gates (repo root, all green):
 
@@ -276,7 +277,7 @@ provider (`NLO_PROVIDER=python-worker`) + a healthy, verified egress proxy node
    submitted text byte-for-byte; `manifest.json` charCount/sizeBytes correct.
 6. (Optional, human) Open the notebook in NotebookLM with the logged-in session
    and confirm the text source and notebook title exist as reported.
-7. Append a **"Live verification (YYYY-MM-DD, job j_…)"** section to this
+7. Append a **"Live verification (YYYY-MM-DD, job j\_…)"** section to this
    report with the captured result JSON, then update the CHANGELOG entry from
    "Live NOT verified" to "Live verified".
 
@@ -329,15 +330,15 @@ the killed 4870 server).
 
 ### PASS/FAIL — H1 text live acceptance
 
-| Criterion                                    | Status                            |
-| -------------------------------------------- | --------------------------------- |
-| Job `SUCCEEDED`                              | **FAIL** — not executed (Step 0 precondition not met) |
-| Real notebook id (not `mock_*`)              | N/A                               |
-| Meaningful Persian title (not Untitled)      | N/A                               |
-| Real source id (not `mock_*`)                | N/A                               |
-| Genuine summary text, `promptVersion: v1`    | N/A                               |
-| `provenance == "real"`                       | N/A                               |
-| DB persistence (notebook/source/answer, prompt version) | N/A                     |
+| Criterion                                               | Status                                                |
+| ------------------------------------------------------- | ----------------------------------------------------- |
+| Job `SUCCEEDED`                                         | **FAIL** — not executed (Step 0 precondition not met) |
+| Real notebook id (not `mock_*`)                         | N/A                                                   |
+| Meaningful Persian title (not Untitled)                 | N/A                                                   |
+| Real source id (not `mock_*`)                           | N/A                                                   |
+| Genuine summary text, `promptVersion: v1`               | N/A                                                   |
+| `provenance == "real"`                                  | N/A                                                   |
+| DB persistence (notebook/source/answer, prompt version) | N/A                                                   |
 
 **Verdict: H1 text live = NOT verified (BLOCKED on re-verify).** Status of
 this feature remains **implemented + tested (mock level)**; the §10 runbook
@@ -362,7 +363,7 @@ summary:
 - Probe with the importer's exact access pattern (`tmp/probe_cookie_lock.py`):
   `shutil.copyfile` → `PermissionError [Errno 13]`; `sqlite3 ro` →
   `unable to open database file`; copy+`sqlite3` → `PermissionError [Errno
-  13]`. A browser-import attempt would have failed with
+13]`. A browser-import attempt would have failed with
   "browser database is locked" — per the acceptance protocol the import was
   **not fired** (no wasted 3-minute worker spawn) and no job was submitted.
 - Server-side truth at stop (23:40 UTC, read-only): `sas`
@@ -375,15 +376,15 @@ summary:
 
 ### PASS/FAIL — H1 text live acceptance (attempt 2)
 
-| Criterion                                    | Status                                    |
-| -------------------------------------------- | ----------------------------------------- |
-| Job `SUCCEEDED`                              | **NOT executed** (Step 0 precondition not met) |
-| Real notebook id (not `mock_*`)              | N/A                                       |
-| Meaningful Persian title (not Untitled)      | N/A                                       |
-| Real source id (not `mock_*`)                | N/A                                       |
-| Genuine summary text, `promptVersion: v1`    | N/A                                       |
-| `provenance == "real"`                       | N/A                                       |
-| DB persistence (notebook/source/answer, prompt version) | N/A                     |
+| Criterion                                               | Status                                         |
+| ------------------------------------------------------- | ---------------------------------------------- |
+| Job `SUCCEEDED`                                         | **NOT executed** (Step 0 precondition not met) |
+| Real notebook id (not `mock_*`)                         | N/A                                            |
+| Meaningful Persian title (not Untitled)                 | N/A                                            |
+| Real source id (not `mock_*`)                           | N/A                                            |
+| Genuine summary text, `promptVersion: v1`               | N/A                                            |
+| `provenance == "real"`                                  | N/A                                            |
+| DB persistence (notebook/source/answer, prompt version) | N/A                                            |
 
 **Verdict (unchanged): H1 text live = NOT verified.**
 
@@ -398,3 +399,61 @@ makes the (rare) "browser database is locked" failure a full auth dead-end
 until the user closes Chrome. A follow-up commit should restore the Login
 button (or a re-export of the same `sessionLogin` flow); documented in
 CHANGELOG as a known limitation.
+
+## 13. Third live-acceptance attempt (2026-11-06 00:34–00:47 UTC) — BLOCKED: 0xC0000142 at proxy spawn
+
+**Outcome: canary text job NOT submitted** — the Step 0 precondition
+(browser-import → server-side `AUTHENTICATED`) could not be met. Full
+evidence is recorded in `PHASE_P0_AUDIO_RECOVERY.md` §12 (both flows share
+the same blocker); summary:
+
+- Account under test: **`سaber`** (`acc_315776aeb5b74e33`,
+  `saber.tabatabaee@gmail.com`) — first live attempt for this account.
+- Pre-flight: `health`/`ready` 200; but `query session` showed session 2
+  = **Disc** at 00:34/00:40/00:43 UTC (server pid 18492 runs in that
+  session), and `tasklist` showed **33 `chrome.exe`** — the same 2026-11-04
+  instance holding the exclusive lock on `Profile 3\Network\Cookies`
+  (cookie DB mtime ≈ now, actively rewritten).
+- The import **was fired** this time (unlike attempt #2, where the gate
+  blocked it before firing):
+  `POST /api/sessions/acc_315776aeb5b74e33/browser-import`
+  (`chrome::Profile 3`, 180 s) → **HTTP 401 in 1.08 s**:
+  `browser import failed: proxy route unhealthy (fail-closed): England_1:
+xray exited early (code=3221225794, signal=none)`. One attempt used; no
+  profile variants (the failure is not cookie-related — it died at the
+  xray tunnel spawn, before any cookie read).
+- Server-side truth at stop (00:43 UTC): `state: AUTH_REQUIRED`,
+  `lastVerifiedAt: null`, `sessionUsable: false`, `hasStoredFile: false`;
+  no session file exists for the account.
+- Log: no `auth op routed` line; the staged England_1 xray health check
+  spawn exited 0xC0000142 on the `Disc` session — the documented
+  RDP-disconnect spawn hazard, now also affecting the proxy runtime
+  (not just worker spawns).
+
+### PASS/FAIL — H1 text live acceptance (attempt 3)
+
+| Criterion                                               | Status                                       |
+| ------------------------------------------------------- | -------------------------------------------- |
+| Job `SUCCEEDED`                                         | **NOT executed** (auth precondition not met) |
+| Real notebook id (not `mock_*`)                         | N/A                                          |
+| Meaningful Persian title (not Untitled)                 | N/A                                          |
+| Real source id (not `mock_*`)                           | N/A                                          |
+| Genuine summary text, `promptVersion: v1`               | N/A                                          |
+| `provenance == "real"`                                  | N/A                                          |
+| DB persistence (notebook/source/answer, prompt version) | N/A                                          |
+
+**Verdict (unchanged): H1 text live = NOT verified.**
+
+### Unblock (exact)
+
+1. Fully close Chrome (kill the 2026-11-04 instance; `tasklist` empty).
+2. Re-attach RDP so session 2 = `Conn` **before firing the import**
+   (attempt #3 proved xray spawns die with 0xC0000142 on a `Disc`
+   session, failing the fail-closed proxy gate before cookies are read).
+3. `POST /api/sessions/acc_315776aeb5b74e33/browser-import`
+   (`chrome::Profile 3`, `account: saber.tabatabaee@gmail.com`,
+   `timeoutSec: 180`) → verify `GET /api/sessions` shows `AUTHENTICATED`
+   - fresh `lastVerifiedAt` → within the 10-min TTL fire
+     `POST /api/v1/notebooks/from-text` with the Persian canary text
+     (`summary.enabled=true`, empty prompt → default master prompt v1) and
+     append the §10-style evidence here.

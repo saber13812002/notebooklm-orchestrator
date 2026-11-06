@@ -217,15 +217,15 @@ instance that was killed ~20:25 UTC.
 
 ### PASS/FAIL — P0 audio live acceptance
 
-| Criterion                                   | Status                              |
-| ------------------------------------------- | ----------------------------------- |
-| SUCCEEDED job                               | **FAIL** — not executed (Step 0 precondition not met) |
-| Real notebook id (not `mock_*`)             | N/A                                 |
-| Real source id (not `mock_*`)               | N/A                                 |
-| Real answer (non-empty, genuine)            | N/A                                 |
-| `provenance == "real"`                      | N/A                                 |
-| IDs persisted to DB                         | N/A                                 |
-| Retrievable via the UI's GET endpoints      | N/A                                 |
+| Criterion                              | Status                                                |
+| -------------------------------------- | ----------------------------------------------------- |
+| SUCCEEDED job                          | **FAIL** — not executed (Step 0 precondition not met) |
+| Real notebook id (not `mock_*`)        | N/A                                                   |
+| Real source id (not `mock_*`)          | N/A                                                   |
+| Real answer (non-empty, genuine)       | N/A                                                   |
+| `provenance == "real"`                 | N/A                                                   |
+| IDs persisted to DB                    | N/A                                                   |
+| Retrievable via the UI's GET endpoints | N/A                                                   |
 
 **Verdict: P0 audio live = NOT verified (BLOCKED on re-verify).**
 Server itself is healthy: `/api/health` + `/api/health/ready` both
@@ -284,11 +284,11 @@ processes** in session 2 — Chrome had NOT been fully closed.
 Direct probe with the exact access pattern the importer uses
 (`shutil.copyfile` + `sqlite3 read`, `tmp/probe_cookie_lock.py`):
 
-| Method                                                        | Result                          |
-| ------------------------------------------------------------- | ------------------------------- |
-| `shutil.copyfile(Profile 3\Network\Cookies)`                  | `PermissionError [Errno 13]`    |
-| `sqlite3.connect("file:<Cookies>?mode=ro")` (in place)        | `OperationalError: unable to open database file` |
-| `shutil.copyfile` + `sqlite3` read on the copy                | `PermissionError [Errno 13]`    |
+| Method                                                 | Result                                           |
+| ------------------------------------------------------ | ------------------------------------------------ |
+| `shutil.copyfile(Profile 3\Network\Cookies)`           | `PermissionError [Errno 13]`                     |
+| `sqlite3.connect("file:<Cookies>?mode=ro")` (in place) | `OperationalError: unable to open database file` |
+| `shutil.copyfile` + `sqlite3` read on the copy         | `PermissionError [Errno 13]`                     |
 
 Even a **shared-read** open is denied → the cookie DB is held with an
 exclusive lock → browser-import would fail with
@@ -297,13 +297,13 @@ exclusive lock → browser-import would fail with
 
 Profile scan (`tmp/probe_all_profiles.py`, copy-test):
 
-| Profile   | Cookie DB (Network\Cookies) |
-| --------- | --------------------------- |
-| Default   | **LOCKED** (exclusive)      |
-| Profile 1 | unlocked (118,784 B)        |
+| Profile       | Cookie DB (Network\Cookies)         |
+| ------------- | ----------------------------------- |
+| Default       | **LOCKED** (exclusive)              |
+| Profile 1     | unlocked (118,784 B)                |
 | **Profile 3** | **LOCKED** (exclusive) — the target |
-| Profile 4 | unlocked (77,824 B)         |
-| Profile 5 | unlocked (32,768 B)         |
+| Profile 4     | unlocked (77,824 B)                 |
+| Profile 5     | unlocked (32,768 B)                 |
 
 ### Blocker 2 (latent) — session 2 dropped to `Disc`, worker 0xC0000142
 
@@ -333,12 +333,12 @@ job run while session 2 is `Disc` would face this on worker spawn.
 
 ### PASS/FAIL — second attempt (P0 audio + H1 text)
 
-| Criterion                                   | Status                                    |
-| ------------------------------------------- | ----------------------------------------- |
-| browser-import fired                        | **NOT fired** — gate not met (cookie DB locked) |
+| Criterion                                            | Status                                              |
+| ---------------------------------------------------- | --------------------------------------------------- |
+| browser-import fired                                 | **NOT fired** — gate not met (cookie DB locked)     |
 | Server-side `AUTHENTICATED` + fresh `lastVerifiedAt` | **FAIL** — still `AUTH_REQUIRED`, 13-day-old verify |
-| P0 audio job / H1 text job executed         | **NOT executed** (precondition not met)    |
-| Real notebook/source ids, provenance, DB    | N/A                                       |
+| P0 audio job / H1 text job executed                  | **NOT executed** (precondition not met)             |
+| Real notebook/source ids, provenance, DB             | N/A                                                 |
 
 **Verdict (unchanged): P0 audio live = NOT verified; H1 text live =
 NOT verified.** Both remain BLOCKED, now with the exact blocker identified.
@@ -358,3 +358,117 @@ NOT verified.** Both remain BLOCKED, now with the exact blocker identified.
    `timeoutSec: 180`) → verify `GET /api/sessions` shows `AUTHENTICATED`
    with a fresh `lastVerifiedAt` → immediately submit both acceptance jobs
    (session TTL is 10 min).
+
+## 12. Third live-acceptance attempt (2026-11-06 00:34–00:47 UTC) — BLOCKED: 0xC0000142 at proxy spawn + Chrome still open
+
+**Outcome: import FIRED (unlike attempt #2) but failed in 1.1 s at the
+fail-closed proxy gate — before any cookie read and before any python
+worker spawn. No P0 audio or H1 text job was submitted (auth precondition
+not met; report + STOP per protocol).**
+
+Account under test this attempt: **`سaber`** (`acc_315776aeb5b74e33`,
+`saber.tabatabaee@gmail.com`) — the first live run for this account.
+
+### Pre-flight (00:34–00:40 UTC)
+
+| Check                                   | Result                                                                                                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/health` / `/api/health/ready` | `200` / `200` (server pid 18492, HEAD `58e90b2`)                                                                                                        |
+| `query session`                         | session 2 (`s.tabatabaei`) = **Disc** at 00:34, 00:40 and 00:43 UTC (user reported re-attach at 00:33 UTC — see note below)                             |
+| `tasklist \| findstr /I chrome`         | **33 `chrome.exe` in session 2** (00:34 UTC), 32 at 00:40 UTC — the same long-running instance as attempt #2 (PID 8392, created 2026-11-04 09:25 local) |
+| `Profile 3\Network\Cookies` mtime       | **≈ the moment of the check** (04:10 local ≈ 00:40 UTC) — actively rewritten by the running Chrome → the exclusive lock from §11 is still in place      |
+| Git                                     | untracked only: `$out`, `HTTP`, `2026-11-05`, `tmp/` (no pre-staged files; HEAD `58e90b2`)                                                              |
+
+Session-state note: the acceptance brief stated "RDP session 2
+re-attached" (00:33 UTC). Every `query session` in this window
+(00:34/00:40/00:43 UTC) showed session 2 = `Disc`. The attach either
+landed in a different session (the agent terminal itself ran in
+`RDP-Tcp#56`) or disconnected again immediately. Either way the hazard
+condition (the server running in a `Disc` session) held for the entire
+attempt.
+
+### Import attempt (fired — 1 attempt, no profile variants)
+
+```
+POST /api/sessions/acc_315776aeb5b74e33/browser-import
+{"browser":"chrome::Profile 3","account":"saber.tabatabaee@gmail.com","timeoutSec":180}
+→ HTTP 401 in 1.08 s (00:42:34 UTC)
+{"error":{"code":"unauthorized","message":"browser import failed: proxy route unhealthy (fail-closed): England_1: xray exited early (code=3221225794, signal=none); tail: "}}
+```
+
+No second variant was run: the failure is not profile/cookie-related —
+it died at the **xray tunnel spawn** (fail-closed egress gate), one layer
+before the cookie import.
+
+### Log evidence (`tmp/dev4871-h1.log`, pid 18492)
+
+```
+[nlo:worker] worker spawned pid=13192 python=...\data\venv\Scripts\python.exe
+[nlo:worker] worker exited code=3221225794 signal=none stderrTail=
+[nlo:proxy] no fresh proxy health — running staged check on England_1 against the real target before use
+[nlo:proxy] no fresh proxy health — running staged check on france1-SeyedSaber against the real target before use
+```
+
+- The `pid=13192` spawn/exit pair predates this attempt (00:33 UTC state)
+  and already shows the 0xC0000142 pattern on a `Disc` session.
+- The 00:42:34 import ran the staged health check on **England_1 first**;
+  its xray child exited `3221225794 = 0xC0000142` before the check could
+  complete → fail-closed error, 401 returned. No `auth op routed` line,
+  no python worker spawned — the cookie DB was never touched.
+- A long-lived `xray.exe` (PID 24840, created 2026-10-26) exists from
+  before; it is not a server spawn.
+
+### Server-side truth at stop (00:43 UTC, read-only)
+
+- `GET /api/sessions`: `acc_315776aeb5b74e33` → `state: AUTH_REQUIRED`,
+  `lastVerifiedAt: null`, `sessionUsable: false`, `hasStoredFile: false`,
+  `lastError: "proxy route unhealthy (fail-closed): England_1: xray
+exited early (code=3221225794, signal=none); tail: "`.
+- `GET /api/accounts`: `سaber` → `status: AUTH_REQUIRED`,
+  `hasAuth: false`.
+- Session file `data/sessions/nlo-acc_315776aeb5b74e33.json`:
+  **does not exist** (only `nlo-acc_9ef8fd4d431c49fc.json`, 12,139 B,
+  written 2026-10-23 — the `sas` account).
+
+### Diagnosis (one level deep)
+
+1. **Primary (this attempt):** `0xC0000142` (3221225794) at **xray
+   spawn** — the documented RDP-disconnect spawn hazard, because session
+   2 (the server's session) was `Disc`. The fail-closed egress gate
+   correctly refused to run the import against an unhealthy tunnel and
+   surfaced a clean error (no worker crash — and in fact no worker was
+   spawned at all this time; `19fba24` remains in place).
+2. **Secondary (would have failed next):** Chrome still open (32–33
+   `chrome.exe`; Profile 3 cookie DB mtime ≈ now) → even with a healthy
+   tunnel, the cookie import would have hit the "browser database is
+   locked" failure identified in §11.
+
+### PASS/FAIL — third attempt (P0 audio + H1 text)
+
+| Criterion                                            | Status                                                                          |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------- |
+| browser-import fired                                 | **FIRED** (1 attempt, 1.08 s)                                                   |
+| Import result                                        | **FAIL** — 401, fail-closed: xray 0xC0000142 at staged health check (England_1) |
+| Server-side `AUTHENTICATED` + fresh `lastVerifiedAt` | **FAIL** — `AUTH_REQUIRED`, `lastVerifiedAt: null`                              |
+| P0 audio job / H1 text job executed                  | **NOT executed** (auth precondition not met)                                    |
+| Real notebook/source ids, provenance, DB             | N/A                                                                             |
+
+**Verdict (unchanged): P0 audio live = NOT verified; H1 text live =
+NOT verified.**
+
+### Unblock (exact, minimal) — same as §11, plus
+
+1. **Close Chrome fully** — kill the 2026-11-04 instance (PID 8392);
+   verify `tasklist | findstr /I chrome` is empty.
+2. **Get session 2 to `Conn`/`Active` before firing anything** — this
+   attempt proved the failure mode: on a `Disc` session even xray spawns
+   die with 0xC0000142, so the fail-closed proxy gate fails before
+   cookies are read.
+3. Re-run: `POST /api/sessions/acc_315776aeb5b74e33/browser-import`
+   (`browser: "chrome::Profile 3"`, `account: saber.tabatabaee@gmail.com`,
+   `timeoutSec: 180`) → verify `GET /api/sessions` shows `AUTHENTICATED`
+   with a fresh `lastVerifiedAt` → immediately submit the P0 audio job
+   (fresh 15–30 s WAV, multipart `POST /api/jobs`,
+   `preferredAccountId=acc_315776aeb5b74e33`) and the H1 text job
+   (`POST /api/v1/notebooks/from-text`, Persian text,
+   `summary.enabled=true`). Session TTL is 10 min.
