@@ -35,3 +35,9 @@ __pycache__/
 
 # vendor (downloaded at runtime, never in git)
 vendor/
+
+# local scratch / debugging artifacts (root-level, accidental shell redirections)
+tmp/
+/HTTP
+/$out
+/'2026-11-05'
