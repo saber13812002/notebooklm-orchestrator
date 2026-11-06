@@ -248,6 +248,7 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       // give verification generous headroom (5 min supervisor / 2 min per
       // inner request) rather than killing a healthy session check.
       requestTimeoutMs: 300_000,
+      correlationId: `acct:${accountId}`,
       log: this.log,
     });
     try {
@@ -299,6 +300,7 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       workerPath: this.opts.workerPath,
       env: tunnel.handle ? this.tunnelEnv(tunnel.handle) : {},
       requestTimeoutMs: (opts.timeoutSec ?? 600) * 1000 + 120_000,
+      correlationId: `login:${accountId}`,
       log: this.log,
     });
     try {
@@ -349,6 +351,7 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       workerPath: this.opts.workerPath,
       env: tunnel.handle ? this.tunnelEnv(tunnel.handle) : {},
       requestTimeoutMs: (opts.timeoutSec ?? 180) * 1000 + 120_000,
+      correlationId: `browser-import:${accountId}`,
       log: this.log,
     });
     try {
@@ -427,6 +430,7 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       workerPath: this.opts.workerPath,
       env: req.tunnel ? this.tunnelEnv(req.tunnel) : {},
       requestTimeoutMs: this.opts.jobTimeoutMs ?? 30 * 60_000,
+      correlationId: `job:${req.jobId}`,
       log: this.log,
     });
 

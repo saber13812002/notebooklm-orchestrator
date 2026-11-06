@@ -29,6 +29,12 @@ export interface WorkerOptions {
   startupTimeoutMs?: number;
   /** Max stderr captured (bytes) before we stop buffering (still drained). */
   maxStderrBytes?: number;
+  /**
+   * Correlation id for structured logs (job id for jobs, account-scoped id
+   * for auth ops). Prefixed to every supervisor log line so one worker's
+   * lifecycle is traceable in a shared log stream.
+   */
+  correlationId?: string;
   log?: (line: string) => void;
 }
 
@@ -50,6 +56,15 @@ interface Pending {
  *  - per-request deadline; on timeout the whole process group is killed
  *  - SIGTERM then SIGKILL escalation
  *  - clean shutdown on close()
+ *  - every in-flight request is settled EXACTLY ONCE: timeout/abort settle
+ *    their own pending entry BEFORE asking the worker to die, so kill() ->
+ *    failAll() can never "lose" the timed-out entry (which would leave the
+ *    promise unsettled and wedge the single-worker queue). A late response
+ *    for an already-settled id is dropped as stale by onStdout(), so a
+ *    timed-out job can never be delivered a duplicate/late result.
+ *  - every lifecycle event is logged with the correlation id (job id for
+ *    jobs, account-scoped id for auth ops): spawn, request sent, response,
+ *    timeout, abort, kill, exit, cleanup
  */
 export class WorkerSupervisor {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -61,6 +76,10 @@ export class WorkerSupervisor {
   private closing = false;
   private exitCode: number | null = null;
   private exitReason: "exited" | "killed" | "closed" = "closed";
+  /** SIGTERM->SIGKILL escalation timer (tracked so exit/close can cancel it). */
+  private escalateTimer: NodeJS.Timeout | null = null;
+  /** True once the supervisor asked the worker to die (kill path). */
+  private killing = false;
 
   readonly opts: Required<WorkerOptions>;
   readonly workerPath: string;
@@ -74,17 +93,24 @@ export class WorkerSupervisor {
       requestTimeoutMs: opts.requestTimeoutMs ?? 30 * 60_000,
       startupTimeoutMs: opts.startupTimeoutMs ?? 20_000,
       maxStderrBytes: opts.maxStderrBytes ?? 64 * 1024,
+      correlationId: opts.correlationId ?? "",
       log: opts.log ?? (() => {}),
     };
     this.workerPath = this.opts.workerPath;
   }
 
   private log(line: string): void {
-    this.opts.log(line);
+    const c = this.opts.correlationId;
+    this.opts.log(c ? `[nlo:worker ${c}] ${line}` : `[nlo:worker] ${line}`);
   }
 
   get running(): boolean {
     return this.child !== null && this.exitCode === null;
+  }
+
+  /** Child pid while running (null when not spawned / after close). For ops/tests. */
+  get pid(): number | null {
+    return this.child?.pid ?? null;
   }
 
   /** Spawn the worker and verify with a ping. */
@@ -107,25 +133,40 @@ export class WorkerSupervisor {
       detached: process.platform !== "win32",
     });
     this.child = child;
-    this.log(`worker spawned pid=${child.pid} python=${this.opts.pythonBin}`);
+    this.log(`spawn pid=${child.pid} python=${this.opts.pythonBin}`);
 
     child.stdout.on("data", (chunk: Buffer) => this.onStdout(chunk));
     child.stderr.on("data", (chunk: Buffer) => this.onStderr(chunk));
     child.on("error", (err) => {
-      this.log(`worker spawn error: ${err.message}`);
+      this.log(`spawn error: ${err.message}`);
       this.failAll(new WorkerError(`worker spawn error: ${err.message}`, "provider_unavailable"));
     });
     child.on("exit", (code, signal) => {
       this.exitCode = code;
       this.exitReason = signal ? "killed" : "exited";
-      this.log(`worker exited code=${code} signal=${signal ?? "none"} stderrTail=${this.tail()}`);
-      const err = new WorkerError(
-        `python worker exited unexpectedly (code=${code}, signal=${signal ?? "none"}); stderr: ${this.tail()}`,
-        "provider_unavailable",
+      this.log(
+        `exit pid=${child.pid} code=${code} signal=${signal ?? "none"} pending=${this.pending.size} stderrTail=${this.tail()}`,
       );
-      this.failAll(err);
+      this.clearEscalation();
+      if (this.killing) {
+        // Requested termination (kill/close path): every pending entry was
+        // already settled by the kill path — nothing to settle here.
+        return;
+      }
+      if (this.pending.size > 0) {
+        // Unrequested exit (crash, stdin EOF, external kill): settle every
+        // in-flight request so no promise hangs and no queue slot wedges.
+        this.failAll(
+          new WorkerError(
+            `python worker exited unexpectedly (code=${code}, signal=${signal ?? "none"}); stderr: ${this.tail()}`,
+            "provider_unavailable",
+          ),
+        );
+      }
     });
     child.on("close", () => {
+      this.log(`cleanup: child pipes closed (pending=${this.pending.size})`);
+      this.clearEscalation();
       this.child = null;
       this.exitCode = null;
     });
@@ -147,6 +188,12 @@ export class WorkerSupervisor {
 
   /**
    * Issue one request. `signal` allows external cancellation (job cancel).
+   *
+   * Settle-once contract: the pending entry is removed from `this.pending`
+   * and the promise rejected BEFORE the worker is asked to die (timeout,
+   * abort). `kill()` -> `failAll()` then sees no leftover for this id, so
+   * the caller's promise always settles exactly once — the queue can never
+   * wedge on a timed-out request.
    */
   request<T = Record<string, unknown>>(
     op: WorkerOp,
@@ -163,39 +210,71 @@ export class WorkerSupervisor {
     const id = this.nextId++;
     const timeoutMs = opts.timeoutMs ?? this.opts.requestTimeoutMs;
     const line = JSON.stringify({ id, op, params }) + "\n";
+    // Only log protocol metadata (id/op) — never params, which may carry
+    // session paths or other sensitive material.
+    this.log(`request sent id=${id} op=${op} timeoutMs=${timeoutMs}`);
 
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
+      // Settle `id` exactly once, no matter which path fires first
+      // (response, timeout, abort, process exit, close, stdin error).
+      const settle = (fn: () => void): boolean => {
+        const p = this.pending.get(id);
+        if (!p) return false;
         this.pending.delete(id);
-        this.log(`worker request ${id} (${op}) timed out after ${timeoutMs}ms`);
-        this.kill(
-          new WorkerError(
-            `python worker request timed out after ${Math.round(timeoutMs / 1000)}s (op=${op})`,
-            "timeout",
-            true,
+        clearTimeout(p.timer);
+        opts.signal?.removeEventListener("abort", onAbort);
+        fn();
+        return true;
+      };
+
+      const timer = setTimeout(() => {
+        // 1) settle the timed-out request FIRST (structured error,
+        //    ambiguous=true so the runner never auto-retries an operation
+        //    that may have completed server-side),
+        const settled = settle(() =>
+          reject(
+            new WorkerError(
+              `python worker request timed out after ${Math.round(timeoutMs / 1000)}s (op=${op})`,
+              "timeout",
+              true,
+            ),
           ),
         );
+        this.log(
+          `request timeout id=${id} op=${op} after ${timeoutMs}ms settled=${settled} -> killing worker`,
+        );
+        // 2) then terminate the worker. Its (late) response, if any, will be
+        //    dropped as stale by onStdout() — no duplicate delivery.
+        if (settled) {
+          this.kill(
+            new WorkerError(
+              `python worker request timed out after ${Math.round(timeoutMs / 1000)}s (op=${op})`,
+              "timeout",
+              true,
+            ),
+          );
+        }
       }, timeoutMs);
 
       const onAbort = () => {
-        if (!this.pending.has(id)) return;
-        // Do NOT delete the pending entry here: kill() -> failAll() rejects it
-        // (and every other in-flight request) by iterating this.pending.
-        clearTimeout(timer);
-        this.kill(new WorkerError(`python worker request cancelled (op=${op})`, "timeout"));
+        const settled = settle(() =>
+          reject(new WorkerError(`python worker request cancelled (op=${op})`, "timeout")),
+        );
+        this.log(`request aborted id=${id} op=${op} settled=${settled} -> killing worker`);
+        if (settled) {
+          this.kill(new WorkerError(`python worker request cancelled (op=${op})`, "timeout"));
+        }
       };
       opts.signal?.addEventListener("abort", onAbort, { once: true });
 
       this.pending.set(id, {
         resolve: (r) => {
-          clearTimeout(timer);
-          opts.signal?.removeEventListener("abort", onAbort);
-          resolve((r.result ?? {}) as T);
+          if (!settle(() => resolve((r.result ?? {}) as T))) return; // already settled
+          this.log(`response ok id=${id} op=${op}`);
         },
         reject: (e) => {
-          clearTimeout(timer);
-          opts.signal?.removeEventListener("abort", onAbort);
-          reject(e);
+          if (!settle(() => reject(e))) return; // already settled
+          this.log(`response error id=${id} op=${op} code=${e.code}`);
         },
         timer,
       });
@@ -203,19 +282,24 @@ export class WorkerSupervisor {
       try {
         child.stdin.write(line, (err) => {
           if (err) {
-            this.pending.delete(id);
-            clearTimeout(timer);
-            reject(
-              new WorkerError(`worker stdin write failed: ${err.message}`, "provider_unavailable"),
+            const settled = settle(() =>
+              reject(
+                new WorkerError(
+                  `worker stdin write failed: ${err.message}`,
+                  "provider_unavailable",
+                ),
+              ),
             );
+            if (settled) this.log(`stdin write failed id=${id} op=${op}: ${err.message}`);
           }
         });
       } catch (err) {
-        this.pending.delete(id);
-        clearTimeout(timer);
-        reject(
-          new WorkerError(`worker stdin write failed: ${String(err)}`, "provider_unavailable"),
+        const settled = settle(() =>
+          reject(
+            new WorkerError(`worker stdin write failed: ${String(err)}`, "provider_unavailable"),
+          ),
         );
+        if (settled) this.log(`stdin write failed (sync) id=${id} op=${op}: ${String(err)}`);
       }
     });
   }
@@ -257,8 +341,9 @@ export class WorkerSupervisor {
       }
       if (isResponse(msg.data)) {
         const pending = this.pending.get(msg.data.id);
-        if (!pending) continue; // stale
-        this.pending.delete(msg.data.id);
+        if (!pending) continue; // stale (already settled by timeout/abort/exit)
+        // The wrapper's settle() removes the entry exactly once — do NOT
+        // delete it here, or settle() would find no entry and no-op.
         if (msg.data.ok) {
           pending.resolve(msg.data);
         } else {
@@ -293,19 +378,26 @@ export class WorkerSupervisor {
   }
 
   private failAll(err: WorkerError): void {
-    for (const [id, p] of this.pending) {
-      this.pending.delete(id);
-      clearTimeout(p.timer);
+    // Snapshot: each p.reject() -> settle() removes its own entry and clears
+    // its own timer, so iterate a copy (do NOT delete first, or settle()
+    // would find no entry and the promise would never settle).
+    for (const [, p] of [...this.pending]) {
       p.reject(err);
     }
   }
 
   private kill(err: WorkerError): void {
-    const child = this.child;
+    this.killing = true;
+    this.log(`kill requested code=${err.code} ambiguous=${String(err.ambiguous)}: ${err.message}`);
     this.failAll(err);
-    if (!child || child.pid === undefined) return;
+    const child = this.child;
+    if (!child || child.pid === undefined) {
+      this.log("kill: no live child (already gone)");
+      return;
+    }
     const pid = child.pid;
-    const escalate = setTimeout(() => {
+    this.escalateTimer = setTimeout(() => {
+      this.log(`kill escalation: SIGKILL pid=${pid} (worker ignored SIGTERM for 5s)`);
       try {
         if (process.platform !== "win32") process.kill(-pid, "SIGKILL");
         else child.kill("SIGKILL");
@@ -316,23 +408,50 @@ export class WorkerSupervisor {
     try {
       if (process.platform !== "win32") process.kill(-pid, "SIGTERM");
       else child.kill("SIGTERM");
+      this.log(`kill: SIGTERM sent pid=${pid}`);
     } catch {
-      clearTimeout(escalate);
+      // Child is already gone; the exit/close handlers clear the timer.
+      this.log(`kill: child already gone pid=${pid}`);
     }
   }
 
-  /** Graceful shutdown: SIGTERM, wait, SIGKILL, drain. */
+  private clearEscalation(): void {
+    if (this.escalateTimer) {
+      clearTimeout(this.escalateTimer);
+      this.escalateTimer = null;
+    }
+  }
+
+  /** Graceful shutdown: end stdin (EOF) + SIGTERM, wait, SIGKILL, drain. */
   async close(): Promise<void> {
     if (this.closing) return;
     this.closing = true;
     const child = this.child;
     if (!child || child.pid === undefined) {
+      this.log("close: no live child");
+      // Settle anything still in flight (defensive; exit normally did).
       this.failAll(new WorkerError("python worker is not running", "provider_unavailable"));
       return;
     }
     const pid = child.pid;
+    // Mark as requested termination: the exit handler must not double-settle.
+    this.killing = true;
+    this.log(`close: requesting shutdown pid=${pid}`);
+    // Settle ALL in-flight requests now. The caller (e.g. provider.cancel())
+    // holds these promises — never leave them hanging. Code "timeout" (with
+    // the server-side completion caveat) keeps the runner's existing
+    // cancel-first handling: ambiguity alone would not change anything
+    // because the runner checks the abort flag before the ambiguity rule.
+    this.failAll(
+      new WorkerError(
+        "python worker closed by owner; NotebookLM-side operation may still complete",
+        "timeout",
+        true,
+      ),
+    );
     await new Promise<void>((resolve) => {
       const t = setTimeout(() => {
+        this.log(`close: escalation SIGKILL pid=${pid} after 5s`);
         try {
           if (process.platform !== "win32") process.kill(-pid, "SIGKILL");
           else child.kill("SIGKILL");
@@ -361,7 +480,8 @@ export class WorkerSupervisor {
         resolve();
       }
     });
+    this.clearEscalation();
     this.child = null;
-    this.pending.clear();
+    // failAll() above already settled and cleared every pending entry.
   }
 }
