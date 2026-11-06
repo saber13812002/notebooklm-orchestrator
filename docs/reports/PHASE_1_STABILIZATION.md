@@ -137,11 +137,11 @@ Unstaged 287 scratch files; `.gitignore` now covers `tmp/`, `/HTTP`, `/$out`,
 
 ## 4. Git
 
-| Commit            | Scope                                                                                                                                                                                                                 |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ed2868b`         | `chore: unstage 287 scratch files and ignore local scratch artifacts` (hygiene)                                                                                                                                       |
+| Commit            | Scope                                                                                                                                                                                                                                                                       |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ed2868b`         | `chore: unstage 287 scratch files and ignore local scratch artifacts` (hygiene)                                                                                                                                                                                             |
 | `87f964b` (C1)    | `fix(worker): settle-once contract for python-worker requests — settle before kill, fail-all on exit/close, drop stale responses, structured logs with correlation ids; +14 regression tests (supervisor + queue-recovery) with fake-worker fixture; Phase 1 stabilization` |
-| `C2` (this phase) | `docs: Phase 1 stabilization report + status/roadmap/changelog updates`                                                                                                                                               |
+| `C2` (this phase) | `docs: Phase 1 stabilization report + status/roadmap/changelog updates`                                                                                                                                                                                                     |
 
 Branch `main`; **fast-forward push to `origin/main` only** (no force-push);
 local HEAD == `origin/main` verified after push. C1 = `87f964b`; C2 is the
