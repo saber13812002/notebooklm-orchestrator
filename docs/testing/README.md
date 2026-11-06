@@ -7,13 +7,13 @@ NotebookLM execution.** Do not invent test counts.
 
 ## Levels
 
-| Level               | What                                                                                       | Where                                               |
-| ------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------- |
-| Unit                | job state machine, redaction, SSRF guard, safe names, retry, VLESS URI, capability mapping | `packages/shared/test/`                             |
-| Feature/integration | REST API surface, repositories, queue/job lifecycle, fail-closed egress, session gate      | `apps/server/test/`                                 |
-| Web                 | API client, utilities, date helpers                                                        | `apps/web/src/**/*.test.ts`                         |
-| E2E (mock)          | full flows against an in-process app with MockProvider                                     | `apps/server/test/` (extend as flows grow)          |
-| **Live**            | real Google accounts + real egress — **manual gate only, never in CI**                     | `apps/server/scripts/e2e-live.ts`, `verify-live.ts` |
+| Level               | What                                                                                                                                                                     | Where                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| Unit                | job state machine, redaction, SSRF guard, safe names, retry, VLESS URI, capability mapping                                                                               | `packages/shared/test/`                             |
+| Feature/integration | REST API surface (incl. H1 text-to-notebook + OpenAPI contract), repositories, queue/job lifecycle, fail-closed egress, session gate, worker protocol (non-ASCII frames) | `apps/server/test/`                                 |
+| Web                 | API client, utilities, date helpers                                                                                                                                      | `apps/web/src/**/*.test.ts`                         |
+| E2E (mock)          | full flows against an in-process app with MockProvider (incl. text → notebook → result, H1)                                                                              | `apps/server/test/` (extend as flows grow)          |
+| **Live**            | real Google accounts + real egress — **manual gate only, never in CI**                                                                                                   | `apps/server/scripts/e2e-live.ts`, `verify-live.ts` |
 
 ## Commands
 

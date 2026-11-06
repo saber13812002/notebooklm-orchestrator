@@ -86,6 +86,16 @@ API + وب). مسیرهای /api در 404، envelope JSON نگه می‌مانن
 npm run dev          # server روی 127.0.0.1:4870 + web روی 127.0.0.1:5173 (proxy /api به server)
 ```
 
+قرارداد توسعه‌ی محلی: اگر ۴۸۷۰ درگیر باشد، سرور را با `NLO_PORT` روی ۴۸۷۱
+باز کنید (مثال ویندوز):
+
+```bash
+set NLO_PORT=4871 && npx tsx apps/server/src/main.ts > tmp\dev4871-h1.log 2>&1
+```
+
+Swagger UI: `http://127.0.0.1:4871/api/docs` · OpenAPI:
+`http://127.0.0.1:4871/api/openapi.json` (هر دو بدون احراز هویت).
+
 ## تنظیم Environment Variables
 
 فایل نمونه: [`.env.example`](.env.example) (کپی به `.env` برای override).

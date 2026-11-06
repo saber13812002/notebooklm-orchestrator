@@ -227,6 +227,11 @@ curl -s -o answer.md 'http://127.0.0.1:4870/api/v1/jobs/j_ab12.../artifacts/art_
 
 ## Text-to-notebook (H1) — `POST /notebooks/from-text`
 
+Runnable examples (cURL + sync Python, validated against a local server,
+including the `400` validation cases):
+[`examples/from-text.md`](examples/from-text.md) and
+[`examples/from-text.py`](examples/from-text.py).
+
 Create a notebook **from a text string** instead of an audio upload (both
 surfaces; scope `jobs:write`). JSON body:
 
