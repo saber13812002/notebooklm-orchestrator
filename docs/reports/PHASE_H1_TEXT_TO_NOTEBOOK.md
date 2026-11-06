@@ -1,14 +1,17 @@
 # Phase H1 — Text-to-Notebook API (report)
 
-Status: **implemented + tested (mock level) — Live NOT verified** (3 attempts
-blocked: cookie DB lock ×2, then 0xC0000142 proxy-spawn hazard on a
-`Disc` RDP session — see §12/§13; unblock runbook in §10)
+Status: **implemented + tested (mock level) — H1 text Live VERIFIED**
+(2026-11-06 attempt #4, job `j_27d5753a15ed88a3d06072f03c4aebe6`,
+account `saber.tabatabaee@gmail.com` — see §14; attempts #1–#3 blocked:
+cookie DB lock ×2, then 0xC0000142 proxy-spawn hazard on a `Disc` RDP
+session — see §12/§13; unblock runbook in §10)
 Date: 2026-11-05
 Design note: [`docs/architecture/h1-text-to-notebook.md`](../architecture/h1-text-to-notebook.md)
 
-Honesty statement (per AGENTS.md §5): everything below verified at
-**Unit / Integration / E2E (in-process, mock provider)** level only.
-Real NotebookLM execution is **not** verified and is explicitly labeled
+Honesty statement (per AGENTS.md §5): everything below §14 verified at
+**Unit / Integration / E2E (in-process, mock provider)** level. §14
+adds a **live-verified** H1 text run against real NotebookLM
+(2026-11-06). Any other claim of real execution is explicitly labeled
 **Live: NOT verified** wherever it would matter.
 
 ---
@@ -457,3 +460,74 @@ xray exited early (code=3221225794, signal=none)`. One attempt used; no
      `POST /api/v1/notebooks/from-text` with the Persian canary text
      (`summary.enabled=true`, empty prompt → default master prompt v1) and
      append the §10-style evidence here.
+
+## 14. Fourth live-acceptance attempt (2026-11-06 ~00:56–02:16 UTC) — PASS: H1 text LIVE-verified
+
+### Environment unblock (shared with `PHASE_P0_AUDIO_RECOVERY.md` §13)
+
+- Stale Chrome (PID 8392, session 2, `Profile 3`) killed
+  (`taskkill /F /T /PID 8392`; 34 processes; `tasklist | findstr /I
+ chrome` empty); Profile 3 cookie DB **UNLOCKED** (`tmp/unblock-1.txt`).
+- Dev server on 4871 restarted: old pid 18492 → new **pid 45412
+  (node), SessionId 2**; `GET /api/health` 200, `GET /api/health/ready`
+  200 with `provider.issues` **clean** (no 3221225794 / 0xC0000142 at
+  boot), OpenAPI contains `/notebooks/from-text` (`tmp/unblock-2.txt`).
+- Auth: `POST /api/sessions/acc_315776aeb5b74e33/browser-import`
+  (`chrome::Profile 3`, `account: saber.tabatabaee@gmail.com`,
+  `timeoutSec: 180`) → **200, `AUTHENTICATED`**,
+  `lastVerifiedAt=2026-11-06T01:07:59.259Z`; `GET /api/sessions`
+  `sessionUsable=true`, `hasStoredFile=true`, `lastError: null`.
+
+### Live run (01:09 UTC)
+
+- Request: `POST /api/v1/notebooks/from-text` with the Persian canary
+  text — 345 chars about Iranian carpet weaving,
+  `metadata.language=fa`, `summary.enabled=true`, empty prompt →
+  default master prompt v1 (`tmp/live-h1-text.json`).
+- **Job `j_27d5753a15ed88a3d06072f03c4aebe6` → SUCCEEDED in ~28 s**
+  (created 01:09:08.380Z, finished 01:09:36.753Z).
+
+### Evidence
+
+| Check                                | Result                                                                                                                                                                                                                                         |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Terminal state                       | **SUCCEEDED**, progress 100, `errorClass: null`                                                                                                                                                                                                |
+| Real notebook id (not `mock_*`)      | `8e4e3b67-8580-47ce-8a80-7a90192c3d62`                                                                                                                                                                                                         |
+| Real source id (not `mock_*`)        | `d9bd0118-ec34-431b-8097-89eae3e9f4a5`                                                                                                                                                                                                         |
+| Real conversation id                 | `2a884bd4-63d1-4b61-a230-6d352f061572`                                                                                                                                                                                                         |
+| Meaningful Persian title             | Persian title auto-generated from the source text, stored in `notebook_title` (readable in `tmp/live4-h1-db.txt`; console display mojibake only)                                                                                               |
+| Genuine summary, `promptVersion: v1` | Yes — structured Persian summary (Overview / Key points / Notable items) with `[1]` source references; `answer_markdown` len=1305                                                                                                              |
+| `provenance == "real"`               | `resultProvenance: "real"`, `simulated: false`, `provider: python-worker`, `email: saber.tabatabaee@gmail.com`                                                                                                                                 |
+| Route                                | `france1-SeyedSaber` (node_23e81d9a6ca04d10), tunnel 127.0.0.1:52316                                                                                                                                                                           |
+| DB persistence                       | jobs row: SUCCEEDED, `result_provenance=real`, notebook/source/conversation ids, `finished_at` set; job_events: created → validate → account_selected → proxy_selected → running (attempt 1) → succeeded; job_attempts: attempt 1 outcome `ok` |
+| `GET /jobs/{id}/result`              | 2682-byte JSON with `provenance: "real"`                                                                                                                                                                                                       |
+
+Log excerpt (`tmp/dev4871-h1.log`):
+
+```
+[nlo:queue] queue: starting job j_27d5753a15ed88a3d06072f03c4aebe6
+[nlo:proxy] selected node france1-SeyedSaber (node_23e81d9a6ca04d10); tunnel at 127.0.0.1:52316
+[nlo:worker] worker spawned pid=23564 python=.../data/venv/Scripts/python.exe
+```
+
+Files: `tmp/live-h1-job.json`, `tmp/live-h1-result.json`,
+`tmp/live4-h1-db.txt`.
+
+### PASS/FAIL — H1 text live acceptance (attempt 4)
+
+| Criterion                                   | Status   |
+| ------------------------------------------- | -------- |
+| SUCCEEDED                                   | **PASS** |
+| Real notebook id (not `mock_*`)             | **PASS** |
+| Meaningful Persian title                    | **PASS** |
+| Real source id                              | **PASS** |
+| Genuine Persian summary                     | **PASS** |
+| `provenance == "real"`, `promptVersion: v1` | **PASS** |
+| DB persistence (job row + events + attempt) | **PASS** |
+| Log evidence                                | **PASS** |
+
+Attempts used: 1 (no retries needed).
+
+**Verdict: H1 text live = LIVE VERIFIED** (2026-11-06, job
+`j_27d5753a15ed88a3d06072f03c4aebe6`, account
+`saber.tabatabaee@gmail.com`, route `france1-SeyedSaber`).

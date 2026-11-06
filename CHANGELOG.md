@@ -8,6 +8,59 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-06] — Live acceptance attempt #4 (سaber, `acc_315776aeb5b74e33`) — environment unblocked; H1 text LIVE-verified; P0 audio BLOCKED
+
+### Status
+
+- **H1 text live — LIVE VERIFIED.** Job
+  `j_27d5753a15ed88a3d06072f03c4aebe6` via
+  `POST /api/v1/notebooks/from-text` (Persian canary text,
+  `summary.enabled=true`, default master prompt v1) → SUCCEEDED in
+  ~28 s against real NotebookLM: real notebook/source/conversation
+  ids, `provenance: "real"`, `simulated: false`, genuine structured
+  Persian summary with `[1]` source references, DB persistence
+  confirmed. Account `سaber` (`acc_315776aeb5b74e33`,
+  `saber.tabatabaee@gmail.com`), routed via `france1-SeyedSaber`.
+  Evidence: `docs/reports/PHASE_H1_TEXT_TO_NOTEBOOK.md` §14.
+- **P0 audio live — still NOT verified (BLOCKED).** All 3 multipart
+  `POST /api/jobs` submissions failed: #1
+  `j_b45e039af33911ea2de580b7e9d14268` FAILED (auth) — repeated
+  `GET_NOTEBOOK ConnectTimeout` through the france1 tunnel, and the
+  queue's connectivity retry ran after the 10-min session TTL had
+  expired; #2 `j_7f10a3c5f6c524600187882878d86711` FAILED (auth,
+  instant) — submission error (stale `lastVerifiedAt`; re-import was
+  refused from the `AUTHENTICATED` state and no re-verify was run);
+  #3 `j_94d3689555e347e409b5ad9f9734b23f` — worker hit repeated
+  `GET_NOTEBOOK RemoteProtocolError`, was force-killed at the 30-min
+  worker request timeout, and the job was left orphaned at
+  `RUNNING`/progress 55 (no queue re-schedule observed). Root cause:
+  unstable france1-SeyedSaber tunnel on long-held connections,
+  interacting with the 10-min session TTL. 2-retry budget exhausted.
+  Evidence: `docs/reports/PHASE_P0_AUDIO_RECOVERY.md` §13.
+- **Auth (browser-import) — PASS.** `chrome::Profile 3` import → 200
+  `AUTHENTICATED` (`lastVerifiedAt=2026-11-06T01:07:59.259Z`), later
+  re-verified via `POST /api/sessions/…/verify` ("verified against
+  service (452 notebooks)", `lastVerifiedAt=01:25:41.224Z`).
+- **Environment unblocked:** stale Chrome PID 8392 killed (34
+  processes; Profile 3 cookie DB unlocked); dev server 4871 restarted
+  (pid 18492 → 45412, SessionId 2) with `provider.issues` clean — no
+  further 0xC0000142/3221225794 worker-spawn failures.
+- **Ops note:** orphaned job `j_94d3689555e347e409b5ad9f9734b23f`
+  remains `RUNNING` in `data/nlo.sqlite` (worker dead, session TTL
+  lapsed) and should be cancelled/marked failed by a follow-up ops
+  action; it cannot complete.
+
+### Re-verify (P0 audio only)
+
+1. Keep Chrome closed; verify `france1-SeyedSaber` is stable for
+   long-held connections (e.g., `POST /api/proxies/node_23e81d9a6ca04d10/health`
+   green) before submitting.
+2. Fresh `browser-import` (or `POST /:id/verify` if already
+   `AUTHENTICATED`) → confirm a fresh `lastVerifiedAt`.
+3. Within the 10-min TTL submit the P0 audio job (fresh 15–30 s WAV,
+   multipart `POST /api/jobs`,
+   `preferredAccountId=acc_315776aeb5b74e33`).
+
 ## [2026-11-06] — Live acceptance attempt #3 (سaber, `acc_315776aeb5b74e33`) — BLOCKED: 0xC0000142 at proxy spawn
 
 ### Status (no flows verified this attempt)
