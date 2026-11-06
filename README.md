@@ -4,7 +4,11 @@
 مدیریت حساب‌های گوگل و نودهای VLESS، اجرای نوبتی کارها، آرشیو و نمایش فارسی RTL.
 
 سرویس عملیاتی (سرویس `nlo`، پورت `4870`) با اتصال واقعی NotebookLM و
-پردازش واقعی صوت به متن **live-verify شده** است. **وضعیت (۲۰۲۶-۱۱-۰۱):**
+پردازش واقعی صوت به متن **live-verify شده** است. **وضعیت (۲۰۲۶-۱۱-۰۶):**
+یک شغل صوتی فارسی واقعی (MP3) از طریق UI/API روی سرور محلی `4871` تا
+پاسخ نوشتاری فارسی کامل از NotebookLM واقعی **live-verify شد**
+(`provenance:"real"` — گزارش:
+[`PHASE_2_AUDIO_LIVE_ACCEPTANCE.md`](docs/reports/PHASE_2_AUDIO_LIVE_ACCEPTANCE.md)).
 هاست قدیمی s52 (`172.20.1.52`) از سرویس خارج شده (دسترسی‌ناپذیر)؛
 استقرار مجدد NLO روی هاست جدید `172.30.0.133` هنوز انجام نشده (فاز G).
 هدف: محصول **API-First**، قابل‌استقرار، مستند و قابل‌اتصال به سامانه‌های ثالث.
@@ -22,6 +26,9 @@
 - امنیت (threat model): [`docs/security/threat-model.md`](docs/security/threat-model.md)
 - برنامه توسعه: [`docs/development/plan.md`](docs/development/plan.md)
 - گزارش‌های بازرسی: [`docs/reports/`](docs/reports/) — شامل
+  [`PHASE_2_AUDIO_LIVE_ACCEPTANCE.md`](docs/reports/PHASE_2_AUDIO_LIVE_ACCEPTANCE.md)
+  (پذیرش زنده‌ی صوت ۲۰۲۶-۱۱-۰۶: یک شغل صوتی فارسی واقعی روی سرور محلی،
+  `provenance:"real"`، ۵۰ ثانیه) و
   [`PHASE_C_LIVE_ACCEPTANCE.md`](docs/reports/PHASE_C_LIVE_ACCEPTANCE.md)
   (پذیرش زنده‌ی فاز C: استقرار `b5e9ad3` روی s52 در ۲۰۲۶-۱۰-۲۸T13:43Z؛
   OpenAPI/Swagger + auth + idempotency + نمونه‌های cURL/TS/Python تأیید شدند؛

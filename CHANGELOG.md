@@ -8,6 +8,55 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-06] — Mission NLO-PHASE-2-AUDIO-LIVE-2026-11: real audio live acceptance — **LIVE AUDIO VERIFIED** (local, no code changes)
+
+### Verified (live — real NotebookLM, local dev server 4871)
+
+- **One real Persian audio job, end-to-end, SUCCEEDED.**
+  `j_367ea5baa8382e2ec42d7a29dcfe5b3b` — multipart `POST /api/jobs` with
+  user-selected `sample_90s.mp3` (720,429 B, `audio/mpeg`, SHA-256
+  `85de5f0a…0748a`, integrity byte-identical in `input_json`) → HTTP 201 →
+  account gate (fresh verified session) → france1 VLESS tunnel → python
+  worker → **real NotebookLM**: notebook + audio source uploaded
+  (`uploaded:true`), conversation turn 1 → verbatim Persian transcript.
+  **50.2 s total**; attempt 1 outcome `ok`.
+- **Provenance: real.** DB row: `result_provenance="real"`,
+  `result_provider_meta_json.simulated=false`,
+  `provider="python-worker"`, real notebook/source/conversation IDs;
+  `GET /api/jobs/{id}/result` → `provenance:"real"`; job visible in the
+  Web UI data feed.
+- **Google session re-auth (browser-import)** unblocked the run:
+  `chrome::Profile 3` import (200, 53 s) after the user's Chrome was
+  force-killed with explicit approval (cookie-DB lock); official
+  re-verify against the real service: `ok:true, "verified against service
+(453 notebooks)"`; `sessionUsable:true` at submission.
+- **Proxy diagnostics:** france1 healthy (staged check PASS 771 ms) and
+  carried the job live; England_1 rejected by the selector
+  (`read ECONNRESET`) — no node mutated.
+- **Regression:** all suites green after the run — `npm test` 227/227
+  (shared 53 / server 144 / web 30), `typecheck`, `lint`, `format:check`,
+  `build` (Stage 5).
+
+### Notes
+
+- **Zero code changes** in this mission — operational actions + report
+  documentation only (no root-cause fix was required: no code failure was
+  found). The mission-target error `no eligible google account…` was
+  confirmed as the by-design 10-min session-eligibility gate, satisfied by
+  a fresh verify.
+- Honest caveats: MP3 worked live but is not in the provider's
+  provider-verified extension list (label stays `.wav`); the P0 15–17 min
+  long-hold failure mode was **not** reproduced and is **not** claimed
+  fixed; audio-file content was never printed or committed; no secrets in
+  any report/commit.
+- Scope: **local only** — production `172.30.0.133` untouched; GitHub
+  source of truth updated by docs-only FF push; GitLab check-only (mirror
+  inactive).
+- Reports: `docs/reports/PHASE_2_STAGE_0_BASELINE.md` …
+  `PHASE_2_STAGE_5_REGRESSION.md`, plus the consolidated
+  `PHASE_2_AUDIO_LIVE_ACCEPTANCE.md` (27 sections, final status
+  `COMPLETE — LIVE AUDIO VERIFIED`).
+
 ## [2026-11-06] — Mission NLO-MASTER-2026-11, Phase 1 stabilization: worker-wedge fix + 14 regression tests + repo hygiene + credential scan
 
 ### Fixed
