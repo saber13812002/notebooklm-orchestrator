@@ -8,6 +8,75 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-06] — Mission NLO-MASTER-2026-11, Phase 1 stabilization: worker-wedge fix + 14 regression tests + repo hygiene + credential scan
+
+### Fixed
+
+- **Worker timeout/kill queue wedge** in
+  `apps/server/src/providers/python-worker/worker.ts`: the old timeout
+  handler deleted the pending entry _before_ `kill()`, so a timed-out
+  request could never settle and the single-worker queue wedged until
+  restart. The worker now has a **settle-once contract**: every pending
+  request is settled exactly once (response, error, timeout, abort,
+  stdin-write failure, worker exit, or `close()`); settlement happens
+  **before** the worker is killed; `close()` and unexpected exit fail all
+  in-flight requests with a structured error; stale late responses are
+  dropped as orphaned (no duplicate delivery); SIGTERM→SIGKILL
+  escalation is tracked and cleared deterministically; every structured
+  log line (spawn, request sent, response, timeout, kill, exit, cleanup)
+  carries a **correlation id** (e.g. `job:<jobId>`, `login:<accountId>`).
+  No protocol change; no schema change.
+- **Orphaned-job recovery on restart**: in-flight jobs are reset to
+  `QUEUED` at boot (`recoverInFlight()`, existing columns — no
+  migration) with a `restart_recover` event, so a restart never leaves a
+  job stuck in `RUNNING`/`RETRY_WAIT`/….
+
+### Added
+
+- **14 regression tests** (fake child processes — no venv, Windows-safe):
+  `apps/server/test/worker-supervisor.test.ts` (10: normal path, timeout
+  settle-before-kill, dual in-flight timeout, late-response drop, crash,
+  early-exit/EOF, SIGTERM-ignore escalation, abort, correlation-id log
+  audit, `close()` with in-flight request) and
+  `apps/server/test/worker-queue-recovery.test.ts` (4: timeout →
+  `NEEDS_ATTENTION` + queue continues; crash → `FAILED` + queue
+  continues; single-worker serialization; restart orphan recovery →
+  re-run to `SUCCEEDED`), plus the `apps/server/test/fixtures/fake-worker.mjs`
+  fixture.
+
+### Verified (mock level — Live NOT verified)
+
+- Full suite: **227 tests / 25 files, 0 failed** (before: 213 / 23);
+  `npm run typecheck`, `npm run lint`, `npm run format:check`, and
+  `npm run build` all clean.
+- **B1 resolved:** the local Python venv (spawn failure `0xC0000142`) was
+  repaired out-of-band; the real-worker non-ASCII protocol test
+  (`worker-nonascii-protocol.test.ts`) now **runs** (not skipped) and
+  passes. Dev server 4871's `configured:false` is stale (process predates
+  the repair); restart is an approval-gated action, not performed.
+- **1.2 login/session verification (read-only, code-level):** browser
+  import is allowlist-restricted (11 browsers); multi-account is
+  per-account-by-email; failed auth returns 401 `AUTH_REQUIRED` — a
+  failed login **never** creates a fake successful job; the 10-minute
+  session TTL is **cached eligibility** (not credential expiry); the
+  API/UI never expose cookie values.
+- **1.3 LiteLLM credential hygiene (redacted scan, values never printed):**
+  no LLM-key env var exists — the key is passed per request via
+  `opts.apiKey` → `Authorization: Bearer`. The previously-leaked key was
+  found **only** in two untracked, git-ignored files:
+  `tmp/myterm.env.txt` and `tmp/server12848.env.json`. Git history
+  contains only the 7-char masked prefix `sk-51Rk` (in the P0 report),
+  never the full key. `.env` is git-ignored and holds no LLM key.
+  **Recommended user action (NOT performed):** rotate the LiteLLM key and
+  delete/scrub the two `tmp/` files.
+
+### Notes
+
+- Repo hygiene: 287 staged scratch files unstaged; `.gitignore` additions
+  (`tmp/`, scratch artifacts) — commit `ed2868b`.
+- No deployment performed; no production changes. Full report:
+  `docs/reports/PHASE_1_STABILIZATION.md`.
+
 ## [2026-11-06] — Live acceptance attempt #5 (سaber, `acc_315776aeb5b74e33`) — P0 audio final retry: BLOCKED (long-connection failure reproduced); orphan job cleaned up
 
 ### Status

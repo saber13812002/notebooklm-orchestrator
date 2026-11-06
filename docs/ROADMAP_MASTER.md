@@ -6,11 +6,16 @@
 > Source: user-provided "MASTER EXECUTION ROADMAP v2.0" (2026-11-01) +
 > "ADDENDUM — SERVER ENDPOINT MIGRATION".
 >
-> **Current position (2026-11-01):** Addendum Phases A+B complete
+> **Current position (2026-11-06):** Mission **NLO-MASTER-2026-11**
+> Phase 1 — Stabilization **COMPLETED**
+> ([`PHASE_1_STABILIZATION.md`](reports/PHASE_1_STABILIZATION.md)):
+> worker-wedge fix (settle-once contract) + 14 regression tests, repo
+> hygiene, LiteLLM credential scan (redacted). Mission Phase 2 — Webhook
+> infrastructure is **PENDING USER APPROVAL** (needs blocker B8).
+> Earlier: Addendum Phases A+B complete
 > ([`SERVER_ENDPOINT_MIGRATION_AUDIT.md`](reports/SERVER_ENDPOINT_MIGRATION_AUDIT.md),
 > [`SERVER_ENDPOINT_CONNECTIVITY.md`](reports/SERVER_ENDPOINT_CONNECTIVITY.md));
-> STOPPED, awaiting user approval for Addendum Phase C. Roadmap Phase 1
-> (local/Swagger) complete; Phase 0 reconciliation complete.
+> Roadmap Phase 1 (local/Swagger) complete; Phase 0 reconciliation complete.
 
 ---
 
