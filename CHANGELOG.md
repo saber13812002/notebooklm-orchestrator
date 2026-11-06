@@ -8,6 +8,41 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-06] — Live acceptance attempt #5 (سaber, `acc_315776aeb5b74e33`) — P0 audio final retry: BLOCKED (long-connection failure reproduced); orphan job cleaned up
+
+### Status
+
+- **P0 audio live — still NOT verified (BLOCKED).** Final authorized
+  audio retry `j_10d3fbe7c2f97890dfc4932fa3d951fa` (fresh 20 s WAV,
+  640044 bytes, multipart `POST /api/jobs`) → `RUNNING`/progress 55
+  from 03:05:28 UTC; at 03:06:36 the worker hit `RPC GET_NOTEBOOK
+(RemoteProtocolError)` ("retrying 1/3") and then made **zero
+  progress for 16+ min** through the source-processing phase — the
+  same long-connection failure pattern as attempt #4, now reproduced
+  3/3 on long ops. Early-stopped at the 15-min mark (03:20:14 UTC)
+  per the runbook; `POST /api/jobs/:id/cancel` → terminal
+  `CANCELLED` 03:22:47 UTC (clean: worker timeout had not fired).
+  No notebook/source/conversation ids, no `answer_markdown`,
+  `provenance=unknown`. H1 text remains LIVE-verified (attempt #4).
+  Evidence: `docs/reports/PHASE_P0_AUDIO_RECOVERY.md` §14.
+- **Orphan cleanup (attempt #4 job) — done.**
+  `j_94d3689555e347e409b5ad9f9734b23f` was left `RUNNING`/progress 55
+  with no re-schedule. The cancel API returned `cancelled:true` but
+  the job stayed non-terminal: root cause is that in
+  `apps/server/src/providers/python-worker/worker.ts` the per-request
+  timeout timer deletes the pending entry **before** `kill()`/
+  `failAll()`, so the request Promise never settles — the in-process
+  queue wedges (`Queue.busy` stuck) and cancel's `onAbort` is a
+  no-op. Terminalized the row to `FAILED`/`worker_timeout` after a DB
+  backup (`data/backups/nlo-pre-retry5-2026-11-06T02-52Z.sqlite`),
+  then force-restarted the dev server to un-wedge the queue.
+  (Code fixes documented as follow-ups — not implemented here.)
+- **Session re-verify — PASS.** `POST /api/sessions/:id/verify`
+  (import refused from `AUTHENTICATED`) succeeded after 3 transient
+  fail-closed 500s (both tunnels 15 s health-check timeouts):
+  "verified against service (452 notebooks)",
+  `lastVerifiedAt=2026-11-06T03:04:33.282Z`.
+
 ## [2026-11-06] — Live acceptance attempt #4 (سaber, `acc_315776aeb5b74e33`) — environment unblocked; H1 text LIVE-verified; P0 audio BLOCKED
 
 ### Status

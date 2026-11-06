@@ -650,3 +650,189 @@ jobs) is required before the P0 audio live run can be re-attempted.
 5. Note: job `j_94d3689555e347e409b5ad9f9734b23f` remains `RUNNING`
    in the DB (orphaned); it should be cancelled/marked failed by a
    follow-up ops action — it cannot complete (worker gone, TTL lapsed).
+
+## 14. Fifth live-acceptance attempt (2026-11-06 02:52–03:23 UTC) — BLOCKED: long-connection failure reproduced; final audio retry consumed
+
+Scope: (1) cleanup of the attempt-#4 orphaned job, (2) session
+re-verification, (3) **ONE** fresh P0 audio job with live tunnel
+monitoring (30-min budget, early-stop rule at 15 min on the same
+long-connection failure pattern), (4) report + commit.
+
+### Step 1 — Orphan cleanup (j_94d3689555e347e409b5ad9f9734b23f)
+
+- Before: `status=RUNNING`, progress 55, `attempt=0`,
+  `updated_at=2026-11-06T01:25:58.873Z` (frozen since worker kill at
+  ~01:55 UTC, attempt #4).
+- `POST /api/jobs/:id/cancel` → `{"ok":true,"cancelled":true,
+"status":"CANCEL_REQUESTED"}` — **but the job did not become
+  terminal**. Root cause (new finding, code-level): in
+  `apps/server/src/providers/python-worker/worker.ts` the per-request
+  timeout timer calls `this.pending.delete(id)` **before**
+  `this.kill(err)` (lines 168–177). `kill()` → `failAll()` then
+  iterates `this.pending` for that id — now empty — so the request
+  Promise **never settles**. `runJob()` never returns, `Queue.busy`
+  stays true (the in-process queue is wedged), and `onAbort`
+  early-returns (`if (!this.pending.has(id)) return;`) so the cancel
+  path reports `cancelled:true` while the job stays
+  `CANCEL_REQUESTED` forever. Graceful shutdown (`queue.drain`) would
+  hang the same way.
+- Cleanup performed (task-authorized fallback): DB backup to
+  `data/backups/nlo-pre-retry5-2026-11-06T02-52Z.sqlite`, then a
+  script (`tmp/p0_retry5_cleanup.py`) terminalized the row:
+  `status=FAILED`, `error_class=worker_timeout`,
+  `error_message='orphaned RUNNING state — worker force-killed at
+30-min timeout, no queue re-schedule (attempt #4)'`; added
+  `job_attempts` id=7 and `job_events` id=88. Verified terminal via
+  API + DB.
+- Dev server force-killed (`taskkill /F /T /PID 45412`) and restarted
+  (new pid 6932, log `tmp/dev4871-retry5.log`; `/api/health/ready`
+  `ready:true`, provider configured). The orphan was already terminal
+  at restart, so `recoverInFlight()` did not re-run it.
+
+### Step 2 — Session re-verification (acc_315776aeb5b74e33)
+
+- `browser-import` was not used: session state was already
+  `AUTHENTICATED` (import is refused from that state). Used
+  `POST /api/sessions/acc_315776aeb5b74e33/verify`.
+- First 3 attempts 500 (02:57–03:01 UTC): `proxy route unhealthy
+(fail-closed): England_1: health check timed out after 15000ms
+through tunnel | france1-SeyedSaber: health check timed out after
+15000ms through tunnel` — both tunnels transiently degraded.
+- 4th attempt **PASS** at 03:04:33.282Z: "verified against service
+  (452 notebooks)", `state=AUTHENTICATED`,
+  `lastVerifiedAt=2026-11-06T03:04:33.282Z`, `mismatch:false`.
+
+### Step 3 — One fresh P0 audio job (live-monitored)
+
+- Input: fresh WAV `data/tmp/p0-retry5-tone-20s.wav` (20 s, 440 Hz,
+  16 kHz mono 16-bit; **640044 bytes**, sha256
+  `f50fd28e579307436d8956d06a698e6d32e88a2c4d711cbfb0c1803a5ad213e8`
+  — deterministic, byte-identical to prior attempts).
+- Multipart `POST /api/jobs` (UI endpoint/fields): `prompt=خلاصه‌ای
+از محتوای این فایل صوتی ارائه کن`, `title=P0 live audio
+acceptance`, `audio=<wav>`, `preferredAccountId=acc_315776aeb5b74e33`.
+  → **HTTP 201**, job `j_10d3fbe7c2f97890dfc4932fa3d951fa`,
+  `CREATED` 03:05:14.232Z.
+
+**Timeline (UTC, log `tmp/dev4871-retry5.log`, poll log
+`tmp/retry5-timeline.txt`):**
+
+| t                 | event                                                                                                                                                                                                                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 03:05:14          | 201 → `CREATED`; account صابر selected; **france1-SeyedSaber** (`node_23e81d9a6ca04d10`) selected, tunnel 127.0.0.1:60922; England_1 rejected (`last check failed: read ECONNRESET`)                                                                                                                       |
+| 03:05:28          | `RUNNING` attempt 1 (worker pid 46132); progress 55 "waiting for NotebookLM to process source"                                                                                                                                                                                                             |
+| 03:05:56–03:06:36 | polls: `RUNNING` / progress 55 throughout                                                                                                                                                                                                                                                                  |
+| 03:06:36          | worker stderr: `RPC GET_NOTEBOOK (TransportServerError)` → `RPC GET_NOTEBOOK server/network error (RemoteProtocolError); backing off 1.2s then retrying (1/3)` — **then complete silence** (no retry progress, no error, no success)                                                                       |
+| 03:06:56–03:20:14 | 13.5 min of polls: `RUNNING` / progress 55, no notebook/source/conversation ids, no new `job_events`                                                                                                                                                                                                       |
+| 03:20:14          | **15-min mark** — same long-connection failure pattern as attempt #4 (GET_NOTEBOOK `RemoteProtocolError`, retry hung, zero progress) → **early-stop per runbook**                                                                                                                                          |
+| 03:22:47          | `POST /api/jobs/:id/cancel` → `{"ok":true,"cancelled":true}`; job terminal `CANCELLED` at 03:22:47.818Z (`errorClass=provider`, "cancelled by user") — clean this time because the worker's 30-min timeout had not fired, so the pending entry still existed and `failAll()` rejected it (queue un-wedged) |
+
+**Terminal DB rows** (`tmp/retry5-evidence.txt`):
+
+- `jobs`: `status=CANCELLED`, `progress=55`, `error_class=provider`,
+  `error_message="cancelled by user"`, `finished_at=2026-11-06T03:22:47.818Z`,
+  `notebook_id=NULL`, `source_id=NULL`, `conversation_id=NULL`,
+  `operation_ids_json="{}"`, `result_provenance=unknown`,
+  `answer_markdown=NULL`.
+- `job_events` (evt_89…95): created → validate → account_selected →
+  proxy_selected → proxy_candidate_rejected → running → cancelled.
+- `job_attempts` id=8: attempt 1, account `acc_315776aeb5b74e33`,
+  node `node_23e81d9a6ca04d10`, started 03:05:14.425Z, ended
+  03:22:47.816Z, outcome `cancelled`, detail `{"reason":"user"}`.
+- Session at stop: `AUTHENTICATED`, `lastVerifiedAt=03:04:33.282Z`
+  (10-min TTL lapsed ~03:14:33 while the job sat in the
+  source-processing phase; the in-flight worker is not re-authed, so
+  the TTL did not itself fail this job).
+
+### PASS/FAIL — fifth attempt (P0 audio, final retry)
+
+| Criterion                              | Status                                                                                                                             |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Orphan (attempt #4) cleanup            | **PASS** — terminalized `FAILED`/`worker_timeout` (DB backup first), server restarted, queue un-wedged                             |
+| Cancel route effective on wedged job   | **FAIL** — returned `cancelled:true` but job stayed non-terminal (wedge bug, see Step 1); DB edit required                         |
+| Re-auth (verify)                       | **PASS** — 452 notebooks, `lastVerifiedAt=2026-11-06T03:04:33.282Z`                                                                |
+| Exactly one audio submission           | **PASS** — `j_10d3fbe7c2f97890dfc4932fa3d951fa` (201), no re-submissions                                                           |
+| P0 audio job executed                  | **NOT succeeded** — `CANCELLED` at 17.5 min (early-stopped at 15-min mark); stuck progress 55, zero worker progress after 03:06:36 |
+| Real notebook/source/conversation ids  | **N/A** — all `NULL` (job never left source-processing)                                                                            |
+| Genuine `answer_markdown` / provenance | **N/A** — `answer_markdown=NULL`, `result_provenance=unknown`                                                                      |
+| DB events/attempts recorded            | **PASS** — `job_events` evt_89–95, `job_attempts` id=8                                                                             |
+| Tunnel behavior                        | france1 selected (fresh health 03:04:24); England_1 `ECONNRESET`; france1 long-connection hang reproduced                          |
+
+**Verdict: P0 audio live = still NOT verified (BLOCKED). This was the
+final retry of the authorized budget; the france1 long-connection
+failure pattern is now reproduced 3/3 on long ops (attempts #4a,
+#4b/#3, #5), while short ops (verify, H1 text) continue to succeed.
+No further audio submission is authorized without a tunnel/egress
+change or a code change.**
+
+### Root cause (one level deep)
+
+1. **Primary (external): the france1-SeyedSaber VLESS/WS tunnel is
+   unstable on long-held connections.** Short single-RPC ops (verify
+   at 03:04, H1 text at 01:09 attempt #4) succeed; the audio flow —
+   which holds the tunnel through a multi-minute "upload → transcribe
+   → process source" phase — hits `GET_NOTEBOOK
+RemoteProtocolError`, and the worker's own retry (1/3) then hangs
+   with zero progress for 16+ min. Both tunnels were also
+   transiently unhealthy at 02:57–03:01 (15 s staged health-check
+   timeouts, fail-closed 500s), and England_1 carried an
+   `ECONNRESET` from its last check at job-selection time.
+2. **Secondary (internal, new): worker timeout orphans the job and
+   wedges the queue** — `worker.ts` `request()` deletes the pending
+   entry before `kill()` (lines 168–177), so on timeout the Promise
+   never settles; `onAbort` early-returns, so the cancel API reports
+   success while the job stays `CANCEL_REQUESTED`/`RUNNING` forever
+   and `Queue.busy` never clears (this is exactly the attempt-#4
+   orphan, now explained at code level).
+3. **Aggravating (design): 10-min session TTL vs. 10+ min
+   source-processing phase** — a retry scheduled mid-flight would
+   fail the auth gate (as in attempt #4 submission #1), and the
+   in-flight worker cannot be re-verified.
+
+### P0 audio retry runbook (learned this attempt — for the next run)
+
+1. Pre-flight: `POST /api/proxies/:id/health` on **both** nodes;
+   require at least one green. A green health check does **not**
+   prove long-lived-connection stability — a long-op canary is the
+   only real evidence (H1 text ≈ 30 s passed yet does not cover a
+   10+ min hold).
+2. `POST /api/sessions/:id/verify` immediately before submission
+   (TTL 10 min).
+3. Submit **one** audio job (fresh 15–30 s WAV, multipart
+   `POST /api/jobs`, `preferredAccountId` set).
+4. Monitor `GET /api/jobs/:id` every ~20 s + worker log every ~60 s.
+   If ≥2 `RemoteProtocolError`/`ConnectTimeout` on the same op (or a
+   retry that makes zero progress for >2 min): **stop early at the
+   15-min mark** via `POST /api/jobs/:id/cancel` — this is clean
+   **only while the worker's 30-min request timeout has not fired**.
+5. After cancel: confirm terminal `CANCELLED` via `GET /api/jobs/:id`.
+   If the 30-min timeout already fired, the job will NOT become
+   terminal (wedge bug) — terminalize via DB (backup first) and
+   force-restart the server.
+6. Do not submit a second audio job without a change (different
+   tunnel, tunnel-stability fix, or code fix).
+
+### Follow-ups (documented — NOT implemented in this run)
+
+1. `worker.ts` `request()`: the timeout timer must not
+   `pending.delete(id)` before `kill()` — let `failAll()` reject the
+   in-flight request (or reject directly), so the Promise always
+   settles and the queue un-wedges.
+2. `jobs.ts` cancel route: when the runner reports `cancelled:true`
+   but the job does not reach a terminal state, add a watchdog that
+   terminalizes it (or make `onAbort` reject the pending Promise
+   directly instead of early-returning).
+3. Queue/job-level watchdog: a `RUNNING` job whose worker exits or
+   times out is currently neither rescheduled nor terminalized
+   (attempt #4 orphan: `attempt=0`, no `job_attempts` row, no
+   `job_events`). Mark it `FAILED`/`RETRY_WAIT` on worker exit.
+4. Session TTL vs. long ops: raise the TTL for in-flight jobs or
+   refresh the session mid-flight so scheduled retries don't hit the
+   auth gate.
+
+### Final P0 audio status
+
+**BLOCKED — not live-verified** (5 live attempts: #1–#2 blocked on
+Chrome/0xC0000142, #3/#4/#5 blocked on the france1 long-connection
+failure + session-TTL interaction; H1 text remains **LIVE VERIFIED**
+from attempt #4, `j_27d5753a15ed88a3d06072f03c4aebe6`).
