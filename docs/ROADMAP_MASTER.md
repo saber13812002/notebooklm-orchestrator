@@ -6,17 +6,27 @@
 > Source: user-provided "MASTER EXECUTION ROADMAP v2.0" (2026-11-01) +
 > "ADDENDUM — SERVER ENDPOINT MIGRATION".
 >
-> **Current position (2026-11-06, evening):** Out-of-phase mission
+> **Current position (2026-11-09):** Master mission **NLO-MASTER-2026-11**
+> **Phase 2 — PROXY, SESSION AND REAL AUDIO RELIABILITY: VERIFIED-COMPLETED**
+> (close-out 2026-11-09, zero code changes —
+> [`PHASE_2_AUDIO_RELIABILITY.md`](reports/PHASE_2_AUDIO_RELIABILITY.md)).
+> All three requirements verified in code: bounded staged proxy health check
+> with fail-closed selection; 10-min session-eligibility TTL + pre-provider
+> gate; stage distinguishability via `errorClass` + job events + the stage
+> field `jobs.progress_note`, with the full 12-stage pipeline mapped and
+> SHA-256 recorded on persist. Live basis: the out-of-phase mission
 > **NLO-PHASE-2-AUDIO-LIVE-2026-11 COMPLETE — LIVE AUDIO VERIFIED**
 > ([`PHASE_2_AUDIO_LIVE_ACCEPTANCE.md`](reports/PHASE_2_AUDIO_LIVE_ACCEPTANCE.md)):
 > real Persian audio upload → real NotebookLM processing → real verbatim
 > Persian transcript (one job, 50.2 s, `provenance:"real"`, local dev 4871).
 > Addendum T1 (Scenario-1 live acceptance) thereby **satisfied for audio
-> transcription** (long-hold caveat remains, see report §7). Master mission
-> **NLO-MASTER-2026-11** Phase 1 — Stabilization remains **COMPLETED**
-> ([`PHASE_1_STABILIZATION.md`](reports/PHASE_1_STABILIZATION.md));
-> Mission Phase 2 — Webhook infrastructure is **PENDING USER APPROVAL**
-> (needs blocker B8).
+> transcription** (long-hold caveat remains, see report §7). Phase 1 —
+> Stabilization remains **COMPLETED**
+> ([`PHASE_1_STABILIZATION.md`](reports/PHASE_1_STABILIZATION.md)).
+> Phase numbering re-scoped by the close-out (see the status checkpoint):
+> Phase 3 = Unified text/audio workflow (**NEXT — PENDING USER APPROVAL**),
+> Phase 4 = Deep Dive + audio conversion (B9, B6), Phase 5 = Webhooks +
+> integration (needs blocker B8), Phase 6 = production deploy (B5).
 > Earlier: Addendum Phases A+B complete
 > ([`SERVER_ENDPOINT_MIGRATION_AUDIT.md`](reports/SERVER_ENDPOINT_MIGRATION_AUDIT.md),
 > [`SERVER_ENDPOINT_CONNECTIVITY.md`](reports/SERVER_ENDPOINT_CONNECTIVITY.md));
@@ -145,7 +155,7 @@ numeric similarity. Proof: [`SERVER_ENDPOINT_CONNECTIVITY.md`](reports/SERVER_EN
   record verbatim.
 - Docker absent on the Windows workstation.
 
-## 6. Status of known blockers (carried into Phases 2–3)
+## 6. Status of known blockers (carried into Phases 3–6, per the 2026-11-09 renumbering)
 
 - NotebookLM region/anti-abuse gate (`location=unsupported`) for s52 egress —
   egress situation may change on the new host; re-verify before live jobs.

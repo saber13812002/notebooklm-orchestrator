@@ -8,6 +8,62 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-09] — Mission NLO-MASTER-2026-11, Phase 2 close-out: PROXY, SESSION AND REAL AUDIO RELIABILITY — **VERIFIED-COMPLETED** (verification + documentation only, zero code changes)
+
+### Verified (in code at HEAD `d90bb42`; recorded live evidence not re-run)
+
+- **2.1 Proxy reliability:** bounded staged health check (SSRF guard →
+  config → runtime → tunnel start → real CONNECT+TLS+HTTP fetch), 10-min
+  health TTL, on-demand self-heal only (≤12 candidates, 3 s cap) — **no
+  aggressive probe loop** (single-probe design documented: shared nodes
+  rate-limit rapid connections). Failing nodes are never selected;
+  fail-closed with per-candidate rejection events (`fail-closed.test.ts`,
+  17 tests green). france1 healthy + live-verified (carried the real job);
+  England_1 `ECONNRESET` remains open (B2 leg).
+- **2.2 Session lifecycle:** the 10-minute TTL characterized precisely as
+  **cached eligibility** (AUTHENTICATED + `lastVerifiedAt` < 10 min), not
+  credential expiry (true expiry surfaces at the next real-service
+  re-verify). A job **cannot start** with an unverified/expired session:
+  the gate is pre-provider at queue pickup (live fast-fail 26 ms;
+  `session-gate.test.ts`, 6 tests green).
+- **2.3 Stage-specific audio errors + 12-stage pipeline:** every pipeline
+  stage (select → browser validate → multipart → persist → SHA-256 → job →
+  account → proxy → source received → source ID → prompt → result
+  persisted) mapped to code; stage failures are distinguishable via
+  `errorClass` (failure nature) + typed job events + the **stage field
+  `jobs.progress_note`** (worker stage keys persisted in real time and
+  preserved through the FAILED write). SHA-256 is recorded on persist
+  (live byte-identical). Artifact generation/retrieval honestly
+  `unsupported` (master Phase 4, B9) — never fabricated.
+- **Regression:** full suite re-run 2026-11-09 — `npm test` **227/227**
+  (shared 53 / server 144 / web 30), `typecheck`, `lint`, `format:check`,
+  `build` all clean. Matches the 2026-11-06 baseline exactly (no code
+  changed).
+
+### Notes
+
+- **No user-visible behavior changed** — this is a verification +
+  documentation close-out; no `src/` file was modified. The close-out brief
+  allowed distinct per-stage `error.code` values "**or a stage field**";
+  the stage field (`progress_note`) already exists and is exercised
+  end-to-end, so per AGENTS.md §1.3 no code change was made (rationale
+  recorded in the report §4.1).
+- **Phase renumbering** (per the close-out brief): 2 = proxy/session/audio
+  reliability (this close-out), 3 = Unified text/audio workflow (**next**,
+  deliverable `PHASE_3_UNIFIED_INPUT_AND_NOTEBOOK.md`), 4 = Deep Dive +
+  audio conversion (B9/B6), 5 = Webhooks + integration (B8), 6 = production
+  deploy (B5), F = final acceptance. Webhook work is **not dropped** — it
+  moves to Phase 5 and remains PENDING (needs B8).
+- Remaining gaps handed to Phase 3+ (report §7): no per-node long-hold
+  stability metric (15–17 min mode unproven); stage is free-text, not a
+  machine-readable enum; B8/B9/B6 open; England_1 node failing; prod 7
+  commits behind `origin/main`.
+- Report: [`docs/reports/PHASE_2_AUDIO_RELIABILITY.md`](docs/reports/PHASE_2_AUDIO_RELIABILITY.md)
+  (8 sections: exec summary + live evidence pointer; per-node proxy audit;
+  session TTL + gate; error-stage matrix + 12-stage mapping; live
+  acceptance evidence (LIVE-labeled); regression before/after; remaining
+  gaps + Phase 3 handoff; commits + verification levels).
+
 ## [2026-11-06] — Mission NLO-PHASE-2-AUDIO-LIVE-2026-11: real audio live acceptance — **LIVE AUDIO VERIFIED** (local, no code changes)
 
 ### Verified (live — real NotebookLM, local dev server 4871)
