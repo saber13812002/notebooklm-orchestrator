@@ -86,6 +86,13 @@ export class ProviderFailure extends Error {
 export interface NotebookLMProvider {
   readonly name: string;
   capabilities(): { operation: string; level: string; note?: string }[];
+  /**
+   * Honest per-format INPUT capability (Phase 3.1). The app layer combines
+   * this with its configured allowed extensions to answer "is this input
+   * supported?" — levels are never inflated, formats the provider cannot
+   * handle are simply not declared.
+   */
+  inputCapabilities(): { format: string; level: string; note?: string }[];
   validateConfiguration(): Promise<{ ok: boolean; issues: string[] }>;
   getAccountStatus(accountId: string, credentialRef: string): Promise<ProviderAccountStatus>;
   /**

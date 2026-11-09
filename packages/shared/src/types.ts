@@ -142,6 +142,12 @@ export interface Artifact {
 
 export interface JobInput {
   prompt: string;
+  /**
+   * Which input path created this job: `audio` (file upload) or `text`
+   * (plain text via /notebooks/from-text, or a document source — txt/docx/srt
+   * — that was validated/extracted to text). Phase 3.1.
+   */
+  inputType: "audio" | "text";
   /** Optional human-friendly title; when absent the prompt is displayed. */
   title?: string | null;
   audio: {
@@ -161,7 +167,15 @@ export interface JobInput {
     sizeBytes: number;
     charCount: number;
     language?: string | null;
+    /** Phase 3.1: original upload filename when the text came from a document source. */
+    originalName?: string | null;
   } | null;
+  /**
+   * Phase 3.3: dominant language of the source content ("fa" | "en"),
+   * detected by script heuristic (null = no clear signal). Persisted as a
+   * hint only — never appended to the title.
+   */
+  language?: "fa" | "en" | null;
   /**
    * H1: which prompt produced the result — a versioned master prompt
    * (e.g. "v1") or "custom" (caller-supplied). Null for audio jobs.

@@ -61,6 +61,9 @@ class ScriptedProvider implements NotebookLMProvider {
   capabilities() {
     return [];
   }
+  inputCapabilities() {
+    return [];
+  }
   async validateConfiguration() {
     return { ok: true, issues: [] };
   }

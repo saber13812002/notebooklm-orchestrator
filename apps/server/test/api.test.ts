@@ -290,6 +290,7 @@ describe("jobs", () => {
     const job = ctx.jobs.create({
       input: {
         prompt: "x",
+        inputType: "audio",
         audio: { originalName: "", mediaType: "", size: 0, sha256: "", providerConfirmed: false },
         preferredAccountId: null,
         preferredNodeId: null,

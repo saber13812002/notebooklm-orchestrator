@@ -194,6 +194,10 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       getAccountStatus: { level: live, note: "verify against real service" },
       login: { level: live, note: "interactive Playwright browser sign-in" },
       submitAudioJob: { level: live, note: "real upload + ask via notebooklm-py" },
+      retrieveTextJob: {
+        level: live,
+        note: "real add_text + ask via notebooklm-py 0.8.5",
+      },
       retrieveResult: { level: live, note: "real grounded answer" },
       retrieveArtifacts: {
         level: CapLevel.unsupported,
@@ -204,6 +208,42 @@ export class PythonWorkerProvider implements NotebookLMProvider {
         note: "kills the worker; in-flight server op may still finish",
       },
     });
+  }
+
+  inputCapabilities() {
+    const live = CapLevel.implementedUntestedLive;
+    const exp = CapLevel.experimental;
+    return [
+      {
+        format: "text",
+        level: live,
+        note: "submitted via sources.add_text (verified API in notebooklm-py 0.8.5)",
+      },
+      {
+        format: "txt",
+        level: live,
+        note: "submitted verbatim as a text source (sources.add_text)",
+      },
+      {
+        format: "srt",
+        level: live,
+        note: "validated in the app layer, submitted verbatim as a text source",
+      },
+      {
+        format: "docx",
+        level: live,
+        note: "extracted to plain text in the app layer (mammoth), submitted via sources.add_text",
+      },
+      {
+        format: "wav",
+        level: live,
+        note: "live-verified real NotebookLM upload 2026-11-06",
+      },
+      { format: "mp3", level: exp, note: "not live-verified on the real service" },
+      { format: "m4a", level: exp, note: "not live-verified on the real service" },
+      { format: "ogg", level: exp, note: "not live-verified on the real service" },
+      { format: "flac", level: exp, note: "not live-verified on the real service" },
+    ];
   }
 
   async validateConfiguration(): Promise<{ ok: boolean; issues: string[] }> {

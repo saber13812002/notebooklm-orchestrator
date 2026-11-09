@@ -50,4 +50,8 @@ export const ApiCodes = {
   secretNotFound: "secret_not_found",
   providerUnavailable: "provider_unavailable",
   runtimeNotConfigured: "runtime_not_configured",
+  /** Phase 3.1: SRT upload failed structural validation (index/timing/text). */
+  invalidSrt: "invalid_srt",
+  /** Phase 3.1: DOCX upload could not be extracted (corrupted/invalid archive). */
+  invalidDocx: "invalid_docx",
 } as const;

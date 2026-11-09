@@ -11,6 +11,12 @@ export interface AppConfig {
   proxyRuntime: "mock" | "xray";
   maxUploadBytes: number;
   allowedAudioExtensions: string[];
+  /**
+   * Phase 3.1: document extensions accepted on the file path (validated and
+   * extracted to plain text, then submitted as a text source). Default
+   * "txt,docx,srt".
+   */
+  allowedDocumentExtensions: string[];
   liveTestsEnabled: boolean;
   /** SSRF allowlist for health checks (host[:port] entries). */
   healthAllowlist: string[];
@@ -144,6 +150,11 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
 
+  const allowedDocumentExtensions = (env("NLO_ALLOWED_DOCUMENT_EXTENSIONS") ?? "txt,docx,srt")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+
   const healthAllowlist = (
     env("NLO_HEALTH_ALLOWLIST") ?? "api.ipify.org:443,notebooklm.google.com:443"
   )
@@ -167,6 +178,7 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     proxyRuntime: proxyRuntime as AppConfig["proxyRuntime"],
     maxUploadBytes,
     allowedAudioExtensions,
+    allowedDocumentExtensions,
     liveTestsEnabled: boolEnv(env, "NLO_LIVE_TESTS", false),
     healthAllowlist,
     pythonBin: env("NLO_PYTHON_BIN") ?? "python3",

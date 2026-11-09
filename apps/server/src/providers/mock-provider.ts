@@ -64,6 +64,33 @@ export class MockProvider implements NotebookLMProvider {
     });
   }
 
+  inputCapabilities() {
+    const t = CapLevel.implementedTested;
+    return [
+      { format: "text", level: t, note: "simulated (H1 text-to-notebook)" },
+      {
+        format: "txt",
+        level: t,
+        note: "simulated; validated and submitted verbatim in the app layer",
+      },
+      {
+        format: "docx",
+        level: t,
+        note: "simulated; extracted to plain text in the app layer (mammoth)",
+      },
+      {
+        format: "srt",
+        level: t,
+        note: "simulated; validated in the app layer, submitted verbatim",
+      },
+      { format: "wav", level: t, note: "simulated; real provider supports .wav" },
+      { format: "mp3", level: t, note: "simulated; real support unverified" },
+      { format: "m4a", level: t, note: "simulated; real support unverified" },
+      { format: "ogg", level: t, note: "simulated; real support unverified" },
+      { format: "flac", level: t, note: "simulated; real support unverified" },
+    ];
+  }
+
   async validateConfiguration(): Promise<{ ok: boolean; issues: string[] }> {
     return { ok: true, issues: [] };
   }

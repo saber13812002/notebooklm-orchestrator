@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { buildInputMatrix } from "@nlo/shared";
 import type { AppContext } from "../../app-context.js";
 
 /**
@@ -26,6 +27,15 @@ export function registerProviderRoutes(
       configured: config.ok,
       issues: config.issues,
       capabilities: ctx.provider.capabilities(),
+      // Phase 3.1: per-format INPUT capability — app-layer acceptance
+      // (configured extensions) combined with the provider's honest levels.
+      inputs: buildInputMatrix(
+        {
+          audio: ctx.config.allowedAudioExtensions,
+          documents: ctx.config.allowedDocumentExtensions,
+        },
+        ctx.provider.inputCapabilities(),
+      ),
     };
   });
 }

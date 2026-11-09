@@ -3,6 +3,7 @@ import {
   ApiError,
   ApiCodes,
   deriveTitleFromText,
+  detectLanguage,
   resolveMasterPrompt,
   type Job,
 } from "@nlo/shared";
@@ -69,12 +70,17 @@ export async function createJobFromText(
 
   // --- title (resolved at creation; used for notebook + source titles) -----
   const title = (body.title ?? "").trim() || deriveTitleFromText(text);
-  const language = body.metadata?.language?.trim() || null;
+  // Caller-declared language wins (normalized to fa/en); otherwise a
+  // script-based hint (fa/en). Persisted as metadata — never appended to the
+  // title.
+  const language = normalizeLanguage(body.metadata?.language) ?? detectLanguage(text) ?? null;
 
   const job = ctx.jobs.create({
     input: {
       prompt,
       title,
+      inputType: "text",
+      language: language ?? null,
       audio: {
         originalName: "",
         mediaType: "",
@@ -136,4 +142,13 @@ export async function createJobFromText(
   }
 
   return { job, idempotentReplay: false };
+}
+
+/** Normalize a caller-declared language hint to the known fa/en codes. */
+function normalizeLanguage(v: string | null | undefined): "fa" | "en" | null {
+  const s = (v ?? "").trim().toLowerCase();
+  if (s === "fa" || s === "en") return s;
+  if (s === "fa-ir" || s === "persian") return "fa";
+  if (s === "en-us" || s === "en-gb" || s === "english") return "en";
+  return null;
 }

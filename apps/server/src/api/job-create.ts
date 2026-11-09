@@ -1,9 +1,23 @@
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import path from "node:path";
 import type { FastifyInstance } from "fastify";
-import { ApiError, ApiCodes, type Job } from "@nlo/shared";
+import {
+  ApiError,
+  ApiCodes,
+  cleanFilename,
+  deriveNotebookTitle,
+  deriveTitleFromText,
+  detectLanguage,
+  parseSrt,
+  resolveMasterPrompt,
+  safeName,
+  type Job,
+} from "@nlo/shared";
 import type { AppContext } from "../app-context.js";
 import { JobArchive, sha256OfFile } from "../domain/archive.js";
+import { extractDocxText } from "../domain/docx.js";
 import { dataPaths } from "../config.js";
 
 /**
@@ -11,12 +25,19 @@ import { dataPaths } from "../config.js";
  * the versioned `/api/v1/jobs` handler. Keeping one implementation guarantees
  * the versioned surface cannot drift from the audited legacy behavior
  * (multipart drain semantics, audio validation, archive init + rollback).
+ *
+ * Phase 3.1: two accepted input shapes (never both):
+ *   - audio file  (field `audio` or any file part) — the legacy audio path
+ *   - source document (field `source`; .txt/.docx/.srt) — validated and
+ *     extracted to plain text, then submitted as a NotebookLM text source
  */
 
 export interface ParsedJobUpload {
   fields: Record<string, string>;
   audio: { filename: string; type: string; tempPath: string } | null;
-  /** Always called (success or failure) — removes the temp upload copy. */
+  /** Phase 3.1: document source (txt/docx/srt) — the alternative to audio. */
+  source: { filename: string; type: string; tempPath: string } | null;
+  /** Always called (success or failure) — removes the temp upload copies. */
   cleanup(): Promise<void>;
 }
 
@@ -24,6 +45,10 @@ export interface ParsedJobUpload {
  * Drain a multipart request. The iterator only advances past a file part
  * once its stream is consumed, so each file stream MUST be drained inside
  * the loop (to a temp file) or the request hangs forever.
+ *
+ * File routing: a part with fieldname `source` becomes the document source;
+ * every other file part becomes the audio (first one wins, extras discarded —
+ * legacy behavior preserved).
  */
 export async function parseJobMultipart(
   req: import("fastify").FastifyRequest,
@@ -31,17 +56,31 @@ export async function parseJobMultipart(
 ): Promise<ParsedJobUpload> {
   const fields: Record<string, string> = {};
   let audio: { filename: string; type: string; tempPath: string } | null = null;
-  let tempAudioPath: string | null = null;
+  let source: { filename: string; type: string; tempPath: string } | null = null;
+  const tempPaths: string[] = [];
 
   try {
     for await (const part of req.parts()) {
       if (part.type === "file") {
-        if (!audio) {
-          tempAudioPath = await saveMultipartToTemp(ctx, part.file);
+        if (part.fieldname === "source") {
+          if (!source) {
+            const p = await saveMultipartToTemp(ctx, part.file);
+            tempPaths.push(p);
+            source = {
+              filename: part.filename ?? "upload",
+              type: part.mimetype ?? "application/octet-stream",
+              tempPath: p,
+            };
+          } else {
+            await drainStream(part.file); // extra document parts: discard
+          }
+        } else if (!audio) {
+          const p = await saveMultipartToTemp(ctx, part.file);
+          tempPaths.push(p);
           audio = {
             filename: part.filename ?? "upload",
             type: part.mimetype ?? "application/octet-stream",
-            tempPath: tempAudioPath,
+            tempPath: p,
           };
         } else {
           await drainStream(part.file); // extra file parts: discard
@@ -51,17 +90,95 @@ export async function parseJobMultipart(
       }
     }
   } catch (err) {
-    if (tempAudioPath) await rm(tempAudioPath);
+    for (const p of tempPaths) await rm(p);
     throw err;
   }
 
   return {
     fields,
     audio,
+    source,
     cleanup: async () => {
-      if (tempAudioPath) await rm(tempAudioPath);
+      for (const p of tempPaths) await rm(p);
     },
   };
+}
+
+/**
+ * Phase 3.1: validate a document upload and extract it to plain text.
+ * Distinct error codes keep failures machine-readable:
+ *   unsupported extension / empty file / traversal filename -> validation
+ *   corrupted DOCX -> invalid_docx ; malformed SRT -> invalid_srt
+ */
+async function resolveDocumentSource(
+  ctx: AppContext,
+  source: { filename: string; type: string; tempPath: string },
+): Promise<{ content: string; firstText: string | null }> {
+  // Dotfiles (".srt") have no extension by path.extname rules; treat the stem
+  // after the leading dot as the extension.
+  const base = source.filename.split(/[\\/]/).pop() ?? source.filename;
+  const ext = (path.extname(base) || (base.startsWith(".") && base.length > 1 ? base.slice(1) : ""))
+    .replace(/^\./, "")
+    .toLowerCase();
+  if (!ctx.config.allowedDocumentExtensions.includes(ext)) {
+    throw new ApiError(ApiCodes.validation, `unsupported document extension: .${ext}`, 400);
+  }
+  // Traversal defense: path components in an upload filename are never accepted.
+  if (source.filename.includes("/") || source.filename.includes("\\")) {
+    throw new ApiError(ApiCodes.validation, "invalid document filename", 400);
+  }
+  try {
+    safeName(source.filename);
+  } catch {
+    throw new ApiError(ApiCodes.validation, "invalid document filename", 400);
+  }
+  const size = await sizeOf(source.tempPath);
+  if (size === 0) {
+    throw new ApiError(ApiCodes.validation, "document file is empty", 400);
+  }
+  if (size > ctx.config.maxUploadBytes) {
+    throw new ApiError(ApiCodes.validation, "document file exceeds size limit", 413);
+  }
+
+  let firstText: string | null = null;
+  let content: string;
+  if (ext === "docx") {
+    try {
+      content = await extractDocxText(source.tempPath);
+    } catch {
+      throw new ApiError(
+        ApiCodes.invalidDocx,
+        "could not extract text from DOCX (corrupted or invalid file)",
+        400,
+      );
+    }
+  } else {
+    // Preserve the original document verbatim (SRT keeps its timestamps);
+    // only a UTF-8 BOM and surrounding whitespace are removed.
+    const raw = readFileSync(source.tempPath, "utf8")
+      .replace(/^\uFEFF/, "")
+      .trim();
+    if (ext === "srt") {
+      const parsed = parseSrt(raw);
+      if (!parsed.ok) {
+        throw new ApiError(ApiCodes.invalidSrt, `invalid SRT: ${parsed.reason}`, 400);
+      }
+      firstText = parsed.firstText;
+    }
+    content = raw;
+  }
+
+  if (content.trim() === "") {
+    throw new ApiError(ApiCodes.validation, "document contains no text", 400);
+  }
+  const charCount = Array.from(content).length;
+  if (charCount > ctx.config.maxTextChars) {
+    throw new ApiError(ApiCodes.validation, "document text exceeds maximum length", 400, {
+      maxTextChars: ctx.config.maxTextChars,
+      charCount,
+    });
+  }
+  return { content, firstText };
 }
 
 /**
@@ -77,7 +194,7 @@ export async function createJobFromUpload(
   parsed: ParsedJobUpload,
   opts: { idempotencyKey?: string | null; tokenId?: string | null } = {},
 ): Promise<{ job: Job; idempotentReplay: boolean }> {
-  const { fields, audio } = parsed;
+  const { fields, audio, source } = parsed;
   const idempotencyKey = opts.idempotencyKey ?? null;
   const tokenId = opts.tokenId ?? null;
 
@@ -88,20 +205,103 @@ export async function createJobFromUpload(
       if (existing) return { job: existing, idempotentReplay: true };
     }
 
+    if (audio && source) {
+      throw new ApiError(
+        ApiCodes.validation,
+        "provide either an audio file or a source document (not both)",
+        400,
+      );
+    }
+
     const prompt = (fields.prompt ?? "").trim();
-    if (!prompt) {
+    // A document source may omit the prompt (the versioned default master
+    // prompt is used); the audio path keeps its existing "prompt required".
+    if (!source && !prompt) {
       throw new ApiError(ApiCodes.validation, "prompt is required", 400);
     }
 
     const preferredAccountId = fields.preferredAccountId || null;
     const preferredNodeId = fields.preferredNodeId || null;
-    const title = (fields.title ?? "").trim() || null;
 
     // Reject an unknown account ID up front (clearer than a runner failure
     // later); the runner re-checks eligibility + a live verified session.
     if (preferredAccountId && !ctx.accounts.get(preferredAccountId)) {
       throw new ApiError(ApiCodes.notFound, "preferred account not found", 404);
     }
+
+    // --- document source (Phase 3.1): txt/docx/srt -> text job -------------
+    if (source) {
+      const doc = await resolveDocumentSource(ctx, source);
+      const docPrompt = prompt || resolveMasterPrompt(null).text;
+      const title = deriveNotebookTitle(
+        fields.title ?? null,
+        cleanFilename(source.filename),
+        doc.firstText ?? deriveTitleFromText(doc.content),
+      );
+      const language = detectLanguage(doc.content);
+      const charCount = Array.from(doc.content).length;
+      const sizeBytes = Buffer.byteLength(doc.content, "utf8");
+
+      const job = ctx.jobs.create({
+        input: {
+          prompt: docPrompt,
+          title,
+          inputType: "text",
+          audio: { originalName: "", mediaType: "", size: 0, sha256: "", providerConfirmed: false },
+          text: {
+            sha256: createHash("sha256").update(doc.content, "utf8").digest("hex"),
+            sizeBytes,
+            charCount,
+            language,
+            originalName: source.filename,
+          },
+          promptVersion: prompt ? "custom" : "v1",
+          language: language ?? null,
+          metadata: { language: language ?? null, customer: null, category: null },
+          preferredAccountId,
+          preferredNodeId,
+        },
+        configSnapshot: {
+          provider: ctx.provider.name,
+          proxyRuntime: ctx.config.proxyRuntime,
+          host: ctx.config.host,
+        },
+        idempotencyKey: idempotencyKey && tokenId ? idempotencyKey : null,
+        tokenId: idempotencyKey && tokenId ? tokenId : null,
+      });
+
+      try {
+        const archive = new JobArchive(dataPaths(ctx.config.dataDir).jobsDir, job.id);
+        archive.init({
+          prompt: docPrompt,
+          originalAudioName: null,
+          audioMediaType: null,
+          configSnapshot: job.configSnapshot,
+          createdAt: job.createdAt,
+          text: { charCount, sizeBytes, language },
+        });
+        archive.storeText(doc.content);
+        ctx.jobs.appendEvent(
+          job.id,
+          "created",
+          idempotencyKey
+            ? "document job created and queued (idempotency key recorded)"
+            : "document job created and queued",
+        );
+      } catch {
+        // Roll back: fail the job, do not leak the raw error.
+        ctx.jobs.setStatus(job.id, "FAILED", {
+          errorClass: "invalid_input",
+          errorMessage: "archive initialization failed",
+        });
+        throw new ApiError(ApiCodes.validation, "could not store request", 400);
+      }
+
+      return { job, idempotentReplay: false };
+    }
+
+    // --- audio path (legacy, unchanged semantics) ---------------------------
+    const title = (fields.title ?? "").trim() || null;
 
     // Validate + hash the audio if present.
     let audioMeta: Job["input"]["audio"] = {
@@ -138,6 +338,7 @@ export async function createJobFromUpload(
       input: {
         prompt,
         title,
+        inputType: "audio",
         audio: audioMeta,
         preferredAccountId,
         preferredNodeId,
@@ -182,7 +383,7 @@ export async function createJobFromUpload(
 
     return { job, idempotentReplay: false };
   } finally {
-    // The temp upload is copied into the archive; drop the temp copy.
+    // The temp uploads are copied into the archive; drop the temp copies.
     await parsed.cleanup();
   }
 }
