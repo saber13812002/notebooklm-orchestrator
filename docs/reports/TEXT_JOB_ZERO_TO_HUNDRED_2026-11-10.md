@@ -287,21 +287,85 @@ corrected in the commit accompanying this report.
 
 - **§1 fresh run:** in-process mock E2E + integration, 11/11 passed, this
   session.
-- **Stage 1 live status:** live-verified previously (H1 on prod since
-  `d705634`; real notebook/source IDs on production job rows). **Not re-run
-  today** (live verification is a manual gate and was not requested).
-- **No live NotebookLM request was made in this session.**
+- **Stage 1 live status:** **re-verified live in this session** — a real
+  NotebookLM text job succeeded on dev 4871 at 13:53–13:54 UTC 2026-11-10
+  through the france1 tunnel with `provenance: "real"` (full evidence in §7).
+  Prior live verification (H1 on prod since `d705634`) remains valid
+  context. This is a manual live gate; it is never run in CI.
+- Stages 2–5 remain **not implemented**: the live run produced no audio and
+  no artifacts (`/artifacts` → `[]`), consistent with §3 and §4.4.
 
-## 7. Actions taken / not taken
+## 7. Live execution evidence (2026-11-10, 13:53–13:54 UTC, dev 4871)
+
+Executed at the user's explicit request ("اجرا کنیم" → live real text job).
+
+Gates:
+
+1. `GET /api/health/ready` → ready; provider `python-worker`; xray present.
+2. `POST /api/sessions/acc_315776aeb5b74e33/verify` → FAILED ("Authentication
+   expired or invalid" — session was 4 days stale, `sessionUsable: false`).
+3. User-approved `POST .../browser-import`
+   (`{"browser":"chrome","account":"saber.tabatabaee@gmail.com","timeoutSec":600}`)
+   → first attempt failed (Chrome held its cookie DB, OS error 32); after the
+   approved Chrome kill, the retry → `state: AUTHENTICATED`,
+   `lastVerifiedAt: 2026-11-10T13:53:05Z` (re-verified against the real
+   service through the tunnel).
+
+Job:
+
+- `POST /api/notebooks/from-text` — title
+  `Live Trace Coffee Origins 20261110-1353` (unique → new notebook), 415-char
+  English text → `202 {jobId: j_599fc5300d20a2ec682ef956d42f66c1}`.
+- Events (`GET /api/jobs/<id>/events`, 7): `created` 13:53:55.502 →
+  `validate` → `account_selected` (صابر) → `proxy_selected`
+  (`france1-SeyedSaber`, tunnel `127.0.0.1:58929`, health fresh at
+  13:52:21) → `proxy_candidate_rejected` (`node_1e238ac8aed440cb`
+  ECONNRESET — correctly excluded) → `running` (attempt 1) → `succeeded`
+  13:54:32.
+- `GET /api/jobs/<id>/result` → `200`:
+
+```json
+{
+  "jobId": "j_599fc5300d20a2ec682ef956d42f66c1",
+  "status": "SUCCEEDED",
+  "notebook": {
+    "id": "4b56c514-c2a4-4c94-a80e-6f68a50ed894",
+    "title": "Live Trace Coffee Origins 20261110-1353",
+    "url": null,
+    "shareUrl": null
+  },
+  "source": { "id": "89d960db-63e0-4864-8243-3733f4dbd1cb" },
+  "summary": { "text": "### 1. Overview ...", "promptVersion": "v1" },
+  "provenance": "real"
+}
+```
+
+- Job row `resultProviderMeta`: `simulated: false`,
+  `email: saber.tabatabaee@gmail.com`, `sourceKind: text`,
+  `notebookId: 4b56c514-…`,
+  `conversationId: 8c3f83b8-5b01-42fe-b695-188b0c7a1f30`, `turnNumber: 1`,
+  `references[0].sourceId: 89d960db-…`,
+  `route: {nodeId: node_23e81d9a6ca04d10, port: 58929}`.
+- `GET /api/jobs/<id>/artifacts` → `[]` (no file output by design — the
+  answer is markdown on the job; §4.4).
+- Wall clock: created 13:53:55.496Z → succeeded 13:54:32.403Z = **37 s** for
+  short text. The "~20 minutes" in the 5-stage expectation is not a system
+  setting; the hard limit is the 30-min `NLO_JOB_TIMEOUT_MS`, and longer
+  inputs/answers simply take longer.
+
+## 8. Actions taken / not taken
 
 - Actions: ran the from-text suite (evidence above); wrote this report;
-  corrected the stale blocker table in the audit doc.
-- Not taken (approval gates, unchanged): no prod deploy/restart, no live job,
-  no new code.
+  corrected the stale blocker table in the audit doc; re-authenticated the
+  «صابر» session via the approved browser-import; created, monitored, and
+  verified the live text job of §7.
+- Not taken (approval gates, unchanged): no prod deploy/restart, no new code,
+  no push.
 
-## 8. Integrity statement
+## 9. Integrity statement
 
 Every capability label in this report is backed by the cited file (code
-read today) or by the fresh test run of §1 (exit 0, 11/11). Nothing is
+read today), the fresh test run of §1 (exit 0, 11/11), or the live run of
+§7 (terminal `SUCCEEDED`, `provenance: "real"`, real UUIDs). Nothing is
 claimed that is not implemented. The five-stage expectation is a target
 state, not the current product; §3 states exactly which stages exist.
