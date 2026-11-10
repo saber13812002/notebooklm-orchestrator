@@ -533,18 +533,28 @@ reconciliation, re-confirmed today):
   `d705634`).
 - **P0 (audio recovery):** implemented + live-verified (on prod).
 
-### Open blockers (carried from preflight, renumbered 2026-11-09)
+### Open blockers (authoritative: `NLO_MASTER_EXECUTION_STATUS.md` §7,
 
-| #     | Blocker                                                                                                          |
-| ----- | ---------------------------------------------------------------------------------------------------------------- |
-| B1    | GitLab mirror inactive (needs maintainer PAT, api scope; then 4-step setup per `docs/operations/gitlab-sync.md`) |
-| B5    | No passwordless sudo on prod host (deploys need the sudo password)                                               |
-| B6/B7 | DNS: `nlo.ai.ismc.ir` → 185.213.10.25 (edge), not 172.30.0.133 — blocks certbot / nginx Stage B HTTPS            |
-| B8    | Webhooks — deferred to Phase 5                                                                                   |
-| B9    | LiteLLM API key not provisioned (internal LLM feature dormant)                                                   |
-| B10   | Wiki.js publish credentials not provided (customer docs stay in `docs/wiki/`)                                    |
+2026-11-09 reconciliation — table corrected 2026-11-10, see
+`TEXT_JOB_ZERO_TO_HUNDRED_2026-11-10.md` §5)
 
-(Full table with details: `docs/reports/NLO_MASTER_EXECUTION_STATUS.md` §7.)
+| ID  | Blocker                                                           | Status after reconciliation                                  |
+| --- | ----------------------------------------------------------------- | ------------------------------------------------------------ |
+| B1  | Local Python venv spawn failure `0xC0000142`                      | RESOLVED (re-verified 2026-11-09)                            |
+| B2  | Local VLESS nodes health                                          | PARTIAL — france1 healthy + live-verified; England_1 failing |
+| B3  | GitLab instance survival + no maintainer PAT                      | OPEN — mirror inactive; no PAT, no NLO project               |
+| B4  | No GitLab runner (mirror CI inactive)                             | OPEN                                                         |
+| B5  | Prod service restart needs sudo password                          | OPEN — Phase 6 (deploy) gate                                 |
+| B6  | FFmpeg not installed locally; no conversion code                  | OPEN — `ffmpeg` not on PATH (Phase 4)                        |
+| B7  | LiteLLM key hygiene                                               | PARTIAL — rotation still a pending user action               |
+| B8  | Webhook destination + shared secret                               | OPEN — required for master Phase 5                           |
+| B9  | Deep Dive audio-overview generation unverified vs real NotebookLM | OPEN — master Phase 4 live gate                              |
+| B10 | No `gh` CLI on dev machine                                        | OPEN — CI status not verifiable locally                      |
+
+Additionally open (not in the checkpoint B-numbering): DNS —
+`nlo.ai.ismc.ir` still points to the edge `185.213.10.25`, not `172.30.0.133`
+— blocks certbot / nginx Stage B HTTPS (see
+`PRODUCTION_READINESS_2026-11-06.md` §5).
 
 ---
 
