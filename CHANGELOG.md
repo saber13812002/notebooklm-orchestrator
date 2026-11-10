@@ -8,6 +8,52 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-10] — Mission NLO-MASTER-2026-11, Phase 3 (unified text/audio workflow): 3.1 document sources + 3.3 audio title fallback — **IMPLEMENTED + UNIT TESTED** (Live NOT verified)
+
+### Added (Phase 3.1 — committed at `e973451`; CHANGELOG entry added retroactively in this commit, per the 2026-11-10 full-project audit)
+
+- **Unified input capability matrix:** every provider now declares
+  `inputCapabilities()` (audio / text / document per extension) alongside the
+  legacy `capabilities()`; the web client and API surface it so consumers can
+  check support **before** uploading. `packages/shared/src/input-capabilities.ts`.
+- **Document sources (TXT, DOCX, SRT)** accepted on the existing multipart
+  `POST /api/jobs` as an alternative to audio: the text is extracted
+  (DOCX via `apps/server/src/domain/docx.ts`, SRT cues flattened with
+  timestamps preserved as the stored text), stored as a text source, and the
+  job runs the H1 text-to-notebook pipeline. New env var
+  `NLO_ALLOWED_DOCUMENT_EXTENSIONS` (default `txt,docx,srt`).
+- Shared helpers: `packages/shared/src/srt.ts` (SRT parsing),
+  `packages/shared/src/title.ts` (`cleanFilename`, `deriveNotebookTitle`,
+  `detectLanguage`, word-boundary truncation).
+- 48 new tests: `document-sources.test.ts` (16, in-process E2E with the mock
+  provider), `input-capabilities.test.ts`, `srt.test.ts`, `title.test.ts`.
+
+### Added (Phase 3.3 — this commit)
+
+- **Audio-job title fallback:** when a multipart audio job is created without
+  a `title` field, the notebook title is now derived from the cleaned audio
+  filename (basename only, last extension stripped, `-`/`_` normalized to
+  spaces) instead of staying `null`. A user-provided `title` still wins;
+  prompt-only jobs keep the legacy `null` title.
+- 3 new tests in `apps/server/test/api.test.ts` (filename-derived title,
+  user override wins, prompt-only stays null).
+
+### Verified
+
+- `npm test` **278/278** (shared 85 / server 163 / web 30) — fresh run
+  2026-11-10, local (Node v24.14.0). Up from 227/227 on 2026-11-09.
+- `typecheck`, `lint`, `format:check`, `build` clean — fresh run 2026-11-10.
+
+### Notes
+
+- **Live NOT verified:** no real NotebookLM run was performed for either
+  Phase 3.1 or 3.3 in this cycle (mock provider only). Live verification
+  remains a manual gate (`apps/server/scripts/e2e-live.ts`), never in CI.
+- Full-project audit & session reference:
+  [`docs/reports/FULL_PROJECT_AUDIT_2026-11-10.md`](docs/reports/FULL_PROJECT_AUDIT_2026-11-10.md)
+  (source map, git connectivity map, production identification, fresh
+  verification evidence, open blockers).
+
 ## [2026-11-09] — Mission NLO-MASTER-2026-11, Phase 2 close-out: PROXY, SESSION AND REAL AUDIO RELIABILITY — **VERIFIED-COMPLETED** (verification + documentation only, zero code changes)
 
 ### Verified (in code at HEAD `d90bb42`; recorded live evidence not re-run)

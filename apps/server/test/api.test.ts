@@ -280,6 +280,48 @@ describe("jobs", () => {
     expect(detail.json().input.audio.size).toBe(12);
   });
 
+  it("derives the audio job title from the cleaned filename when no title is given (Phase 3.3)", async () => {
+    const res = await mpInject([
+      "prompt=transcribe",
+      {
+        field: "audio",
+        filename: "lecture-01_intro.wav",
+        bytes: Buffer.from("RIFF....fake"),
+        type: "audio/wav",
+      },
+    ]);
+    expect(res.statusCode).toBe(201);
+    const job = res.json();
+    const detail = await app.inject({ method: "GET", url: `/api/jobs/${job.id}`, headers: auth });
+    // Extension stripped, -/_ normalized to spaces.
+    expect(detail.json().input.title).toBe("lecture 01 intro");
+  });
+
+  it("honors a user-provided title over the audio filename (Phase 3.3)", async () => {
+    const res = await mpInject([
+      "prompt=transcribe",
+      "title=My custom title",
+      {
+        field: "audio",
+        filename: "lecture-01_intro.wav",
+        bytes: Buffer.from("RIFF....fake"),
+        type: "audio/wav",
+      },
+    ]);
+    expect(res.statusCode).toBe(201);
+    const job = res.json();
+    const detail = await app.inject({ method: "GET", url: `/api/jobs/${job.id}`, headers: auth });
+    expect(detail.json().input.title).toBe("My custom title");
+  });
+
+  it("keeps a null title for prompt-only (no-audio) jobs (Phase 3.3 legacy semantics)", async () => {
+    const res = await mpInject(["prompt=hello"]);
+    expect(res.statusCode).toBe(201);
+    const job = res.json();
+    const detail = await app.inject({ method: "GET", url: `/api/jobs/${job.id}`, headers: auth });
+    expect(detail.json().input.title ?? null).toBe(null);
+  });
+
   it("404s for unknown job ids with the standard envelope", async () => {
     const res = await app.inject({ method: "GET", url: "/api/jobs/j_deadbeef", headers: auth });
     expect(res.statusCode).toBe(404);

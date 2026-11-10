@@ -300,8 +300,11 @@ export async function createJobFromUpload(
       return { job, idempotentReplay: false };
     }
 
-    // --- audio path (legacy, unchanged semantics) ---------------------------
-    const title = (fields.title ?? "").trim() || null;
+    // --- audio path (Phase 3.3: title = user override || cleaned filename) --
+    // The notebook title comes from the user override when given, otherwise
+    // from the cleaned audio filename (basename, extension stripped, -/_
+    // normalized to spaces). Prompt-only jobs keep the legacy null title.
+    const title = (fields.title ?? "").trim() || (audio ? cleanFilename(audio.filename) : null);
 
     // Validate + hash the audio if present.
     let audioMeta: Job["input"]["audio"] = {
