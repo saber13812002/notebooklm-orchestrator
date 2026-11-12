@@ -144,6 +144,33 @@ DENY ACCESS ON DATABASE neo4j TO radio_read;
 
 ---
 
-## 10. حکم فاز
+## 10. رگرسیون‌های یافت‌شده پس از اجرا و رفع آن‌ها (LIVE-VERIFIED)
+
+پس از Gate A دو مشکل واقعی ظاهر شد و هر دو با مجوز صریح کاربر رفع شدند:
+
+### 10.1 شکست `/api` از طریق فرانت‌اند و دامنه (502)
+
+- **علامت:** `8043/api/health` = 200 اما `8044/api/health` و `https://radio.ai.ismc.ir/api/health` = **502**.
+- **علت:** `radio_frontend` با `proxy_pass http://radio_api:8003;` کار می‌کند و nginx نام upstream را فقط در startup حل می‌کند (بدون `resolver`). بازسازی مجازشدهٔ `radio_api` باعث تغییر IP از `15.15.12.16` به `15.15.12.18` شد و فرانت‌اند به IP مرده وصل می‌شد:
+  `connect() failed (111: Connection refused) ... upstream: "http://15.15.12.16:8003/api/health"`
+- **نکتهٔ مهم:** `docker compose up -d --no-deps frontend` در این stack **no-op** است (قالب bind-mount و رندر آن در entrypoint)، بنابراین فقط `docker restart radio_frontend` قالب را بازتولید می‌کند.
+- **رفع دائمی (اعمال‌شده):** در `nginx.conf` (قالب با توکن `__API_UPSTREAM__`):
+  `resolver 127.0.0.11 valid=10s ipv6=off;` + `set $r13_api_upstream "__API_UPSTREAM__"; proxy_pass http://$r13_api_upstream$request_uri;`
+- **اثبات:** config رندرشده داخل container: خط ۲ `resolver 127.0.0.11 valid=10s ipv6=off;` و خطوط ۳۶–۳۷ فرم متغیری.
+
+### 10.2 `neo4j_online:false` پس از سخت‌سازی DENY
+
+- **علامت:** health با `200` برمی‌گشت اما body: `"status":"degraded","neo4j_online":false`.
+- **علت:** `api.py` در `def health()` از `_driver.session()` استفاده می‌کرد (دیتابیس پیش‌فرض `neo4j`)، که بعد از `DENY ACCESS ON DATABASE neo4j TO radio_read` مسدود است؛ کوئری‌های واقعی روی `radio` سالم بودند.
+- **رفع (اعمال‌شده):** `with _driver.session(database=NEO4J_DB) as s:` — health همان دیتابیسی را می‌سنجد که اپ استفاده می‌کند.
+- **اثبات:** `{"status":"ok",...,"neo4j_online":true,...}` هم مستقیم (8043)، هم از فرانت‌اند (8044) و هم از دامنه.
+
+### 10.3 فایل‌های تغییریافته روی سرور (هنوز commit نشده — فاز R1-D)
+
+`radio-rag-service`: `docker-compose.radio.yml` (۱ خط)، `nginx.conf` (resolver + متغیر upstream)، `api.py` (session health)، `.env.radio` (رمز/کاربر — gitignored، 0600).
+
+---
+
+## 11. حکم فاز
 
 **R1-A.3 = `LIVE-VERIFIED`** — حساب اختصاصی فعال، کمترین دسترسی اثبات‌شده، نشت `neo4j` DB بسته شد، ۱۵/۱۵ پذیرش pass، Production سالم.
