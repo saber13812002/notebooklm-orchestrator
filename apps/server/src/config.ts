@@ -58,6 +58,25 @@ export interface AppConfig {
    * split policy; one text = one NotebookLM source).
    */
   maxTextChars: number;
+  /**
+   * M2-6-05 (C): radio RAG API (radio-rag-service) base URL used by
+   * POST /orchestrator/ask — e.g. http://172.20.1.53:8043. Trailing
+   * slashes are normalized; http/https only.
+   */
+  radioBase: string;
+  /** Bearer token for the radio RAG API (RAG_SERVICE_TOKEN). Empty = not configured. */
+  radioToken: string;
+  /** Timeout for the radio RAG call (ms). */
+  radioTimeoutMs: number;
+  /**
+   * M2-6-05 (C): how long /orchestrator/ask waits for the optional
+   * NotebookLM text job to reach a terminal state (ms). A timeout does NOT
+   * fail the request — the radio answer is returned with the job id, its
+   * current status and `timedOut: true`.
+   */
+  orchNloTimeoutMs: number;
+  /** Poll interval for the optional NotebookLM job (ms). */
+  orchNloPollMs: number;
 }
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..", "..");
@@ -169,6 +188,14 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     throw new Error(`invalid NLO_INTERNAL_API_BASE_URL (expected http(s)://host[:port])`);
   }
 
+  const radioBase = (env("NLO_RADIO_BASE") ?? "http://172.20.1.53:8043")
+    .trim()
+    .replace(/\/+$/, "");
+  if (!/^https?:\/\/[^\s/]+$/.test(radioBase)) {
+    throw new Error(`invalid NLO_RADIO_BASE (expected http(s)://host[:port])`);
+  }
+  const radioToken = (env("NLO_RADIO_TOKEN") ?? "").trim();
+
   return {
     host,
     port: intEnv(env, "NLO_PORT", 4870),
@@ -190,6 +217,11 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     apiRateLimitWindowMs: intEnv(env, "NLO_API_RATE_LIMIT_WINDOW_MS", 60_000),
     internalApiBaseUrl,
     maxTextChars: intEnv(env, "NLO_MAX_TEXT_CHARS", 200_000),
+    radioBase,
+    radioToken,
+    radioTimeoutMs: intEnv(env, "NLO_RADIO_TIMEOUT_MS", 120_000),
+    orchNloTimeoutMs: intEnv(env, "NLO_ORCH_NLO_TIMEOUT_MS", 300_000),
+    orchNloPollMs: intEnv(env, "NLO_ORCH_POLL_MS", 2_000),
   };
 }
 

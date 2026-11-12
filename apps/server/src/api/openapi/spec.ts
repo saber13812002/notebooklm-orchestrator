@@ -155,6 +155,7 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
       { name: "proxies", description: "VLESS proxy node management + health." },
       { name: "meta", description: "Health, provider capability, settings, secrets." },
       { name: "tokens", description: "API token management (admin)." },
+      { name: "orchestrator", description: "Cross-product RAG orchestration (radio RAG + NotebookLM)." },
     ],
     security: [],
     components: {
@@ -295,6 +296,101 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
             },
           },
         },
+        OrchestratorAskRequest: {
+          type: "object",
+          required: ["question"],
+          properties: {
+            question: { type: "string", minLength: 1, maxLength: 2000 },
+            variant: {
+              type: "string",
+              enum: ["06b", "4b", "rrf"],
+              default: "06b",
+              description: "Radio RAG retrieval variant.",
+            },
+            notebooklm: {
+              type: ["object", "null"],
+              properties: {
+                enabled: { type: "boolean", default: true },
+                collection: {
+                  type: ["string", "null"],
+                  maxLength: 200,
+                  description:
+                    "Recorded in the notebook job metadata. When omitted, the top citation's real collection is used (never fabricated).",
+                },
+              },
+            },
+          },
+        },
+        OrchestratorAskResponse: {
+          type: "object",
+          required: ["question", "answer", "selected_variant", "trace_id", "collection", "sources", "notebooklm", "timings"],
+          properties: {
+            question: { type: "string" },
+            answer: { type: "string" },
+            selected_variant: { type: "string", enum: ["06b", "4b", "rrf"] },
+            trace_id: {
+              type: ["string", "null"],
+              description: "Real trace id from the radio RAG API (uuid4 hex); null when the API did not report one.",
+            },
+            collection: {
+              type: ["string", "null"],
+              description: "Real collection value from the radio RAG API; null when no citation reported one.",
+            },
+            sources: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  rank: { type: "integer" },
+                  source_id: { type: ["string", "null"] },
+                  title: { type: ["string", "null"] },
+                  url: { type: ["string", "null"] },
+                  date: { type: ["string", "null"] },
+                  relevant_text: { type: ["string", "null"] },
+                  score: { type: ["number", "null"] },
+                  rrf_score: { type: ["number", "null"] },
+                  collection: { type: ["string", "null"] },
+                },
+              },
+            },
+            notebooklm: {
+              type: "object",
+              required: ["jobId", "status", "timedOut"],
+              properties: {
+                jobId: { type: ["string", "null"] },
+                status: { type: ["string", "null"] },
+                timedOut: { type: "boolean" },
+                notebook: {
+                  type: ["object", "null"],
+                  properties: {
+                    id: { type: "string" },
+                    title: { type: ["string", "null"] },
+                    url: { type: ["string", "null"] },
+                    shareUrl: { type: ["string", "null"] },
+                  },
+                },
+                source: { type: ["object", "null"], properties: { id: { type: "string" } } },
+                summary: {
+                  type: ["object", "null"],
+                  properties: {
+                    text: { type: ["string", "null"] },
+                    promptVersion: { type: ["string", "null"] },
+                  },
+                },
+                provenance: { type: "string", enum: ["real", "mock", "unknown"] },
+                statusUrl: { type: ["string", "null"] },
+              },
+            },
+            timings: {
+              type: "object",
+              properties: {
+                radioMs: { type: "integer" },
+                notebookMs: { type: ["integer", "null"] },
+                totalMs: { type: "integer" },
+              },
+            },
+          },
+        },
       },
     },
     paths: {
@@ -431,6 +527,35 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
             "401": errorResponse("unauthorized"),
             "403": errorResponse("forbidden"),
             "429": errorResponse("rate_limited"),
+          },
+        },
+      },
+      "/orchestrator/ask": {
+        post: {
+          tags: ["orchestrator"],
+          ...bearerParams(),
+          summary: "Radio-ma'arif RAG orchestrator: one question -> RAG answer + NotebookLM consolidation.",
+          description:
+            "Calls the radio RAG v1 API (POST /api/v1/chat/completions, variant from the body) and returns the answer with the real 12-field contract values (trace_id, collection, rrf_score, ranked cited sources). When notebooklm.enabled (default true), the Q&A transcript is also stored as a real text-to-notebook job on this server and polled until a terminal state or NLO_ORCH_NLO_TIMEOUT_MS; a timeout does not fail the request — the notebooklm section then carries the job id, current status and timedOut=true. Errors: 503 runtime_not_configured when NLO_RADIO_TOKEN is not set; 502 provider_unavailable when the radio RAG API is unreachable or errors (details.stage=\"radio\").",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": { schema: { $ref: "#/components/schemas/OrchestratorAskRequest" } },
+            },
+          },
+          responses: {
+            "200": {
+              description: "Consolidated answer (radio RAG + optional NotebookLM job).",
+              content: {
+                "application/json": { schema: { $ref: "#/components/schemas/OrchestratorAskResponse" } },
+              },
+            },
+            "400": errorResponse("validation"),
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
+            "429": errorResponse("rate_limited"),
+            "502": errorResponse("provider_unavailable"),
+            "503": errorResponse("runtime_not_configured"),
           },
         },
       },

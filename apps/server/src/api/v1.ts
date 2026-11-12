@@ -11,6 +11,7 @@ import { registerProxyRoutes } from "./routes/proxies.js";
 import { registerProviderRoutes } from "./routes/providers.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
+import { registerOrchestratorRoutes } from "./routes/orchestrator.js";
 import { registerTokenRoutes, registerAuditRoutes } from "./routes/tokens.js";
 import { buildOpenApiDocument } from "./openapi/spec.js";
 
@@ -128,6 +129,7 @@ function requiredScope(method: string, path: string): string {
   if (method === "POST") {
     if (path === "/jobs") return "jobs:write";
     if (path === "/notebooks/from-text") return "jobs:write";
+    if (path.startsWith("/orchestrator")) return "jobs:write";
     if (path.endsWith("/cancel")) return "jobs:cancel";
     if (path.endsWith("/requeue")) return "jobs:write";
     return "admin";
@@ -254,6 +256,7 @@ export async function registerV1Routes(app: FastifyInstance, ctx: AppContext): P
     // Mirror the full legacy surface under /api/v1 (same handler modules).
     registerHealthRoutes(instance, ctx, V1);
     registerJobRoutes(instance, ctx, V1);
+    registerOrchestratorRoutes(instance, ctx, V1);
     registerAccountRoutes(instance, ctx, V1);
     registerProxyRoutes(instance, ctx, V1);
     registerProviderRoutes(instance, ctx, V1);
