@@ -35,16 +35,16 @@
 
 ## 3. شواهد Preflight (Phase A)
 
-| مورد | مقدار |
-|---|---|
-| هویت SSH | `saber` (uid 1001) از `172.22.6.30` |
-| گروه‌ها | `sudo`, `users`, `docker`, `ollama` |
-| Host key (ED25519) | `SHA256:BP+9ekCAA+LaalRmqt84JQydR+PUwx0GQ8a33t4U7WY` |
-| Host key (RSA-3072) | `SHA256:E/5/R8JvQnM6G02sZ+PR/L1IjJF1C0+PnABUS+31XHw` |
-| سیستم‌عامل | Ubuntu 24.04.5 LTS، کرنل 6.8.0-147-generic |
-| Docker | client/server 29.1.3، API 1.52، driver overlay2، root `/var/lib/docker`، cgroup v2 |
-| نشست‌های هم‌زمان | فقط یک نشست (همین مأموریت) |
-| فعالیت هم‌زمان Radio | هیچ عملیات neo4j-admin/restore/backup فعال نبود؛ `restarts=0` |
+| مورد                 | مقدار                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------- |
+| هویت SSH             | `saber` (uid 1001) از `172.22.6.30`                                                |
+| گروه‌ها              | `sudo`, `users`, `docker`, `ollama`                                                |
+| Host key (ED25519)   | `SHA256:BP+9ekCAA+LaalRmqt84JQydR+PUwx0GQ8a33t4U7WY`                               |
+| Host key (RSA-3072)  | `SHA256:E/5/R8JvQnM6G02sZ+PR/L1IjJF1C0+PnABUS+31XHw`                               |
+| سیستم‌عامل           | Ubuntu 24.04.5 LTS، کرنل 6.8.0-147-generic                                         |
+| Docker               | client/server 29.1.3، API 1.52، driver overlay2، root `/var/lib/docker`، cgroup v2 |
+| نشست‌های هم‌زمان     | فقط یک نشست (همین مأموریت)                                                         |
+| فعالیت هم‌زمان Radio | هیچ عملیات neo4j-admin/restore/backup فعال نبود؛ `restarts=0`                      |
 
 **Docker Compose مربوط به neo4j:** `/home/saber/saberprojects/graph-rag/docker-compose.yml` (تصویر `neo4j:2025.10.1-enterprise`، نام container `neo4j_db`، mountها: `./neo4j_data:/data` و `./neo4j_dump:/import`).
 
@@ -52,29 +52,29 @@
 
 ## 4. هویت سرور (Server Identity)
 
-| مورد | مقدار |
-|---|---|
-| IP | `172.20.1.53/24` (ens33) |
-| Hostname | `llm` |
-| Container ID | `f8f850e8ca812fa1a61421552b1a25594b54a87cbcfc00e966caf183dc80a738` |
-| وضعیت | `running`, `healthy` |
-| RestartCount | `0` |
-| RestartPolicy | `no` |
-| StartedAt | `2026-11-12T08:32:45.128699022Z` (بدون تغییر تا پایان مأموریت) |
-| Mountهای `/data` | bind از `/home/saber/saberprojects/graph-rag/neo4j_data` |
+| مورد             | مقدار                                                              |
+| ---------------- | ------------------------------------------------------------------ |
+| IP               | `172.20.1.53/24` (ens33)                                           |
+| Hostname         | `llm`                                                              |
+| Container ID     | `f8f850e8ca812fa1a61421552b1a25594b54a87cbcfc00e966caf183dc80a738` |
+| وضعیت            | `running`, `healthy`                                               |
+| RestartCount     | `0`                                                                |
+| RestartPolicy    | `no`                                                               |
+| StartedAt        | `2026-11-12T08:32:45.128699022Z` (بدون تغییر تا پایان مأموریت)     |
+| Mountهای `/data` | bind از `/home/saber/saberprojects/graph-rag/neo4j_data`           |
 
 ---
 
 ## 5. نسخه و Edition
 
-| مورد | مقدار |
-|---|---|
-| Image | `neo4j:2025.10.1-enterprise` (image id `a64074737267`، 794MB، به‌صورت محلی موجود) |
-| Kernel | `2025.10.1` |
-| Edition | `enterprise` |
-| Cypher | `5`, `25` |
-| neo4j-admin | `2025.10.1` |
-| صفحه‌cache | `server.memory.pagecache.size=512M` |
+| مورد        | مقدار                                                                             |
+| ----------- | --------------------------------------------------------------------------------- |
+| Image       | `neo4j:2025.10.1-enterprise` (image id `a64074737267`، 794MB، به‌صورت محلی موجود) |
+| Kernel      | `2025.10.1`                                                                       |
+| Edition     | `enterprise`                                                                      |
+| Cypher      | `5`, `25`                                                                         |
+| neo4j-admin | `2025.10.1`                                                                       |
+| صفحه‌cache  | `server.memory.pagecache.size=512M`                                               |
 
 ---
 
@@ -82,22 +82,22 @@
 
 در زمان preflight، ۱۴ دیتابیس، همه `online`:
 
-| دیتابیس | حجم store |
-|---|---|
-| `system` | 2.3M |
-| `neo4j` (default/home) | 1.1M |
-| `radio` | 1.4G |
-| `radio-4b` | 3.2G |
-| `mesbah` | 1.9G |
-| `taghrir` | 376M |
-| `taghrir-10` | 3.0G |
-| `taghrir-50` | 15G |
-| `taghrir-100` | 30G |
-| `tasnim-qwen3-embed-06b` | 841M |
-| `falsafe-siasi-1000-embed-06b` | 6.2G |
-| `falsafe-siasi-qwen3-embed-06b` | 620M |
-| `falsafe-siasi-qwen3-embed-4b` | 1.4G |
-| `import-test-06b` | 4.7M |
+| دیتابیس                         | حجم store |
+| ------------------------------- | --------- |
+| `system`                        | 2.3M      |
+| `neo4j` (default/home)          | 1.1M      |
+| `radio`                         | 1.4G      |
+| `radio-4b`                      | 3.2G      |
+| `mesbah`                        | 1.9G      |
+| `taghrir`                       | 376M      |
+| `taghrir-10`                    | 3.0G      |
+| `taghrir-50`                    | 15G       |
+| `taghrir-100`                   | 30G       |
+| `tasnim-qwen3-embed-06b`        | 841M      |
+| `falsafe-siasi-1000-embed-06b`  | 6.2G      |
+| `falsafe-siasi-qwen3-embed-06b` | 620M      |
+| `falsafe-siasi-qwen3-embed-4b`  | 1.4G      |
+| `import-test-06b`               | 4.7M      |
 
 مجموع `/data` = **71G** (۶٫۲G آن transactions).
 
@@ -110,6 +110,7 @@
 **روش: پشتیبان فیزیکی آنلاین با `neo4j-admin database backup` روی backup service داخلی پورت `6362`.**
 
 دلایل:
+
 1. Backup service در تصویر Enterprise به‌صورت پیش‌فرض روی `127.0.0.1:6362` داخل container فعال است — با `ss`/`netstat` (که در image نصب نیستند) از طریق `/proc/net/tcp6` اثبات شد: `::ffff:127.0.0.1:6362` در حالت `LISTEN`.
 2. در `neo4j.conf` هیچ خط فعالِ backup وجود ندارد ⇒ **هیچ تغییر پیکربندی و هیچ recreate لازم نبود**.
 3. فشرده‌سازی پیش‌فرض (`--compress=true`) → ۳۳٫۶ GiB برای ۷۱G داده.
@@ -141,12 +142,12 @@
 
 ## 9. حجم پشتیبان
 
-| مورد | مقدار |
-|---|---|
-| مجموع artifactها | `36,093,209,280` بایت (۳۳٫۶ GiB) |
-| کل پوشه (با config/logs) | 34G |
-| بزرگ‌ترین artifact | `taghrir-100` = `17,275,115,670` بایت |
-| کوچک‌ترین (بدون `neo4j`) | `system` = `22,572` بایت |
+| مورد                     | مقدار                                 |
+| ------------------------ | ------------------------------------- |
+| مجموع artifactها         | `36,093,209,280` بایت (۳۳٫۶ GiB)      |
+| کل پوشه (با config/logs) | 34G                                   |
+| بزرگ‌ترین artifact       | `taghrir-100` = `17,275,115,670` بایت |
+| کوچک‌ترین (بدون `neo4j`) | `system` = `22,572` بایت              |
 
 ---
 
@@ -158,29 +159,29 @@
 
 ## 11. تأیید SHA-256
 
-| مرحله | نتیجه |
-|---|---|
-| تولید `checksums.sha256` (۱۴ artifact + ۱۰ فایل متادیتا/پیکربندی) | انجام شد |
-| `sha256sum -c` بلافاصله | **۲۴ خط `OK`، صفر mismatch** (`verified_count.txt = 24`) |
-| بازبینی مستقل بعدی (مستقل از verify اولیه) | `mismatch_lines=0`، `verified_ok_lines=24` |
-| بازبینی نهایی پس از همهٔ آزمون‌های بازیابی | `FINAL_VERIFY_RC=0` |
+| مرحله                                                             | نتیجه                                                    |
+| ----------------------------------------------------------------- | -------------------------------------------------------- |
+| تولید `checksums.sha256` (۱۴ artifact + ۱۰ فایل متادیتا/پیکربندی) | انجام شد                                                 |
+| `sha256sum -c` بلافاصله                                           | **۲۴ خط `OK`، صفر mismatch** (`verified_count.txt = 24`) |
+| بازبینی مستقل بعدی (مستقل از verify اولیه)                        | `mismatch_lines=0`، `verified_ok_lines=24`               |
+| بازبینی نهایی پس از همهٔ آزمون‌های بازیابی                        | `FINAL_VERIFY_RC=0`                                      |
 
-| Database / Artifact | Backup | bytes | SHA-256 (کوتاه) | Verified |
-|---|---|---:|---|---|
-| `falsafe-siasi-1000-embed-06b` | OK | 3,319,347,708 | `dd5d7046…a3527d` | OK |
-| `falsafe-siasi-qwen3-embed-06b` | OK | 306,999,995 | `2d5f3c77…a75056` | OK |
-| `falsafe-siasi-qwen3-embed-4b` | OK | 658,671,811 | `ba4a4932…198283` | OK |
-| `import-test-06b` | OK | 1,911,196 | `899ad6e5…c93ddc` | OK |
-| `mesbah` | OK | 1,237,285,830 | `8ce44e1b…6d5323` | OK |
-| `neo4j` | OK | 6,074 | `f854b4a2…e313f7` | OK |
-| `radio` | OK | 701,087,091 | `27d843ce…c8fe9a` | OK |
-| `radio-4b` | OK | 1,527,416,034 | `00bf0fe9…c4e261b` | OK |
-| `system` | OK | 22,572 | `7ba00014…ad16c7c` | OK |
-| `taghrir` | OK | 199,545,034 | `9b4987e3…77cd231` | OK |
-| `taghrir-10` | OK | 1,722,337,234 | `e140f39b…a271853` | OK |
-| `taghrir-50` | OK | 8,732,488,494 | `64afe4d7…815f7fb6` | OK |
-| `taghrir-100` | OK | 17,275,115,670 | `0dbdb734…868bc3bc6` | OK |
-| `tasnim-qwen3-embed-06b` | OK | 410,974,537 | `f79242fa…a87849f6` | OK |
+| Database / Artifact             | Backup |          bytes | SHA-256 (کوتاه)      | Verified |
+| ------------------------------- | ------ | -------------: | -------------------- | -------- |
+| `falsafe-siasi-1000-embed-06b`  | OK     |  3,319,347,708 | `dd5d7046…a3527d`    | OK       |
+| `falsafe-siasi-qwen3-embed-06b` | OK     |    306,999,995 | `2d5f3c77…a75056`    | OK       |
+| `falsafe-siasi-qwen3-embed-4b`  | OK     |    658,671,811 | `ba4a4932…198283`    | OK       |
+| `import-test-06b`               | OK     |      1,911,196 | `899ad6e5…c93ddc`    | OK       |
+| `mesbah`                        | OK     |  1,237,285,830 | `8ce44e1b…6d5323`    | OK       |
+| `neo4j`                         | OK     |          6,074 | `f854b4a2…e313f7`    | OK       |
+| `radio`                         | OK     |    701,087,091 | `27d843ce…c8fe9a`    | OK       |
+| `radio-4b`                      | OK     |  1,527,416,034 | `00bf0fe9…c4e261b`   | OK       |
+| `system`                        | OK     |         22,572 | `7ba00014…ad16c7c`   | OK       |
+| `taghrir`                       | OK     |    199,545,034 | `9b4987e3…77cd231`   | OK       |
+| `taghrir-10`                    | OK     |  1,722,337,234 | `e140f39b…a271853`   | OK       |
+| `taghrir-50`                    | OK     |  8,732,488,494 | `64afe4d7…815f7fb6`  | OK       |
+| `taghrir-100`                   | OK     | 17,275,115,670 | `0dbdb734…868bc3bc6` | OK       |
+| `tasnim-qwen3-embed-06b`        | OK     |    410,974,537 | `f79242fa…a87849f6`  | OK       |
 
 (مقادیر کامل در `checksums.sha256`.)
 
@@ -192,9 +193,9 @@
 
 1. **آزمون تفاضلی روی سرور production:** پشتیبان‌گیری از `import-test-06b` (دادهٔ یکسان) یک‌بار با `--include-metadata=all` و یک‌بار با `none`:
 
-| پرچم | bytes | SHA-256 |
-|---|---:|---|
-| `all` | 1,911,420 | `6dda11d0c863abb7…acc3b7` |
+| پرچم   |     bytes | SHA-256                   |
+| ------ | --------: | ------------------------- |
+| `all`  | 1,911,420 | `6dda11d0c863abb7…acc3b7` |
 | `none` | 1,909,650 | `51488021514477bf…6e7fd8` |
 
 اختلاف **+1,770 بایت** و hash متفاوت ⇒ payload متادیتا واقعاً داخل artifact نوشته می‌شود.
@@ -210,28 +211,31 @@
 
 ## 13. مشخصات محیط بازیابی (Restore Environment)
 
-| مورد | مقدار |
-|---|---|
-| Container | `r1a2_restore` (ایزوله، سپس حذف‌شده) |
-| Image | `neo4j:2025.10.1-enterprise` (همان نسخهٔ Production) |
-| Volume | `r1a2_restore_data` (مستقل، سپس حذف‌شده) |
-| Network | `r1a2_net` (مستقل، سپس حذف‌شده) |
-| Port منتشرشده | **هیچ** (`docker port` خالی) |
-| مسیر داده | فقط volume ایزوله — هیچ bind production استفاده نشد |
-| نام‌های production | استفاده نشد (`neo4j_db` و volume تولیدی دست‌نخورده) |
-| ترافیک خارجی | هیچ |
+| مورد               | مقدار                                                |
+| ------------------ | ---------------------------------------------------- |
+| Container          | `r1a2_restore` (ایزوله، سپس حذف‌شده)                 |
+| Image              | `neo4j:2025.10.1-enterprise` (همان نسخهٔ Production) |
+| Volume             | `r1a2_restore_data` (مستقل، سپس حذف‌شده)             |
+| Network            | `r1a2_net` (مستقل، سپس حذف‌شده)                      |
+| Port منتشرشده      | **هیچ** (`docker port` خالی)                         |
+| مسیر داده          | فقط volume ایزوله — هیچ bind production استفاده نشد  |
+| نام‌های production | استفاده نشد (`neo4j_db` و volume تولیدی دست‌نخورده)  |
+| ترافیک خارجی       | هیچ                                                  |
 
 ---
 
 ## 14. نتایج آزمون بازیابی
 
 ### E1 — بازیابی دیتابیس‌ها — **VERIFIED**
+
 هر ۱۴ دیتابیس در نمونهٔ ایزوله `online`: `falsafe-siasi-1000-embed-06b`, `falsafe-siasi-qwen3-embed-06b`, `falsafe-siasi-qwen3-embed-4b`, `import-test-06b`, `mesbah`, `neo4j`, `radio`, `radio-4b`, `system`, `taghrir`, `taghrir-10`, `taghrir-100`, `taghrir-50`, `tasnim-qwen3-embed-06b`.
 
 ### E2 — بازیابی متادیتا — **VERIFIED**
+
 `SHOW USERS` = `neo4j` با `[admin, PUBLIC]`؛ `SHOW ROLES` = همان ۶ رول production؛ `SHOW ROLE admin PRIVILEGES AS COMMANDS` پس از اجرای اسکریپت‌ها شامل grantهای per-database برای هر ۱۳ دیتابیس شد (هم‌ارز معنایی با grantهای wildcard تولیدی). هیچ password/hash چاپ یا کپی نشد.
 
 ### E3 — یکپارچگی کورپس Radio — **VERIFIED**
+
 - `radio`: Chunk = **79,350** (Production = 79,350)، nodes = 79,350
 - `radio-4b`: Chunk = **79,350** (Production = 79,350)، nodes = 79,350
 - `size(keys(chunk)) = 38` (هم‌راستا با Production)
@@ -239,19 +243,21 @@
 - سایر دیتابیس‌ها (nodes): `mesbah`=126,296، `taghrir`=22,113، `taghrir-10`=191,728، `taghrir-50`=971,738، `taghrir-100`=1,921,783، `import-test-06b`=200، `falsafe-siasi-1000-embed-06b`=348,139، `falsafe-siasi-qwen3-embed-06b`=32,183، `falsafe-siasi-qwen3-embed-4b`=32,183، `tasnim-qwen3-embed-06b`=78,022
 
 ### E4 — اثبات ایزولاسیون — **VERIFIED**
+
 Production در تمام مدت: `state=running`, `health=healthy`, `restarts=0`, `started_at` بدون تغییر (`08:32:45Z`)، شمارش `radio`/`radio-4b` بدون تغییر (79,350/79,350). Container بازیابی: بدون port، فقط روی `r1a2_net`، فقط volume ایزوله.
 
 ### E5 — پاک‌سازی — **VERIFIED**
+
 `r1a2_restore` حذف شد، `r1a2_restore_data` و `r1a2_net` حذف شدند؛ پشتیبان اصلی دست‌نخورده (۳۴G)؛ فضای دیسک به 294G بازگشت؛ لاگ‌های sanitized حفظ شدند.
 
 ---
 
 ## 15. مقایسهٔ شمارش Chunk
 
-| دیتابیس | Production | Restored | نتیجه |
-|---|---:|---:|---|
-| `radio` | 79,350 | 79,350 | MATCH |
-| `radio-4b` | 79,350 | 79,350 | MATCH |
+| دیتابیس    | Production | Restored | نتیجه |
+| ---------- | ---------: | -------: | ----- |
+| `radio`    |     79,350 |   79,350 | MATCH |
+| `radio-4b` |     79,350 |   79,350 | MATCH |
 
 ---
 
@@ -259,11 +265,11 @@ Production در تمام مدت: `state=running`, `health=healthy`, `restarts=0`
 
 پروب ثابت ۱۰۲۴-بعدی (همان پروب R1-A.1) روی `vector_index_chunk`، `top-3`:
 
-| رتبه | Production | Restored |
-|---|---|---|
-| 1 | 0.5511904954910278 | 0.5511904954910278 |
-| 2 | 0.5501537322998047 | 0.5501537322998047 |
-| 3 | 0.5468377470970154 | 0.5468377470970154 |
+| رتبه | Production         | Restored           |
+| ---- | ------------------ | ------------------ |
+| 1    | 0.5511904954910278 | 0.5511904954910278 |
+| 2    | 0.5501537322998047 | 0.5501537322998047 |
+| 3    | 0.5468377470970154 | 0.5468377470970154 |
 
 **نتیجه:** تطابق کامل (۱۶ رقم اعشار) ⇒ هم دادهٔ برداری و هم index بازیابی شده‌اند. هر دو index پيش از پرس‌وجو `ONLINE` بودند (indexها در پشتیبان فیزیکی حفظ می‌شوند و بازسازی طولانی لازم نشد).
 

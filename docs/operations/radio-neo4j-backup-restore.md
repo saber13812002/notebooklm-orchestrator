@@ -143,13 +143,13 @@ docker exec -i <ctr> cypher-shell -d radio -u neo4j -p '<pw>' \
 
 ## 9. نقاط تصمیم (Decision Points)
 
-| وضعیت | اقدام |
-|---|---|
-| checksum mismatch | توقف فوری؛ پشتیبان معیوب است؛ از نسخهٔ دیگر استفاده کنید |
-| بازیابی یک دیتابیس شکست خورد | متوقف شوید؛ artifact و لاگ را نگه دارید؛ رویهٔ اضطراری را اجرا نکنید |
+| وضعیت                                                 | اقدام                                                                      |
+| ----------------------------------------------------- | -------------------------------------------------------------------------- |
+| checksum mismatch                                     | توقف فوری؛ پشتیبان معیوب است؛ از نسخهٔ دیگر استفاده کنید                   |
+| بازیابی یک دیتابیس شکست خورد                          | متوقف شوید؛ artifact و لاگ را نگه دارید؛ رویهٔ اضطراری را اجرا نکنید       |
 | دیتابیس پس از START `unknown / Server is unavailable` | artifact `system` را از نمونهٔ دیگر بازیابی نکرده‌اید؟ رویهٔ §10 را ببینید |
-| index پس از دقایقی `ONLINE` نشد | صبر و پایش؛ در صورت شکست، پشتیبانی Neo4j |
-| شمارش Chunk با Production اختلاف داشت | بازیابی ناقص/ناسازگار؛ rollback به پشتیبان قبلی |
+| index پس از دقایقی `ONLINE` نشد                       | صبر و پایش؛ در صورت شکست، پشتیبانی Neo4j                                   |
+| شمارش Chunk با Production اختلاف داشت                 | بازیابی ناقص/ناسازگار؛ rollback به پشتیبان قبلی                            |
 
 ---
 
@@ -215,14 +215,14 @@ docker network rm r1a2_net
 
 ## 13. خرابی‌ها و رفتار مورد انتظار (Failure Handling)
 
-| خطا | علت | راه‌حل |
-|---|---|---|
-| `Read-only file system … -temp-extracted-artifacts-N` | استخراج temp کنار منبع فقط-خواندنی | `--temp-path` قابل نوشتن بدهید |
-| `unrecognized arguments: '-i'` | در 2025.10.1 گزینهٔ `-i` وجود ندارد | از `--non-interactive` یا حذف آن استفاده کنید |
-| `42N17 … 'RETURN 1' is not allowed on the system database` | پرس‌وجوی نامعتبر روی system | برای readiness از دیتابیس default استفاده کنید |
-| `22N51 … graph reference not found` | دیتابیس در catalog ثبت نشده | `CREATE DATABASE` پیش از restore |
-| `unknown / Server is unavailable` | بازیابی system در هویت دیگر | رویهٔ §10 |
-| سرور دیتابیس را نمی‌پذیرد | مالکیت فایل‌ها | `chown -R 7474:7474` |
+| خطا                                                        | علت                                 | راه‌حل                                         |
+| ---------------------------------------------------------- | ----------------------------------- | ---------------------------------------------- |
+| `Read-only file system … -temp-extracted-artifacts-N`      | استخراج temp کنار منبع فقط-خواندنی  | `--temp-path` قابل نوشتن بدهید                 |
+| `unrecognized arguments: '-i'`                             | در 2025.10.1 گزینهٔ `-i` وجود ندارد | از `--non-interactive` یا حذف آن استفاده کنید  |
+| `42N17 … 'RETURN 1' is not allowed on the system database` | پرس‌وجوی نامعتبر روی system         | برای readiness از دیتابیس default استفاده کنید |
+| `22N51 … graph reference not found`                        | دیتابیس در catalog ثبت نشده         | `CREATE DATABASE` پیش از restore               |
+| `unknown / Server is unavailable`                          | بازیابی system در هویت دیگر         | رویهٔ §10                                      |
+| سرور دیتابیس را نمی‌پذیرد                                  | مالکیت فایل‌ها                      | `chown -R 7474:7474`                           |
 
 ---
 
