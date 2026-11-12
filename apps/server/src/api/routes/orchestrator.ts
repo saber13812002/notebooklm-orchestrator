@@ -62,8 +62,13 @@ function numOrNull(v: unknown): number | null {
 }
 
 function strOrNull(v: unknown): string | null {
-  if (typeof v !== "string") return null;
-  const t = v.trim();
+  // Some upstream fields (e.g. the radio service's `session_id`) arrive as
+  // numbers. A real numeric id IS a real value — coerce, don't drop it.
+  let s: string;
+  if (typeof v === "number" && Number.isFinite(v)) s = String(v);
+  else if (typeof v === "string") s = v;
+  else return null;
+  const t = s.trim();
   return t.length > 0 ? t : null;
 }
 

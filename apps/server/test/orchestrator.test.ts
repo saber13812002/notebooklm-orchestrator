@@ -202,6 +202,42 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
     expect(sent.variant).toBe("rrf");
   });
 
+  it("coerces a NUMERIC upstream session_id into a real source_id (live radio returns numbers)", async () => {
+    // Regression: the live radio service (172.20.1.53:8043) sends `session_id`
+    // as a number (e.g. 4755). A real numeric id is a real value — map it,
+    // don't drop it to null. `link: ""` must still map to url null (real null).
+    const NUM_C1 = {
+      source: "پرسمان قرآنی",
+      date: "1404-04-08 (2025-06-29)",
+      link: "",
+      text: "متن واقعی از آرشیو رادیو معارف.",
+      score: 0.7952,
+      session_id: 4755,
+      chunk_id: "radio-maaref-04-08-03-16-00__s4755::subtitle_window::1",
+      rrf_score: null,
+      collection: "radio",
+      trace_id: "d".repeat(32),
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => radioOk(radioBody("d".repeat(32), [NUM_C1]))));
+    running = await startApp();
+    const res = await running.app.inject({
+      method: "POST",
+      url: "/api/v1/orchestrator/ask",
+      headers: jsonH(),
+      payload: { question: "آیه اول سوره بقره چیست؟", notebooklm: { enabled: false } },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.sources).toHaveLength(1);
+    const s1 = body.sources[0];
+    expect(s1.source_id).toBe("4755#radio-maaref-04-08-03-16-00__s4755::subtitle_window::1");
+    expect(s1.url).toBeNull(); // empty-string link -> real null, not ""
+    expect(s1.title).toBe("پرسمان قرآنی");
+    expect(s1.date).toBe("1404-04-08 (2025-06-29)");
+    expect(s1.score).toBeCloseTo(0.7952);
+    expect(s1.rank).toBe(1);
+  });
+
   it("notebooklm enabled: creates a REAL text job that SUCCEEDS (mock provider)", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => radioOk(radioBody("c".repeat(32), [C1]))));
     running = await startApp();
