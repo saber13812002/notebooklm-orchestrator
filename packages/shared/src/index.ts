@@ -10,3 +10,4 @@ export * from "./text-source.js";
 export * from "./srt.js";
 export * from "./title.js";
 export * from "./input-capabilities.js";
+export * from "./e2e-contract.js";
