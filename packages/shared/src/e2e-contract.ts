@@ -14,12 +14,23 @@
 import type { Artifact, FailureClass, JobStatus, ResultProvenance } from "./types.js";
 
 /** Verdict levels used across the project (never claim more than observed). */
-export type E2EVerdict = "PASS" | "FAIL" | "BLOCKED" | "NOT_IMPLEMENTED" | "NOT_TESTED";
+export type E2EVerdict =
+  | "PASS"
+  | "FAIL"
+  | "BLOCKED"
+  | "NOT_IMPLEMENTED"
+  | "NOT_TESTED"
+  | "MOCK_PROVIDER_INTEGRATION_VERIFIED";
 
 export type E2ERunStatus = "RUNNING" | "COMPLETED" | "ABORTED";
 
 export type E2EScenarioId =
-  "text-to-notebook" | "audio-upload" | "job-monitor" | "failure-recovery" | "artifact-acceptance";
+  | "text-to-notebook"
+  | "audio-upload"
+  | "job-monitor"
+  | "failure-recovery"
+  | "artifact-acceptance"
+  | "text-to-podcast";
 
 export type E2EInputType = "text" | "audio";
 
@@ -377,7 +388,11 @@ export interface AcceptanceInput {
 /**
  * PASS only when the job is SUCCEEDED, provenance is "real", no error was
  * recorded, and (for scenarios that expect an artifact) every artifact valid.
- * A mock-provenance run is never PASS.
+ * A mock-provenance run is never PASS: when everything else holds (SUCCEEDED,
+ * all stages passed, every artifact valid) it is verdicted as
+ * MOCK_PROVIDER_INTEGRATION_VERIFIED — the full integration was exercised,
+ * only the provider boundary was simulated. Any other (unknown) provenance
+ * remains FAIL.
  */
 export function evaluateAcceptance(input: AcceptanceInput): E2EVerdict {
   const { run, jobStatus } = input;
@@ -392,8 +407,9 @@ export function evaluateAcceptance(input: AcceptanceInput): E2EVerdict {
 
   const pendingStage = run.stages.find((s) => s.state !== "PASSED" && s.state !== "SKIPPED");
   if (pendingStage) return "NOT_TESTED";
-  if (run.provenance !== "real") return "FAIL";
   if (run.artifacts.some((a) => !a.valid)) return "FAIL";
+  if (run.provenance === "mock") return "MOCK_PROVIDER_INTEGRATION_VERIFIED";
+  if (run.provenance !== "real") return "FAIL";
   return "PASS";
 }
 
@@ -440,4 +456,15 @@ export const SCENARIO_STAGES: Record<E2EScenarioId, readonly string[]> = {
   "job-monitor": ["poll_status", "events_timeline", "attempts_read", "acceptance"],
   "failure-recovery": ["inject_or_observe_failure", "classify", "recovery_decision"],
   "artifact-acceptance": ["download", "checksum", "mime", "acceptance"],
+  "text-to-podcast": [
+    "create_job",
+    "validate_input",
+    "queue_wait",
+    "notebook_created",
+    "source_created",
+    "podcast_generation",
+    "artifact_download",
+    "artifact_validate",
+    "acceptance",
+  ],
 };

@@ -187,6 +187,21 @@ export interface JobInput {
     customer?: string | null;
     category?: string | null;
   } | null;
+  /**
+   * NLO-P2 (podcast): when enabled, after the base notebook workflow the job
+   * generates an Audio Overview (podcast) in the created notebook and stores
+   * the downloaded audio as a job artifact (signature-validated, hashed, and
+   * tracked by its external operation id for restart recovery).
+   */
+  podcast?: {
+    enabled: boolean;
+    /** Deep Dive instructions (falls back to the job prompt when unset). */
+    instructions?: string | null;
+    /** Podcast language; falls back to the job language. */
+    language?: "en" | "fa" | null;
+    format?: "deep_dive" | "brief" | "critique" | "debate" | null;
+    length?: "short" | "default" | "long" | null;
+  } | null;
   preferredAccountId: string | null;
   preferredNodeId: string | null;
 }

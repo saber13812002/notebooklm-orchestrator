@@ -241,9 +241,47 @@ describe("evaluateAcceptance", () => {
     expect(evaluateAcceptance({ run, jobStatus: "SUCCEEDED" })).toBe("PASS");
   });
 
-  it("never passes a mock-provenance run", () => {
+  it("verifies a fully-passing mock-provenance run as MOCK_PROVIDER_INTEGRATION_VERIFIED (never PASS)", () => {
     const run = succeededRealRun();
     run.provenance = "mock";
+    run.artifacts.push({
+      artifact_id: "art-1",
+      filename: "podcast.wav",
+      media_type: "audio/wav",
+      size: 1068,
+      sha256_expected: null,
+      sha256_actual: null,
+      download_status: 200,
+      source: "provider",
+      valid: true,
+      note: null,
+    });
+    expect(evaluateAcceptance({ run, jobStatus: "SUCCEEDED" })).toBe(
+      "MOCK_PROVIDER_INTEGRATION_VERIFIED",
+    );
+  });
+
+  it("still FAILs a mock run when an artifact is invalid", () => {
+    const run = succeededRealRun();
+    run.provenance = "mock";
+    run.artifacts.push({
+      artifact_id: "art-1",
+      filename: "podcast.wav",
+      media_type: "audio/wav",
+      size: 0,
+      sha256_expected: null,
+      sha256_actual: null,
+      download_status: 200,
+      source: "provider",
+      valid: false,
+      note: "empty payload",
+    });
+    expect(evaluateAcceptance({ run, jobStatus: "SUCCEEDED" })).toBe("FAIL");
+  });
+
+  it("FAILs an unknown provenance even when everything else passed", () => {
+    const run = succeededRealRun();
+    run.provenance = "unknown";
     expect(evaluateAcceptance({ run, jobStatus: "SUCCEEDED" })).toBe("FAIL");
   });
 
@@ -293,6 +331,29 @@ describe("helpers", () => {
     for (const [scenario, stages] of Object.entries(SCENARIO_STAGES)) {
       expect(stages.length, scenario).toBeGreaterThan(0);
       expect(new Set(stages).size, scenario).toBe(stages.length);
+    }
+  });
+
+  it("declares the canonical text-to-podcast stages in execution order", () => {
+    expect(SCENARIO_STAGES["text-to-podcast"]).toEqual([
+      "create_job",
+      "validate_input",
+      "queue_wait",
+      "notebook_created",
+      "source_created",
+      "podcast_generation",
+      "artifact_download",
+      "artifact_validate",
+      "acceptance",
+    ]);
+    // a run built from the canonical stages must accept the full transition sequence
+    const run = newRun({
+      scenarioId: "text-to-podcast",
+      stages: [...SCENARIO_STAGES["text-to-podcast"]],
+    });
+    for (const name of SCENARIO_STAGES["text-to-podcast"]) {
+      startStage(run, name, "2026-01-01T00:00:00.000Z");
+      completeStage({ run, stage: name, at: "2026-01-01T00:00:01.000Z" });
     }
   });
 });

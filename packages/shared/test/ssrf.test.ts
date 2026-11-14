@@ -69,6 +69,25 @@ describe("assertAllowedDestination", () => {
       assertAllowedDestination({ host: "10.0.0.5", port: 443, ips: ["10.0.0.5"] }, noOptIn),
     ).toThrow(SsrfBlockedError);
   });
+
+  it("allows loopback when explicitly opted in (local test receivers / webhook sandboxes)", () => {
+    const loopback: AllowEntry[] = [{ host: "127.0.0.1", allowPrivate: true }];
+    expect(() =>
+      assertAllowedDestination({ host: "127.0.0.1", port: 8080, ips: ["127.0.0.1"] }, loopback),
+    ).not.toThrow();
+    // Without the opt-in, loopback still fails closed (DNS-rebinding defense).
+    expect(() =>
+      assertAllowedDestination({ host: "127.0.0.1", port: 8080, ips: ["127.0.0.1"] }, [
+        { host: "127.0.0.1" },
+      ]),
+    ).toThrow(SsrfBlockedError);
+    // Link-local (cloud metadata) stays blocked even WITH the opt-in.
+    expect(() =>
+      assertAllowedDestination({ host: "169.254.169.254", port: 80, ips: ["169.254.169.254"] }, [
+        { host: "169.254.169.254", allowPrivate: true },
+      ]),
+    ).toThrow(SsrfBlockedError);
+  });
 });
 
 describe("parseAllowEntry", () => {

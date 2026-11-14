@@ -119,11 +119,15 @@ export function assertAllowedDestination(dest: DestinationCheck, allowlist: Allo
   }
 
   // Always resolve the host when possible; if we have IPs, re-check them.
+  // `allowPrivate` is the explicit opt-in for non-public targets (private AND
+  // loopback — the latter is what local test receivers / webhook sandboxes
+  // need; link-local such as cloud metadata stays blocked either way).
   const ipsToCheck = ips.length > 0 ? ips : [host];
   for (const ip of ipsToCheck) {
     if (ip.includes(":") || ip.includes(".")) {
       const cls = classifyIp(ip);
-      if (cls !== "public" && !(cls === "private" && entry.allowPrivate)) {
+      const nonPublicAllowed = entry.allowPrivate && (cls === "private" || cls === "loopback");
+      if (cls !== "public" && !nonPublicAllowed) {
         throw new SsrfBlockedError(
           `destination resolves to non-public address (${cls}): ${ip}`,
           "private_target",
