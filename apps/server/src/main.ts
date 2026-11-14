@@ -66,6 +66,13 @@ async function main(): Promise<void> {
     console.log("[nlo] NOTE: mock provider is active — all job results are simulated.");
   }
 
+  // NLO-P2 (webhooks): start outbox draining (unref'd; drained also on demand).
+  ctx.webhooks.dispatcher.start(config.webhookIntervalMs);
+  console.log(
+    `[nlo] webhooks: dispatcher started (interval=${config.webhookIntervalMs}ms, ` +
+      `allowLoopback=${config.webhookAllowLoopback}, allowlist=${config.webhookAllowlist.length} entries)`,
+  );
+
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) return;

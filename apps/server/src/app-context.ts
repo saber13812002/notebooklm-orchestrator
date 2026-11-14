@@ -1,12 +1,17 @@
 import { mkdirSync } from "node:fs";
+import { parseAllowEntry, type AllowEntry } from "@nlo/shared";
 import { dataPaths, loadConfig, type AppConfig } from "./config.js";
 import { Db } from "./db/db.js";
 import { AccountsRepo } from "./domain/accounts.repo.js";
 import { ApiTokensRepo } from "./domain/api-tokens.repo.js";
+import { ArtifactRepo } from "./domain/artifacts.repo.js";
 import { AuthSessionsRepo } from "./domain/auth-sessions.repo.js";
 import { JobsRepo } from "./domain/jobs.repo.js";
 import { ProxiesRepo } from "./domain/proxies.repo.js";
+import { JobStagesRepo } from "./domain/stages.repo.js";
+import { WebhookDeliveriesRepo, WebhookEndpointsRepo } from "./domain/webhooks.repo.js";
 import { SecretVault } from "./secrets/vault.js";
+import { WebhookDispatcher } from "./webhooks/dispatcher.js";
 import { MockProvider } from "./providers/mock-provider.js";
 import { PythonWorkerProvider } from "./providers/python-worker/python-worker-provider.js";
 import type { NotebookLMProvider } from "./providers/types.js";
@@ -30,13 +35,26 @@ export interface AppContext {
   proxies: ProxiesRepo;
   jobs: JobsRepo;
   apiTokens: ApiTokensRepo;
+  artifacts: ArtifactRepo;
+  stages: JobStagesRepo;
   provider: NotebookLMProvider;
   runtime: ProxyRuntime;
   egress: MockProviderEgress;
   proxyManager: ProxyManager;
   runner: JobRunner;
   queue: Queue;
+  /** NLO-P2 (webhooks): outbox delivery (endpoints, deliveries, dispatcher). */
+  webhooks: WebhookServices;
   close(): Promise<void>;
+}
+
+/** NLO-P2 (webhooks): the webhook delivery surface exposed to routes/tests. */
+export interface WebhookServices {
+  endpoints: WebhookEndpointsRepo;
+  deliveries: WebhookDeliveriesRepo;
+  dispatcher: WebhookDispatcher;
+  /** Enqueue deliveries for a job event. Never throws. */
+  publish(jobId: string, eventType: string): number;
 }
 
 export function createAppContext(config: AppConfig = loadConfig()): AppContext {
@@ -52,6 +70,39 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
   const proxies = new ProxiesRepo(db);
   const jobs = new JobsRepo(db);
   const apiTokens = new ApiTokensRepo(db);
+  const artifacts = new ArtifactRepo(db);
+  const stages = new JobStagesRepo(db);
+
+  // NLO-P2 (webhooks): outbox delivery. Secrets live in the vault; the
+  // allowlist is fail-closed (loopback needs an explicit opt-in).
+  const webhookAllowlist: AllowEntry[] = [];
+  for (const raw of config.webhookAllowlist) {
+    try {
+      webhookAllowlist.push(parseAllowEntry(raw));
+    } catch {
+      console.warn(`[nlo:webhooks] ignoring invalid allowlist entry: ${raw}`);
+    }
+  }
+  const webhookEndpoints = new WebhookEndpointsRepo(db);
+  const webhookDeliveries = new WebhookDeliveriesRepo(db);
+  const webhookDispatcher = new WebhookDispatcher({
+    endpoints: webhookEndpoints,
+    deliveries: webhookDeliveries,
+    jobs,
+    artifacts,
+    vault,
+    allowlist: webhookAllowlist,
+    allowLoopback: config.webhookAllowLoopback,
+    maxAttempts: config.webhookMaxAttempts,
+    timeoutMs: config.webhookRequestTimeoutMs,
+    log: (msg) => console.log(`[nlo:webhooks] ${msg}`),
+  });
+  const webhooks: WebhookServices = {
+    endpoints: webhookEndpoints,
+    deliveries: webhookDeliveries,
+    dispatcher: webhookDispatcher,
+    publish: (jobId, eventType) => webhookDispatcher.publish(jobId, eventType),
+  };
 
   mkdirSync(paths.sessionsDir, { recursive: true, mode: 0o700 });
   mkdirSync(paths.vendorDir, { recursive: true });
@@ -145,6 +196,11 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
       // Structured-ish, redaction is applied at call sites.
       console.log(`[nlo] ${msg}`);
     },
+    artifacts,
+    stages,
+    ffmpegBin: config.ffmpegBin || undefined,
+    mp3TargetKbps: config.mp3TargetKbps,
+    webhooks: { publish: (jobId, ev) => webhooks.publish(jobId, ev) },
   });
 
   const queue = new Queue(runner, 500, (msg) => console.log(`[nlo:queue] ${msg}`));
@@ -166,13 +222,17 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     proxies,
     jobs,
     apiTokens,
+    artifacts,
+    stages,
     provider,
     runtime,
     egress,
     proxyManager,
     runner,
     queue,
+    webhooks,
     close: async () => {
+      await webhookDispatcher.stop();
       await queue.stop();
       (provider as { dispose?: () => void }).dispose?.();
       await (runtime as { close?: () => Promise<void> }).close?.();

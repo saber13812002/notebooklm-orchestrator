@@ -13,6 +13,7 @@ import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerOrchestratorRoutes } from "./routes/orchestrator.js";
 import { registerTokenRoutes, registerAuditRoutes } from "./routes/tokens.js";
+import { registerWebhookRoutes } from "./routes/webhooks.js";
 import { buildOpenApiDocument } from "./openapi/spec.js";
 
 /**
@@ -104,6 +105,7 @@ function v1Path(url: string): string {
  */
 function requiredScope(method: string, path: string): string {
   if (path === "/tokens" || path.startsWith("/tokens/") || path === "/audit") return "admin";
+  if (path === "/webhooks" || path.startsWith("/webhooks/")) return "admin";
   if (path.startsWith("/sessions") || path.startsWith("/accounts") || path.startsWith("/proxies")) {
     return "admin";
   }
@@ -122,6 +124,7 @@ function requiredScope(method: string, path: string): string {
     return "meta:read";
   }
   if (method === "GET") {
+    if (path.startsWith("/artifacts/")) return "jobs:download";
     if (/^\/jobs\/[^/]+\/artifacts\/[^/]+$/.test(path)) return "jobs:download";
     if (/^\/jobs\/[^/]+\/audio(\/download)?$/.test(path)) return "jobs:download";
     return "jobs:read";
@@ -265,6 +268,8 @@ export async function registerV1Routes(app: FastifyInstance, ctx: AppContext): P
     // New product surface (tokens + audit trail).
     registerTokenRoutes(instance, ctx, V1);
     registerAuditRoutes(instance, ctx, V1);
+    // NLO-P2 (webhooks): endpoint management + delivery log (admin).
+    registerWebhookRoutes(instance, ctx, V1);
   });
 }
 

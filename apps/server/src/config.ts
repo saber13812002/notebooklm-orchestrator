@@ -30,6 +30,15 @@ export interface AppConfig {
   loginBrowser: string;
   /** Hard timeout for a live job (ms). */
   jobTimeoutMs: number;
+  /**
+   * NLO-P2: absolute path to the ffmpeg executable used to transcode stored
+   * podcast artifacts to MP3 (56 kbps). Empty = transcoding disabled — the
+   * original artifact stays canonical and the job reports transcode status
+   * "not_configured". The application never installs ffmpeg itself.
+   */
+  ffmpegBin: string;
+  /** NLO-P2: target MP3 bitrate in kbps (default 56, clamped to 8..320). */
+  mp3TargetKbps: number;
   /** Development only: allow live jobs without a proxy tunnel. */
   allowDirectEgress: boolean;
   /**
@@ -77,6 +86,17 @@ export interface AppConfig {
   orchNloTimeoutMs: number;
   /** Poll interval for the optional NotebookLM job (ms). */
   orchNloPollMs: number;
+  /** NLO-P2 (webhooks): SSRF allowlist entries (host[:port], comma-separated)
+   *  for webhook delivery targets. */
+  webhookAllowlist: string[];
+  /** NLO-P2 (webhooks): allow delivery to loopback targets (local receivers). */
+  webhookAllowLoopback: boolean;
+  /** NLO-P2 (webhooks): max delivery attempts before dead-lettering. */
+  webhookMaxAttempts: number;
+  /** NLO-P2 (webhooks): dispatcher poll interval (ms). */
+  webhookIntervalMs: number;
+  /** NLO-P2 (webhooks): per-delivery HTTP timeout (ms). */
+  webhookRequestTimeoutMs: number;
 }
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..", "..");
@@ -188,9 +208,7 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     throw new Error(`invalid NLO_INTERNAL_API_BASE_URL (expected http(s)://host[:port])`);
   }
 
-  const radioBase = (env("NLO_RADIO_BASE") ?? "http://172.20.1.53:8043")
-    .trim()
-    .replace(/\/+$/, "");
+  const radioBase = (env("NLO_RADIO_BASE") ?? "http://172.20.1.53:8043").trim().replace(/\/+$/, "");
   if (!/^https?:\/\/[^\s/]+$/.test(radioBase)) {
     throw new Error(`invalid NLO_RADIO_BASE (expected http(s)://host[:port])`);
   }
@@ -211,6 +229,8 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     pythonBin: env("NLO_PYTHON_BIN") ?? "python3",
     loginBrowser: env("NLO_LOGIN_BROWSER") ?? "chromium",
     jobTimeoutMs: intEnv(env, "NLO_JOB_TIMEOUT_MS", 30 * 60_000),
+    ffmpegBin: (env("NLO_FFMPEG_BIN") ?? "").trim(),
+    mp3TargetKbps: intEnv(env, "NLO_MP3_TARGET_KBPS", 56),
     allowDirectEgress: boolEnv(env, "NLO_ALLOW_DIRECT_EGRESS", false),
     apiAuthEnforced: boolEnv(env, "NLO_API_AUTH", false),
     apiRateLimitMax: intEnv(env, "NLO_API_RATE_LIMIT_MAX", 120),
@@ -222,6 +242,14 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     radioTimeoutMs: intEnv(env, "NLO_RADIO_TIMEOUT_MS", 120_000),
     orchNloTimeoutMs: intEnv(env, "NLO_ORCH_NLO_TIMEOUT_MS", 300_000),
     orchNloPollMs: intEnv(env, "NLO_ORCH_POLL_MS", 2_000),
+    webhookAllowlist: (env("NLO_WEBHOOK_ALLOWLIST") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    webhookAllowLoopback: boolEnv(env, "NLO_WEBHOOK_ALLOW_LOOPBACK", false),
+    webhookMaxAttempts: intEnv(env, "NLO_WEBHOOK_MAX_ATTEMPTS", 8),
+    webhookIntervalMs: intEnv(env, "NLO_WEBHOOK_INTERVAL_MS", 5_000),
+    webhookRequestTimeoutMs: intEnv(env, "NLO_WEBHOOK_REQUEST_TIMEOUT_MS", 10_000),
   };
 }
 
