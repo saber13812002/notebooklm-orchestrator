@@ -11,7 +11,7 @@ tests, and documentation are complete and committed; only the live gate
 - Starting commit: `b45dadd`. Pre-code-change backup:
   `data/backups/nlo-p2-resume.bundle`, SHA-256
   `920b90e8473dede3ad7aa80af381c23d8a423ee6aaebc37d2ae92408b3eac543`.
-- Commits created by this mission (10):
+- Commits created by this mission (11):
 
 | #   | SHA             | Title                                                                                                          |
 | --- | --------------- | -------------------------------------------------------------------------------------------------------------- |
@@ -24,9 +24,10 @@ tests, and documentation are complete and committed; only the live gate
 | 7   | `5f04cb9`       | feat(api): podcast job creation + artifact download route + OpenAPI spec                                       |
 | 8   | `21d8090`       | feat(e2e): text-to-podcast scenario in nlo-e2e + local test environment                                        |
 | 9   | `6f3bd98`       | docs(nlo-p2): architecture, testing, operations docs (11 files)                                                |
-| 10  | _(this commit)_ | docs(nlo-p2): phase reports + roadmap/status/README/CHANGELOG/env updates                                      |
+| 10  | `d232e5e`       | docs(nlo-p2): phase reports + roadmap/status/README/CHANGELOG/env updates                                      |
+| 11  | _(this commit)_ | docs(nlo-p2): final mission report (26 sections) + checkpoint commit table                                     |
 
-Working tree after commit 10: clean (`git status --short` empty).
+Working tree after commit 11: clean (`git status --short` empty).
 
 ## 2. Verification state (all re-run after every code change)
 
