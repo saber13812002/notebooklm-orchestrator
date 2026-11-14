@@ -8,9 +8,16 @@
  * Usage:
  *   NLO_API_BASE=https://host NLO_API_TOKEN=... npx tsx scripts/nlo-e2e.ts --scenario text --text-file ./sample.txt
  *   NLO_API_BASE=... --scenario audio --audio-file ./small.m4a
+ *   NLO_API_BASE=... --scenario podcast --text-file ./sample.txt [--podcast-format deep_dive]
  *   NLO_API_BASE=... --scenario monitor --job-id j_...
  *
- * Exit codes: 0 PASS · 1 FAIL · 2 BLOCKED/NOT_TESTED · 3 bad usage.
+ * The podcast scenario exercises the text -> notebook -> deep-dive podcast ->
+ * audio artifact pipeline. Against a mock provider the run is accepted as
+ * MOCK_PROVIDER_INTEGRATION_VERIFIED (never PASS): the full integration is
+ * exercised, only the provider boundary is simulated.
+ *
+ * Exit codes: 0 PASS or MOCK_PROVIDER_INTEGRATION_VERIFIED · 1 FAIL ·
+ * 2 BLOCKED/NOT_TESTED · 3 bad usage.
  * The token is never printed or written to the report.
  */
 import { createHash } from "node:crypto";
@@ -50,6 +57,10 @@ interface Args {
   minBytes?: number;
   expectMime?: string;
   prompt?: string;
+  podcastFormat?: string;
+  podcastLanguage?: string;
+  podcastLength?: string;
+  podcastInstructions?: string;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -66,6 +77,7 @@ function parseArgs(argv: string[]): Args {
     text: "text-to-notebook",
     audio: "audio-upload",
     monitor: "job-monitor",
+    podcast: "text-to-podcast",
   };
   const scenario = aliases[rawScenario] ?? (rawScenario as E2EScenarioId);
   if (!(scenario in SCENARIO_STAGES)) {
@@ -85,6 +97,10 @@ function parseArgs(argv: string[]): Args {
     minBytes: get("min-bytes") ? num(get("min-bytes"), 0) : undefined,
     expectMime: get("expect-mime"),
     prompt: get("prompt"),
+    podcastFormat: get("podcast-format"),
+    podcastLanguage: get("podcast-language"),
+    podcastLength: get("podcast-length"),
+    podcastInstructions: get("podcast-instructions"),
   };
 }
 
@@ -175,7 +191,21 @@ async function runText(run: E2ETestRun, args: Args): Promise<void> {
   const res = await fetch(`${args.base}${V1}/notebooks/from-text`, {
     method: "POST",
     headers: authHeaders({ "content-type": "application/json" }),
-    body: JSON.stringify({ text, ...(args.prompt ? { prompt: args.prompt } : {}) }),
+    body: JSON.stringify({
+      text,
+      ...(args.prompt ? { prompt: args.prompt } : {}),
+      ...(args.scenario === "text-to-podcast"
+        ? {
+            podcast: {
+              enabled: true,
+              ...(args.podcastInstructions ? { instructions: args.podcastInstructions } : {}),
+              ...(args.podcastLanguage ? { language: args.podcastLanguage } : {}),
+              ...(args.podcastFormat ? { format: args.podcastFormat } : {}),
+              ...(args.podcastLength ? { length: args.podcastLength } : {}),
+            },
+          }
+        : {}),
+    }),
   });
   const bodyText = await res.text();
   if (res.status !== 202 && res.status !== 200) {
@@ -328,14 +358,23 @@ async function pollJob(run: E2ETestRun, args: Args): Promise<JobView | null> {
 async function collectEvidence(run: E2ETestRun, args: Args, job: JobView | null): Promise<void> {
   if (!run.job_id) return;
 
-  startStage(run, "create_job", run.started_at);
-  completeStage({
-    run,
-    stage: "create_job",
-    at: now(),
-    checkpoint: "job_created",
-    externalOperationId: run.job_id,
-  });
+  // Stage bookkeeping must be scenario-aware: only touch stages that the
+  // scenario actually declares (and that are not already finished).
+  const stageState = (name: string): string | null =>
+    run.stages.find((s) => s.stage === name)?.state ?? null;
+  const stageAbsent = (name: string): boolean => !run.stages.some((s) => s.stage === name);
+
+  const cj = stageState("create_job");
+  if (cj !== null && cj !== "PASSED" && cj !== "FAILED") {
+    startStage(run, "create_job", run.started_at);
+    completeStage({
+      run,
+      stage: "create_job",
+      at: now(),
+      checkpoint: "job_created",
+      externalOperationId: run.job_id,
+    });
+  }
 
   const events = await getJson<unknown>(`${args.base}${V1}/jobs/${run.job_id}/events`);
   if (events.status !== 200) {
@@ -344,12 +383,12 @@ async function collectEvidence(run: E2ETestRun, args: Args, job: JobView | null)
       code: cls.code,
       message: `events -> HTTP ${events.status}`,
       at: now(),
-      stage: "events_timeline",
+      stage: stageAbsent("events_timeline") ? null : "events_timeline",
       failure_class: null,
       http_status: events.status,
       retryable: cls.retryable,
     });
-  } else {
+  } else if (!stageAbsent("events_timeline")) {
     completeStage({ run, stage: "events_timeline", at: now(), checkpoint: "events_read" });
   }
 
@@ -357,7 +396,9 @@ async function collectEvidence(run: E2ETestRun, args: Args, job: JobView | null)
   if (attempts.status === 200) {
     const arr = Array.isArray(attempts.body) ? attempts.body : [];
     run.attempts_observed = Math.max(run.attempts_observed, arr.length);
-    completeStage({ run, stage: "attempts_read", at: now(), checkpoint: "attempts_read" });
+    if (!stageAbsent("attempts_read")) {
+      completeStage({ run, stage: "attempts_read", at: now(), checkpoint: "attempts_read" });
+    }
   }
 
   if (job) {
@@ -410,6 +451,7 @@ async function collectEvidence(run: E2ETestRun, args: Args, job: JobView | null)
     } catch {
       status = null;
     }
+    const isPodcast = a.mediaType === "audio/wav" || a.filename.startsWith("podcast-");
     const ref: E2EArtifactRef = validateArtifact({
       artifact: {
         id: a.id,
@@ -422,11 +464,53 @@ async function collectEvidence(run: E2ETestRun, args: Args, job: JobView | null)
       downloadStatus: status,
       expected: {
         ...(args.minBytes !== undefined ? { minBytes: args.minBytes } : {}),
+        // The podcast scenario pins the audio artifact to a real audio stream
+        // (magic-byte check below); generic expectations are explicit flags.
+        ...(args.scenario === "text-to-podcast" && isPodcast ? { mediaTypePrefix: "audio/" } : {}),
         ...(args.expectMime ? { mediaTypePrefix: args.expectMime } : {}),
       },
     });
+    if (
+      ref.valid &&
+      a.mediaType === "audio/wav" &&
+      downloaded !== null &&
+      !wavHasRiffHeader(downloaded)
+    ) {
+      ref.valid = false;
+      ref.note = "audio/wav artifact is missing the RIFF/WAVE magic bytes";
+    }
     run.artifacts.push(ref);
   }
+
+  if (
+    args.scenario === "text-to-podcast" &&
+    !run.artifacts.some((a) => a.valid && a.media_type?.startsWith("audio/"))
+  ) {
+    recordError(run, {
+      code: "E2E_ARTIFACT_MISSING",
+      message: "podcast job SUCCEEDED but no valid audio artifact was returned",
+      at: now(),
+      stage: "artifact_validate",
+      failure_class: null,
+      http_status: null,
+      retryable: false,
+    });
+  }
+}
+
+/** Content check for the mock/real WAV contract: "RIFF" at 0, "WAVE" at 8. */
+function wavHasRiffHeader(bytes: Uint8Array): boolean {
+  if (bytes.length < 12) return false;
+  return (
+    bytes[0] === 0x52 && // R
+    bytes[1] === 0x49 && // I
+    bytes[2] === 0x46 && // F
+    bytes[3] === 0x46 && // F
+    bytes[8] === 0x57 && // W
+    bytes[9] === 0x41 && // A
+    bytes[10] === 0x56 && // V
+    bytes[11] === 0x45 // E
+  );
 }
 
 async function main(): Promise<number> {
@@ -435,7 +519,10 @@ async function main(): Promise<number> {
     console.error("ERROR: --base or NLO_API_BASE is required");
     return 3;
   }
-  if (args.scenario === "text-to-notebook" && !args.textFile) {
+  if (
+    (args.scenario === "text-to-notebook" || args.scenario === "text-to-podcast") &&
+    !args.textFile
+  ) {
     console.error("ERROR: --text-file is required for the text scenario");
     return 3;
   }
@@ -480,8 +567,11 @@ async function main(): Promise<number> {
   if (args.jobId) run.job_id = args.jobId;
 
   if (run.job_id === null) {
-    if (args.scenario === "text-to-notebook") await runText(run, args);
-    else if (args.scenario === "audio-upload") await runAudio(run, args);
+    if (args.scenario === "text-to-notebook" || args.scenario === "text-to-podcast") {
+      await runText(run, args);
+    } else if (args.scenario === "audio-upload") {
+      await runAudio(run, args);
+    }
   }
 
   const job = run.job_id ? await pollJob(run, args) : null;
@@ -525,7 +615,9 @@ async function finish(
     report: out,
   };
   console.log(JSON.stringify(summary, null, 2));
-  if (run.acceptance === "PASS") return 0;
+  if (run.acceptance === "PASS" || run.acceptance === "MOCK_PROVIDER_INTEGRATION_VERIFIED") {
+    return 0;
+  }
   if (run.acceptance === "BLOCKED" || run.acceptance === "NOT_TESTED") return 2;
   return 1;
 }
