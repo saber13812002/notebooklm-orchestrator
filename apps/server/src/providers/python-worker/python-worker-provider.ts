@@ -8,11 +8,18 @@ import {
   capabilityMatrix,
   type NotebookLMProvider,
   type ProviderAccountStatus,
+  type ProviderAudioDownloadRequest,
+  type ProviderAudioDownloadResult,
+  type ProviderAudioGenerateRequest,
+  type ProviderAudioGenerateResult,
+  type ProviderAudioStatus,
+  type ProviderAudioStatusRequest,
+  type ProviderAudioStatusResult,
   type ProviderJobRequest,
   type ProviderJobResult,
 } from "../types.js";
 import { WorkerError, WorkerSupervisor } from "./worker.js";
-import { isAmbiguousCode } from "./protocol.js";
+import { isAmbiguousCode, type WorkerOp } from "./protocol.js";
 
 /**
  * PythonWorkerProvider: REAL NotebookLM access via notebooklm-py running in a
@@ -206,6 +213,18 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       cancelJob: {
         level: CapLevel.experimental,
         note: "kills the worker; in-flight server op may still finish",
+      },
+      generateAudio: {
+        level: live,
+        note: "real Audio Overview submit via notebooklm-py artifacts.generate_audio (NLO-P2)",
+      },
+      getAudioStatus: {
+        level: live,
+        note: "real task polling via artifacts.poll_status (NLO-P2)",
+      },
+      downloadAudio: {
+        level: live,
+        note: "real artifact download + verification via artifacts.download_audio (NLO-P2)",
       },
     });
   }
@@ -579,6 +598,277 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       this.active.delete(req.jobId);
       await w.close();
     }
+  }
+
+  // ------------------------------------------------------------------
+  // NLO-P2: Audio Overview (podcast) pipeline.
+  //
+  // One short-lived worker per operation (same lifecycle discipline as
+  // runJob). The external operation is tracked by its TASK ID (== artifact
+  // id): the app persists it and may resume via generateAudio(resumeTaskId).
+  // Re-submission only happens on proven failure (worker enforces this).
+  // ------------------------------------------------------------------
+
+  /** Map of worker progress stages (audio ops) to app progress percentages. */
+  private static readonly AUDIO_STAGE_PROGRESS: Record<string, [number, string]> = {
+    opening_session: [10, "opening authenticated session"],
+    validating_notebook: [20, "validating notebook and sources"],
+    checking_resume: [25, "checking recorded task for idempotency"],
+    resume_kept: [30, "reusing existing generation task"],
+    resume_failed_resubmitting: [35, "re-submitting failed generation"],
+    submitting_audio: [40, "submitting Audio Overview generation"],
+    audio_submitted: [60, "generation submitted — task recorded"],
+    polling_audio: [30, "polling generation task"],
+    locating_artifact: [20, "locating audio artifact"],
+    artifact_not_ready: [40, "artifact not finished yet"],
+    downloading_audio: [50, "downloading audio artifact"],
+    verifying_audio: [90, "verifying downloaded audio"],
+  };
+
+  /**
+   * Shared pre-flight + worker construction for the audio ops: fail-closed
+   * tunnel check, credential resolution, session existence (auth/needsReauth).
+   */
+  private prepareAudioWorker(
+    req: {
+      jobId: string;
+      accountId: string;
+      credentialRef: string;
+      tunnel: { nodeId: string; host: string; port: number } | null;
+    },
+    correlation: string,
+  ): { sessionPath: string; w: WorkerSupervisor } {
+    if (!req.tunnel && !this.opts.allowDirect) {
+      throw new ProviderFailure({
+        failureClass: "proxy",
+        message:
+          "no approved proxy tunnel for this audio operation (fail-closed: direct egress is not allowed)",
+        ambiguous: false,
+        needsReauth: false,
+      });
+    }
+    const sessionPath = this.resolveCredential(req.credentialRef, req.accountId);
+    if (!existsSync(sessionPath)) {
+      throw new ProviderFailure({
+        failureClass: "auth",
+        message: "account has no stored session — complete login first",
+        ambiguous: false,
+        needsReauth: true,
+      });
+    }
+    const w = new WorkerSupervisor({
+      pythonBin: this.opts.pythonBin,
+      workerPath: this.opts.workerPath,
+      env: req.tunnel ? this.tunnelEnv(req.tunnel) : {},
+      requestTimeoutMs: this.opts.jobTimeoutMs ?? 30 * 60_000,
+      correlationId: correlation,
+      log: this.log,
+    });
+    return { sessionPath, w };
+  }
+
+  /**
+   * Run one audio op on a fresh worker with the standard error mapping and
+   * cleanup. The worker is registered in `this.active` under `req.jobId` so
+   * `cancel(jobId)` covers in-flight audio operations too.
+   */
+  private async withAudioWorker<T>(
+    req: { jobId: string; signal: AbortSignal; onProgress: (p: number, n: string) => void },
+    w: WorkerSupervisor,
+    op: WorkerOp,
+    params: Record<string, unknown>,
+    done: () => string,
+  ): Promise<T> {
+    w.setEventSink((data) => {
+      const stage = typeof data.stage === "string" ? data.stage : "";
+      const next = PythonWorkerProvider.AUDIO_STAGE_PROGRESS[stage];
+      if (next) req.onProgress(next[0], next[1]);
+    });
+    this.active.set(req.jobId, w);
+    try {
+      await w.start();
+      const r = await w.request<T>(op, params, { signal: req.signal });
+      req.onProgress(100, done());
+      return r;
+    } catch (e) {
+      if (e instanceof ProviderFailure) throw e;
+      const code = e instanceof WorkerError ? e.code : "unknown";
+      const message = e instanceof Error ? e.message : String(e);
+      throw new ProviderFailure({
+        failureClass: this.toFailureClass(code),
+        message: `python-worker (${op}): ${message}`,
+        ambiguous: isAmbiguousCode(code),
+        needsReauth: code === "auth",
+      });
+    } finally {
+      this.active.delete(req.jobId);
+      await w.close();
+    }
+  }
+
+  private timeoutSec(): number {
+    return Math.floor((this.opts.jobTimeoutMs ?? 30 * 60_000) / 1000);
+  }
+
+  /**
+   * Submit (or resume) an Audio Overview generation. Idempotency contract:
+   * when `resumeTaskId` is given the worker polls it FIRST and only re-submits
+   * on proven failure ("failed"); completed/in-progress/not-found tasks are
+   * kept as-is. The returned `status.taskId` is the recoverable handle.
+   */
+  async generateAudio(req: ProviderAudioGenerateRequest): Promise<ProviderAudioGenerateResult> {
+    const { sessionPath, w } = this.prepareAudioWorker(req, `audio-gen:${req.jobId}`);
+    const raw = await this.withAudioWorker<Record<string, unknown>>(
+      req,
+      w,
+      "audio_generate",
+      {
+        sessionPath,
+        notebookId: req.notebookId,
+        sourceIds: req.sourceIds ?? null,
+        prompt: req.prompt ?? null,
+        language: req.language ?? null,
+        audioFormat: req.audioFormat ?? null,
+        audioLength: req.audioLength ?? null,
+        resumeTaskId: req.resumeTaskId ?? null,
+        timeoutSec: this.timeoutSec(),
+      },
+      () => "audio generation submitted or resumed",
+    );
+    const status: ProviderAudioStatus = {
+      taskId: typeof raw.taskId === "string" ? raw.taskId : null,
+      status: typeof raw.status === "string" ? raw.status : null,
+      url: typeof raw.url === "string" ? raw.url : null,
+      error: typeof raw.error === "string" ? raw.error : null,
+      errorCode: typeof raw.errorCode === "string" ? raw.errorCode : null,
+      metadata:
+        raw.metadata && typeof raw.metadata === "object"
+          ? (raw.metadata as Record<string, unknown>)
+          : null,
+      isComplete: raw.isComplete === true,
+      isFailed: raw.isFailed === true,
+      isTerminal: raw.isTerminal === true,
+      isNotFound: raw.isNotFound === true,
+      isRateLimited: raw.isRateLimited === true,
+    };
+    if (!status.taskId) {
+      throw new ProviderFailure({
+        failureClass: "provider",
+        message: "worker reported no task id for the audio generation; not reporting success",
+        ambiguous: true,
+        needsReauth: false,
+      });
+    }
+    return {
+      email: typeof raw.email === "string" ? raw.email : null,
+      notebookId: typeof raw.notebookId === "string" ? raw.notebookId : req.notebookId,
+      resumed: raw.resumed === true,
+      priorStatus: typeof raw.priorStatus === "string" ? raw.priorStatus : null,
+      status,
+      instructionsProvided: raw.instructionsProvided === true,
+      checkedAt: typeof raw.checkedAt === "string" ? raw.checkedAt : new Date().toISOString(),
+    };
+  }
+
+  /** Poll a recorded generation task (task id == artifact id). */
+  async getAudioStatus(req: ProviderAudioStatusRequest): Promise<ProviderAudioStatusResult> {
+    const { sessionPath, w } = this.prepareAudioWorker(req, `audio-status:${req.jobId}`);
+    const raw = await this.withAudioWorker<Record<string, unknown>>(
+      req,
+      w,
+      "audio_status",
+      {
+        sessionPath,
+        notebookId: req.notebookId,
+        taskId: req.taskId,
+        timeoutSec: this.timeoutSec(),
+      },
+      () => "polled",
+    );
+    return {
+      notebookId: typeof raw.notebookId === "string" ? raw.notebookId : req.notebookId,
+      status: {
+        taskId: typeof raw.taskId === "string" ? raw.taskId : req.taskId,
+        status: typeof raw.status === "string" ? raw.status : null,
+        url: typeof raw.url === "string" ? raw.url : null,
+        error: typeof raw.error === "string" ? raw.error : null,
+        errorCode: typeof raw.errorCode === "string" ? raw.errorCode : null,
+        metadata:
+          raw.metadata && typeof raw.metadata === "object"
+            ? (raw.metadata as Record<string, unknown>)
+            : null,
+        isComplete: raw.isComplete === true,
+        isFailed: raw.isFailed === true,
+        isTerminal: raw.isTerminal === true,
+        isNotFound: raw.isNotFound === true,
+        isRateLimited: raw.isRateLimited === true,
+      },
+      checkedAt: typeof raw.checkedAt === "string" ? raw.checkedAt : new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Fetch a completed audio artifact to `req.destPath` (server-controlled,
+   * app-generated name) and verify the transfer. `ready: false` means the
+   * artifact exists but is not finished — NOT an error.
+   */
+  async downloadAudio(req: ProviderAudioDownloadRequest): Promise<ProviderAudioDownloadResult> {
+    if (!req.destPath || !path.isAbsolute(req.destPath)) {
+      throw new ProviderFailure({
+        failureClass: "invalid_input",
+        message: `destPath must be a non-empty absolute path: ${req.destPath}`,
+        ambiguous: false,
+        needsReauth: false,
+      });
+    }
+    const { sessionPath, w } = this.prepareAudioWorker(req, `audio-dl:${req.jobId}`);
+    const raw = await this.withAudioWorker<Record<string, unknown>>(
+      req,
+      w,
+      "audio_download",
+      {
+        sessionPath,
+        notebookId: req.notebookId,
+        artifactId: req.artifactId,
+        destPath: req.destPath,
+        maxBytes: req.maxBytes ?? null,
+        timeoutSec: this.timeoutSec(),
+      },
+      () => "audio artifact download operation completed",
+    );
+    if (raw.ready !== true) {
+      return {
+        ready: false,
+        notebookId: typeof raw.notebookId === "string" ? raw.notebookId : req.notebookId,
+        artifactId: req.artifactId,
+        artifactStatus: typeof raw.artifactStatus === "string" ? raw.artifactStatus : undefined,
+        checkedAt: typeof raw.checkedAt === "string" ? raw.checkedAt : new Date().toISOString(),
+      };
+    }
+    if (
+      typeof raw.path !== "string" ||
+      typeof raw.size !== "number" ||
+      typeof raw.sha256 !== "string"
+    ) {
+      throw new ProviderFailure({
+        failureClass: "provider",
+        message: "worker reported a ready artifact without path/size/sha256; not reporting success",
+        ambiguous: true,
+        needsReauth: false,
+      });
+    }
+    return {
+      ready: true,
+      notebookId: typeof raw.notebookId === "string" ? raw.notebookId : req.notebookId,
+      artifactId: req.artifactId,
+      path: raw.path,
+      size: raw.size,
+      sha256: raw.sha256,
+      durationSeconds: typeof raw.durationSeconds === "number" ? raw.durationSeconds : null,
+      artifactTitle: typeof raw.artifactTitle === "string" ? raw.artifactTitle : null,
+      artifactStatus: typeof raw.artifactStatus === "string" ? raw.artifactStatus : "completed",
+      checkedAt: typeof raw.checkedAt === "string" ? raw.checkedAt : new Date().toISOString(),
+    };
   }
 
   /**

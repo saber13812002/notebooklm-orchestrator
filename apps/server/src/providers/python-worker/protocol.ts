@@ -13,6 +13,10 @@ export const OpCodes = [
   "browser-import",
   "job",
   "job_text",
+  // NLO-P2 audio pipeline (podcast generation).
+  "audio_generate",
+  "audio_status",
+  "audio_download",
 ] as const;
 export type WorkerOp = (typeof OpCodes)[number];
 

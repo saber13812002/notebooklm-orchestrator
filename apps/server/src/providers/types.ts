@@ -50,6 +50,14 @@ export interface ProviderJobRequest {
    */
   notebookTitle?: string | null;
   /**
+   * NLO-P2 (podcast): the job wants an Audio Overview generated in the
+   * created notebook AFTER the base workflow. The job runner drives the
+   * audio ops (generate/status/download); this flag tells the provider the
+   * job is podcast-enabled (the mock uses it to report notebook operation
+   * IDs, mirroring the real worker).
+   */
+  podcast?: boolean | null;
+  /**
    * The ONLY network route the provider may use. `null` means "no approved
    * tunnel" — a live provider MUST then refuse (fail-closed). Mock ignores.
    */
@@ -101,6 +109,152 @@ export interface NotebookLMProvider {
    */
   runJob(req: ProviderJobRequest): Promise<ProviderJobResult>;
   cancel(jobId: string): Promise<{ accepted: boolean; note: string }>;
+
+  // NLO-P2: Audio Overview (podcast) pipeline. These are OPTIONAL on the
+  // interface (capability-gated): the app checks for their presence and
+  // reports the operation as unsupported when absent. Providers that
+  // implement them MUST throw ProviderFailure on any error and must never
+  // fabricate a task id or an artifact file.
+
+  /**
+   * Submit (or resume) an Audio Overview generation in an EXISTING notebook.
+   * When `resumeTaskId` is given, the provider MUST poll the recorded task
+   * first and only re-submit on proven failure ("failed"). The returned
+   * `status.taskId` is the ONLY recoverable handle for the external
+   * operation and must be persisted by the caller.
+   */
+  generateAudio?(req: ProviderAudioGenerateRequest): Promise<ProviderAudioGenerateResult>;
+  /** Poll a recorded generation task (task id == artifact id). */
+  getAudioStatus?(req: ProviderAudioStatusRequest): Promise<ProviderAudioStatusResult>;
+  /**
+   * Fetch a completed audio artifact to a server-controlled destination path
+   * and verify the transfer (exists, non-empty, within size limit). A
+   * `ready: false` result means "not finished yet" (not an error).
+   */
+  downloadAudio?(req: ProviderAudioDownloadRequest): Promise<ProviderAudioDownloadResult>;
+}
+
+// ---------------------------------------------------------------------------
+// NLO-P2: Audio Overview (podcast) generation types.
+//
+// Wire contract with the python worker (nbl_worker.py audio_* ops): the TS
+// provider maps the flat worker payload onto the nested `status` object below.
+// ---------------------------------------------------------------------------
+
+export const AudioFormats = ["deep_dive", "brief", "critique", "debate"] as const;
+export type AudioFormat = (typeof AudioFormats)[number];
+
+export const AudioLengths = ["short", "default", "long"] as const;
+export type AudioLength = (typeof AudioLengths)[number];
+
+/**
+ * Snapshot of a generation task's state. Values are the library's status
+ * strings ("pending" | "in_progress" | "completed" | "failed" | "not_found" |
+ * ...) plus boolean predicates — the caller decides policy from the flags.
+ */
+export interface ProviderAudioStatus {
+  taskId: string | null;
+  status: string | null;
+  url: string | null;
+  error: string | null;
+  errorCode: string | null;
+  metadata: Record<string, unknown> | null;
+  isComplete: boolean;
+  isFailed: boolean;
+  isTerminal: boolean;
+  isNotFound: boolean;
+  isRateLimited: boolean;
+}
+
+export interface ProviderAudioGenerateRequest {
+  jobId: string;
+  accountId: string;
+  /** Opaque per-account credential handle (resolved by the provider). */
+  credentialRef: string;
+  /** Existing NotebookLM notebook to generate in (created by runJob earlier). */
+  notebookId: string;
+  /** Sources to use; null/undefined = all notebook sources. */
+  sourceIds?: string[] | null;
+  /** Deep Dive instructions (optional). */
+  prompt?: string | null;
+  /** e.g. "en" / "fa"; library default when unset. */
+  language?: string | null;
+  audioFormat?: AudioFormat | null;
+  audioLength?: AudioLength | null;
+  /** Previously recorded task id — poll first, resubmit ONLY on proven failure. */
+  resumeTaskId?: string | null;
+  /** The ONLY network route; `null` => fail-closed refusal in live providers. */
+  tunnel: TunnelHandle | null;
+  egress: ProviderEgress;
+  signal: AbortSignal;
+  onProgress: (progress: number, note: string) => void;
+}
+
+export interface ProviderAudioGenerateResult {
+  email: string | null;
+  notebookId: string;
+  /** True when a pre-existing task was kept (no new generation submitted). */
+  resumed: boolean;
+  /** Prior task status when the resume path re-submitted after a proven failure. */
+  priorStatus: string | null;
+  status: ProviderAudioStatus;
+  instructionsProvided: boolean;
+  checkedAt: string;
+}
+
+export interface ProviderAudioStatusRequest {
+  jobId: string;
+  accountId: string;
+  credentialRef: string;
+  notebookId: string;
+  /** The task id returned by generateAudio (== the artifact id). */
+  taskId: string;
+  tunnel: TunnelHandle | null;
+  egress: ProviderEgress;
+  signal: AbortSignal;
+  onProgress: (progress: number, note: string) => void;
+}
+
+export interface ProviderAudioStatusResult {
+  notebookId: string;
+  status: ProviderAudioStatus;
+  checkedAt: string;
+}
+
+export interface ProviderAudioDownloadRequest {
+  jobId: string;
+  accountId: string;
+  credentialRef: string;
+  notebookId: string;
+  artifactId: string;
+  /**
+   * Server-controlled destination path. The app MUST generate the name
+   * (no user path components); the provider's parent dir is created as needed
+   * and a stale file at the same path is replaced, never appended.
+   */
+  destPath: string;
+  /** Hard size limit (bytes); an oversized transfer is removed + reported as an error. */
+  maxBytes?: number | null;
+  tunnel: TunnelHandle | null;
+  egress: ProviderEgress;
+  signal: AbortSignal;
+  onProgress: (progress: number, note: string) => void;
+}
+
+export interface ProviderAudioDownloadResult {
+  /** False = artifact exists but is not finished yet (not an error). */
+  ready: boolean;
+  notebookId: string;
+  artifactId: string;
+  /** Verified file location — only set when `ready` is true. */
+  path?: string;
+  size?: number;
+  sha256?: string;
+  durationSeconds?: number | null;
+  artifactTitle?: string | null;
+  /** Library artifact status string (e.g. "in_progress", "completed"). */
+  artifactStatus?: string;
+  checkedAt: string;
 }
 
 /** Capability level constants (mirror shared). */
