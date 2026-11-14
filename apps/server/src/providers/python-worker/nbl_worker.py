@@ -19,6 +19,25 @@ Ops:
                   -> {email, notebookId, notebookTitle, sourceId,
                       uploaded, conversationId, turnNumber, answer,
                       references, checkedAt}
+  audio_generate  {sessionPath, notebookId, sourceIds?, prompt?, language?,
+                   audioFormat?, audioLength?, resumeTaskId?, timeoutSec}
+                  -> {email, notebookId, resumed, taskId, priorStatus,
+                      status, url, error, errorCode, metadata,
+                      isComplete, isFailed, isTerminal, isNotFound,
+                      isRateLimited, instructionsProvided, checkedAt}
+                  (resumes an existing task when resumeTaskId is given and
+                  its state is not proven failed — never re-submits blindly)
+  audio_status    {sessionPath, notebookId, taskId, timeoutSec?}
+                  -> {notebookId, taskId, status, url, error, errorCode,
+                      metadata, isComplete, isFailed, isTerminal,
+                      isNotFound, isRateLimited, checkedAt}
+  audio_download  {sessionPath, notebookId, artifactId, destPath,
+                   maxBytes?, timeoutSec?}
+                  -> {ready, notebookId, artifactId, path?, size?, sha256?,
+                      durationSeconds?, artifactTitle?, artifactStatus?,
+                      checkedAt}
+                  (verifies the transfer: non-empty, size limit, SHA-256;
+                  removes partial files on failure)
 
 Security notes:
   * The worker is spawned per job with NO shell.
@@ -32,6 +51,7 @@ Security notes:
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import signal
@@ -98,6 +118,11 @@ def _classify(exc: BaseException) -> tuple[str, str]:
         return code("rate_limit", str(exc))
     if isinstance(exc, WaitTimeoutError):
         return code("timeout", str(exc))
+    # Built-in TimeoutError (e.g. a network-level read timeout that escapes as
+    # the stdlib type): same structured bucket as WaitTimeoutError.
+    # Checked AFTER WaitTimeoutError, which is a subclass of it.
+    if isinstance(exc, TimeoutError):
+        return code("timeout", str(exc))
     if isinstance(exc, NetworkError):
         return code("connectivity", str(exc))
     if isinstance(exc, ValidationError):
@@ -112,6 +137,10 @@ def _classify(exc: BaseException) -> tuple[str, str]:
         return code("configuration", str(exc))
     if isinstance(exc, ServerError):
         return code("provider", str(exc))
+    # Bare ValueError raised by the op's own input validation (bad enums,
+    # missing task/ids, failed transfer verification).
+    if isinstance(exc, ValueError):
+        return code("invalid_input", str(exc))
     return "unknown", f"{type(exc).__name__}: {exc}"
 
 
@@ -612,6 +641,356 @@ async def op_job_text(p: dict[str, Any]) -> dict[str, Any]:
         await ctx.__aexit__(None, None, None)
 
 
+# ---------------------------------------------------------------------------
+# Audio Overview (podcast) ops — NLO-P2.
+#
+# Idempotency contract (mission §6, level 2: external generation):
+#   * The generation task id is the ONLY recoverable handle for a submitted
+#     generation. The TypeScript side persists it in the job's operationIds
+#     before any further work, so a worker crash / restart / retry MUST pass
+#     it back as ``resumeTaskId``.
+#   * A task is re-submitted only on PROVEN failure (status "failed").
+#     "not_found" is an unresolved state (delayed visibility vs deletion):
+#     the same task id is kept so polling can still converge; the caller
+#     (job runner) decides whether to escalate to NEEDS_ATTENTION.
+#   * The task id doubles as the artifact id in notebooklm-py (GenerationStatus
+#     docstring), so audio_status / audio_download reuse it directly.
+# ---------------------------------------------------------------------------
+_AUDIO_FORMATS: dict[str, int] = {
+    "deep_dive": 1,
+    "brief": 2,
+    "critique": 3,
+    "debate": 4,
+}
+_AUDIO_LENGTHS: dict[str, int] = {
+    "short": 1,
+    "default": 2,
+    "long": 3,
+}
+
+
+def _audio_format_enum(value: Any) -> Any:
+    """Map a wire-format string (or None) to an ``AudioFormat`` member.
+
+    Unknown values raise ValueError -> classified "invalid_input" by the
+    protocol boundary. Importing from ``notebooklm.types`` (public) with a
+    fallback to the private module keeps 0.8.x compatibility.
+    """
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"audioFormat must be a string, got: {value!r}")
+    key = value.strip().lower().replace("-", "_")
+    if key not in _AUDIO_FORMATS:
+        raise ValueError(
+            f"unknown audioFormat {value!r}; expected one of "
+            f"{sorted(_AUDIO_FORMATS)}"
+        )
+    from notebooklm.types import AudioFormat
+
+    return AudioFormat(_AUDIO_FORMATS[key])
+
+
+def _audio_length_enum(value: Any) -> Any:
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise ValueError(f"audioLength must be a string, got: {value!r}")
+    key = value.strip().lower().replace("-", "_")
+    if key not in _AUDIO_LENGTHS:
+        raise ValueError(
+            f"unknown audioLength {value!r}; expected one of "
+            f"{sorted(_AUDIO_LENGTHS)}"
+        )
+    from notebooklm.types import AudioLength
+
+    return AudioLength(_AUDIO_LENGTHS[key])
+
+
+def _status_payload(st: Any) -> dict[str, Any]:
+    """Flatten a notebooklm-py GenerationStatus into a JSON-safe dict."""
+    status = getattr(st, "status", None)
+    status_str = getattr(status, "value", None) if status is not None else None
+    if status_str is None:
+        status_str = str(status) if status is not None else "unknown"
+    metadata = getattr(st, "metadata", None)
+    if metadata is not None and not isinstance(metadata, dict):
+        # Metadata must survive JSON serialization for the TS side.
+        metadata = {"raw": str(metadata)}
+    return {
+        "taskId": getattr(st, "task_id", None),
+        "status": status_str,
+        "url": getattr(st, "url", None),
+        "error": getattr(st, "error", None),
+        "errorCode": getattr(st, "error_code", None),
+        "metadata": metadata,
+        "isComplete": bool(getattr(st, "is_complete", False)),
+        "isFailed": bool(getattr(st, "is_failed", False)),
+        "isTerminal": bool(getattr(st, "is_terminal", False)),
+        "isNotFound": bool(getattr(st, "is_not_found", False)),
+        "isRateLimited": bool(getattr(st, "is_rate_limited", False)),
+    }
+
+
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+async def _require_notebook(client: Any, notebook_id: str) -> None:
+    notebooks = await client.notebooks.list()
+    if not any(
+        getattr(n, "notebook_id", None) == notebook_id
+        or getattr(n, "id", None) == notebook_id
+        for n in notebooks
+    ):
+        from notebooklm.exceptions import NotFoundError
+
+        raise NotFoundError(f"notebook not found: {notebook_id}")
+
+
+async def _require_sources(client: Any, notebook_id: str, source_ids: list[str]) -> None:
+    sources = await client.sources.list(notebook_id)
+
+    def _sid(s: Any) -> str | None:
+        return getattr(s, "source_id", None) or getattr(s, "id", None)
+
+    have = {_sid(s) for s in sources if _sid(s)}
+    missing = [sid for sid in source_ids if sid not in have]
+    if missing:
+        from notebooklm.exceptions import NotFoundError
+
+        raise NotFoundError(f"source(s) not found in notebook: {missing}")
+
+
+async def op_audio_generate(p: dict[str, Any]) -> dict[str, Any]:
+    """Submit (or resume) an Audio Overview generation.
+
+    Params:
+      sessionPath    str   (required) path to the account session file
+      notebookId     str   (required) existing notebook to generate in
+      sourceIds      list[str] (optional) sources to use; None = all sources
+      prompt         str   (optional) Deep Dive instructions
+      language       str   (optional) e.g. "en" / "fa"; library default if unset
+      audioFormat    str   (optional) deep_dive|brief|critique|debate
+      audioLength    str   (optional) short|default|long
+      resumeTaskId   str   (optional) previously recorded task id
+      timeoutSec     float (optional) client open timeout, default 300
+
+    Returns a JSON-safe result with the task id and full status snapshot.
+    ``resumed`` tells the caller whether the task was pre-existing (no new
+    generation was submitted).
+    """
+    session = Path(p["sessionPath"])
+    notebook_id = str(p["notebookId"])
+    raw_source_ids = p.get("sourceIds")
+    source_ids: list[str] | None
+    if raw_source_ids is None:
+        source_ids = None
+    else:
+        if not isinstance(raw_source_ids, list) or not all(
+            isinstance(s, str) and s.strip() for s in raw_source_ids
+        ):
+            raise ValueError(f"sourceIds must be a list of non-empty strings: {raw_source_ids!r}")
+        source_ids = [s.strip() for s in raw_source_ids]
+    prompt = p.get("prompt")
+    instructions = str(prompt).strip() if prompt is not None and str(prompt).strip() else None
+    language = p.get("language")
+    if language is not None and not (isinstance(language, str) and language.strip()):
+        raise ValueError(f"language must be a non-empty string: {language!r}")
+    audio_format = _audio_format_enum(p.get("audioFormat"))
+    audio_length = _audio_length_enum(p.get("audioLength"))
+    resume_task_id = p.get("resumeTaskId")
+    if resume_task_id is not None:
+        resume_task_id = str(resume_task_id).strip() or None
+    timeout_sec = float(p.get("timeoutSec", 300))
+
+    async def _progress(stage: str, **data: Any) -> None:
+        await emit({"event": "progress", "op": None, "data": {"stage": stage, **data}})
+
+    await _progress("opening_session")
+    ctx, client = await _client_with(session, min(timeout_sec, 300))
+    try:
+        email = await client.get_account_email(live_fallback=True)
+        await _progress("validating_notebook")
+        await _require_notebook(client, notebook_id)
+        if source_ids:
+            await _require_sources(client, notebook_id, source_ids)
+
+        prior_status: str | None = None
+        if resume_task_id:
+            # Resume path: poll the recorded task BEFORE deciding to submit.
+            await _progress("checking_resume", taskId=resume_task_id)
+            prior = await client.artifacts.poll_status(notebook_id, resume_task_id)
+            prior_payload = _status_payload(prior)
+            if not prior_payload["isFailed"]:
+                # completed / in_progress / pending / not_found: the task is
+                # either done, still running, or unresolved — NEVER re-submit
+                # on anything other than proven failure.
+                await _progress(
+                    "resume_kept", taskId=resume_task_id, status=prior_payload["status"]
+                )
+                return {
+                    "email": email,
+                    "notebookId": notebook_id,
+                    "resumed": True,
+                    "priorStatus": prior_payload["status"],
+                    **prior_payload,
+                    "instructionsProvided": instructions is not None,
+                    "checkedAt": now_iso(),
+                }
+            prior_status = prior_payload["status"]
+            await _progress(
+                "resume_failed_resubmitting",
+                taskId=resume_task_id,
+                priorStatus=prior_payload["status"],
+            )
+
+        await _progress("submitting_audio")
+        st = await client.artifacts.generate_audio(
+            notebook_id,
+            source_ids=source_ids,
+            language=language,
+            instructions=instructions,
+            audio_format=audio_format,
+            audio_length=audio_length,
+        )
+        task_id = getattr(st, "task_id", None)
+        if not task_id:
+            raise RuntimeError(
+                "audio generation accepted but returned no task id; "
+                "cannot track or resume the operation"
+            )
+        payload = _status_payload(st)
+        await _progress("audio_submitted", taskId=task_id, status=payload["status"])
+        return {
+            "email": email,
+            "notebookId": notebook_id,
+            "resumed": False,
+            "priorStatus": prior_status,
+            **payload,
+            "instructionsProvided": instructions is not None,
+            "checkedAt": now_iso(),
+        }
+    finally:
+        await ctx.__aexit__(None, None, None)
+
+
+async def op_audio_status(p: dict[str, Any]) -> dict[str, Any]:
+    """Poll a generation task (task id == artifact id)."""
+    session = Path(p["sessionPath"])
+    notebook_id = str(p["notebookId"])
+    task_id = p.get("taskId")
+    if not (isinstance(task_id, str) and task_id.strip()):
+        raise ValueError(f"taskId is required and must be a non-empty string: {task_id!r}")
+    timeout_sec = float(p.get("timeoutSec", 300))
+
+    async def _progress(stage: str, **data: Any) -> None:
+        await emit({"event": "progress", "op": None, "data": {"stage": stage, **data}})
+
+    await _progress("opening_session")
+    ctx, client = await _client_with(session, min(timeout_sec, 300))
+    try:
+        await _progress("polling_audio", taskId=task_id)
+        st = await client.artifacts.poll_status(notebook_id, task_id)
+        return {
+            "notebookId": notebook_id,
+            **_status_payload(st),
+            "checkedAt": now_iso(),
+        }
+    finally:
+        await ctx.__aexit__(None, None, None)
+
+
+async def op_audio_download(p: dict[str, Any]) -> dict[str, Any]:
+    """Fetch a completed audio artifact to a local file and verify it.
+
+    The file is only reported on success: an interrupted/empty/oversized
+    transfer removes the partial file and raises, so the TS side never
+    stores an artifact it has not verified.
+    """
+    session = Path(p["sessionPath"])
+    notebook_id = str(p["notebookId"])
+    artifact_id = p.get("artifactId")
+    if not (isinstance(artifact_id, str) and artifact_id.strip()):
+        raise ValueError(f"artifactId is required and must be a non-empty string: {artifact_id!r}")
+    dest = Path(p["destPath"])
+    max_bytes = p.get("maxBytes")
+    if max_bytes is not None:
+        max_bytes = int(max_bytes)
+    timeout_sec = float(p.get("timeoutSec", 300))
+
+    async def _progress(stage: str, **data: Any) -> None:
+        await emit({"event": "progress", "op": None, "data": {"stage": stage, **data}})
+
+    if not str(dest).strip():
+        raise ValueError("destPath is required")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if dest.exists():
+        # Never mix a fresh download with a stale file from a previous attempt.
+        dest.unlink()
+
+    await _progress("opening_session")
+    ctx, client = await _client_with(session, min(timeout_sec, 300))
+    try:
+        await _progress("locating_artifact", artifactId=artifact_id)
+        art = await client.artifacts.get_or_none(notebook_id, artifact_id)
+        if art is None:
+            from notebooklm.exceptions import NotFoundError
+
+            raise NotFoundError(f"audio artifact not found: {artifact_id}")
+        if getattr(art, "kind", None) != "audio":
+            raise ValueError(
+                f"artifact {artifact_id} is not an audio artifact "
+                f"(kind={getattr(art, 'kind', None)!r})"
+            )
+        if not art.is_completed:
+            await _progress("artifact_not_ready", artifactId=artifact_id)
+            return {
+                "ready": False,
+                "notebookId": notebook_id,
+                "artifactId": artifact_id,
+                "artifactStatus": art.status_str,
+                "checkedAt": now_iso(),
+            }
+
+        await _progress("downloading_audio", artifactId=artifact_id)
+        await client.artifacts.download_audio(
+            notebook_id, str(dest), artifact_id=artifact_id
+        )
+        await _progress("verifying_audio", artifactId=artifact_id)
+
+        if not dest.is_file():
+            raise ValueError(f"download reported success but file is missing: {dest}")
+        size = dest.stat().st_size
+        if size == 0:
+            dest.unlink(missing_ok=True)
+            raise ValueError(f"downloaded artifact is empty: {dest}")
+        if max_bytes is not None and size > max_bytes:
+            dest.unlink(missing_ok=True)
+            raise ValueError(
+                f"downloaded artifact exceeds size limit: {size} > {max_bytes} bytes"
+            )
+        sha256 = _sha256_file(dest)
+        return {
+            "ready": True,
+            "notebookId": notebook_id,
+            "artifactId": artifact_id,
+            "path": str(dest),
+            "size": size,
+            "sha256": sha256,
+            "durationSeconds": getattr(art, "duration_seconds", None),
+            "artifactTitle": getattr(art, "title", None),
+            "artifactStatus": art.status_str,
+            "checkedAt": now_iso(),
+        }
+    finally:
+        await ctx.__aexit__(None, None, None)
+
+
 OPS = {
     "ping": op_ping,
     "validate": op_validate,
@@ -620,6 +999,9 @@ OPS = {
     "browser-import": op_browser_import,
     "job": op_job,
     "job_text": op_job_text,
+    "audio_generate": op_audio_generate,
+    "audio_status": op_audio_status,
+    "audio_download": op_audio_download,
 }
 
 
