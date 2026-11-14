@@ -258,6 +258,7 @@ export async function createJobFromUpload(
           promptVersion: prompt ? "custom" : "v1",
           language: language ?? null,
           metadata: { language: language ?? null, customer: null, category: null },
+          podcast: parsePodcastField(fields.podcast),
           preferredAccountId,
           preferredNodeId,
         },
@@ -343,6 +344,7 @@ export async function createJobFromUpload(
         title,
         inputType: "audio",
         audio: audioMeta,
+        podcast: parsePodcastField(fields.podcast),
         preferredAccountId,
         preferredNodeId,
       },
@@ -414,6 +416,45 @@ async function drainStream(stream: import("node:stream").Readable): Promise<void
     },
   });
   await pipeline(stream, sink);
+}
+
+/**
+ * NLO-P2: parse the multipart `podcast` form field. The upload form carries
+ * it as a string: "true"/"false"/"1"/"0" toggles, or a JSON object with
+ * {enabled, instructions?, language?, format?, length?}. Anything malformed
+ * is dropped to null (the job still runs as a plain audio job).
+ */
+function parsePodcastField(raw: string | undefined): Job["input"]["podcast"] {
+  if (!raw) return null;
+  const v = raw.trim();
+  if (v === "true" || v === "1") return { enabled: true };
+  if (v === "false" || v === "0") return { enabled: false };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(v);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const p = parsed as Record<string, unknown>;
+  if (typeof p.enabled !== "boolean") return null;
+  const podcast: NonNullable<Job["input"]["podcast"]> = { enabled: p.enabled };
+  if (typeof p.instructions === "string" && p.instructions.trim() !== "") {
+    podcast.instructions = p.instructions;
+  }
+  if (p.language === "en" || p.language === "fa") podcast.language = p.language;
+  if (
+    p.format === "deep_dive" ||
+    p.format === "brief" ||
+    p.format === "critique" ||
+    p.format === "debate"
+  ) {
+    podcast.format = p.format;
+  }
+  if (p.length === "short" || p.length === "default" || p.length === "long") {
+    podcast.length = p.length;
+  }
+  return podcast;
 }
 
 async function rm(file: string): Promise<void> {

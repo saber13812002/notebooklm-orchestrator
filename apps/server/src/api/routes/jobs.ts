@@ -1,8 +1,10 @@
 import { z } from "zod";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { createReadStream, statSync } from "node:fs";
 import { ApiError, ApiCodes, resolveWithin, safeName } from "@nlo/shared";
 import type { AppContext } from "../../app-context.js";
 import { dataPaths } from "../../config.js";
+import type { ArtifactRow } from "../../domain/artifacts.repo.js";
 import { createJobFromUpload, parseJobMultipart } from "../job-create.js";
 import { createJobFromText } from "../job-create-text.js";
 import "../request-augment.js";
@@ -24,6 +26,66 @@ export function registerJobRoutes(
   ctx: AppContext,
   base: string = "/api",
 ): void {
+  /** NLO-P2: artifact view — full verified metadata + the canonical download URL. */
+  const artifactView = (a: ArtifactRow) => ({
+    id: a.id,
+    filename: a.filename,
+    mediaType: a.mediaType,
+    size: a.size,
+    source: a.source,
+    durationSeconds: a.durationSeconds,
+    codec: a.codec,
+    sampleRate: a.sampleRate,
+    channels: a.channels,
+    bitrate: a.bitrate,
+    sourceArtifactId: a.sourceArtifactId,
+    sha256: a.sha256,
+    provenance: a.provenance,
+    createdAt: a.createdAt,
+    downloadUrl: `${base}/artifacts/${a.id}/download`,
+  });
+
+  /**
+   * NLO-P2: ownership check + safe streaming for artifact downloads.
+   *
+   * Ownership: an artifact whose owning job was created by an API token
+   * (token_id != null) can only be downloaded by that SAME token or an
+   * admin token. Artifacts of unowned jobs (token_id null — UI / local
+   * loopback) are served to any caller that can reach the server (the
+   * established loopback trust model).
+   *
+   * Safety: the file path is re-derived from the row's own storage_key via
+   * resolveWithin (no client-controlled path component); a missing or
+   * escaping file is a 404 that never discloses an internal path.
+   */
+  const sendArtifact = (req: FastifyRequest, reply: FastifyReply, art: ArtifactRow): void => {
+    if (art.tokenId !== null) {
+      const tok = req.apiToken ?? null;
+      const owned = tok !== null && (tok.id === art.tokenId || tok.scopes.includes("admin"));
+      if (!owned) {
+        throw new ApiError(ApiCodes.forbidden, "artifact belongs to a different owner", 403);
+      }
+    }
+    let file: string;
+    try {
+      file = resolveWithin(dataPaths(ctx.config.dataDir).jobsDir, art.jobId, art.storageKey);
+    } catch {
+      throw new ApiError(ApiCodes.notFound, "artifact file not found", 404);
+    }
+    let stat;
+    try {
+      stat = statSync(file);
+    } catch {
+      throw new ApiError(ApiCodes.notFound, "artifact file not found", 404);
+    }
+    reply.header("content-type", art.mediaType);
+    reply.header("content-length", stat.size);
+    reply.header(
+      "content-disposition",
+      `attachment; filename="${encodeURIComponent(art.filename)}"`,
+    );
+    reply.send(createReadStream(file));
+  };
   // Create a job: multipart with fields prompt, preferredAccountId,
   // preferredNodeId and an optional file part "audio".
   //
@@ -56,6 +118,7 @@ export function registerJobRoutes(
       reply.header("x-idempotent-replay", "true");
       return reply.code(200).send({ id: job.id, status: job.status });
     }
+    ctx.webhooks.publish(job.id, "job.created");
     return reply.code(201).send({ id: job.id, status: job.status });
   });
 
@@ -80,6 +143,18 @@ export function registerJobRoutes(
       .object({
         enabled: z.boolean().optional(),
         prompt: z.string().max(20_000).optional().nullable(),
+      })
+      .optional()
+      .nullable(),
+    // NLO-P2 (podcast): optional Audio Overview generation after the base
+    // notebook workflow.
+    podcast: z
+      .object({
+        enabled: z.boolean(),
+        instructions: z.string().max(20_000).optional().nullable(),
+        language: z.enum(["en", "fa"]).optional().nullable(),
+        format: z.enum(["deep_dive", "brief", "critique", "debate"]).optional().nullable(),
+        length: z.enum(["short", "default", "long"]).optional().nullable(),
       })
       .optional()
       .nullable(),
@@ -115,6 +190,7 @@ export function registerJobRoutes(
       reply.header("x-idempotent-replay", "true");
       return reply.code(200).send(payload);
     }
+    ctx.webhooks.publish(job.id, "job.created");
     return reply.code(202).send(payload);
   });
 
@@ -166,6 +242,7 @@ export function registerJobRoutes(
           }
         : null,
       provenance: job.resultProvenance ?? "unknown",
+      artifacts: ctx.artifacts.listByJob(job.id).map(artifactView),
     };
   });
 
@@ -181,49 +258,34 @@ export function registerJobRoutes(
     return ctx.jobs.attempts(job.id);
   });
 
+  // NLO-P2: the job's stored artifacts with full verified metadata.
   app.get<{ Params: { id: string } }>(`${base}/jobs/:id/artifacts`, async (req) => {
     const job = ctx.jobs.get(req.params.id);
     if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
-    const rows = (ctx.jobs as unknown as { db: { raw: import("node:sqlite").DatabaseSync } }).db.raw
-      .prepare(
-        "SELECT id, filename, media_type, size, source, storage_key, created_at FROM artifacts WHERE job_id = ? ORDER BY id",
-      )
-      .all(job.id) as Record<string, unknown>[];
-    return rows.map((r) => ({
-      id: r.id as string,
-      filename: r.filename as string,
-      mediaType: r.media_type as string,
-      size: r.size as number,
-      source: r.source as string,
-      storageKey: r.storage_key as string,
-      createdAt: r.created_at as string,
-    }));
+    return ctx.artifacts.listByJob(job.id).map(artifactView);
   });
 
   // Download a single artifact (safe: storage_key is server-assigned).
   app.get<{ Params: { id: string; artifactId: string } }>(
     `${base}/jobs/:id/artifacts/:artifactId`,
-    async (req, reply) => {
+    (req, reply) => {
       const job = ctx.jobs.get(req.params.id);
       if (!job) throw new ApiError(ApiCodes.notFound, "job not found", 404);
-      const art = (
-        ctx.jobs as unknown as { db: { raw: import("node:sqlite").DatabaseSync } }
-      ).db.raw
-        .prepare("SELECT * FROM artifacts WHERE id = ? AND job_id = ?")
-        .get(req.params.artifactId, job.id) as Record<string, unknown> | undefined;
+      const art = ctx.artifacts.listByJob(job.id).find((a) => a.id === req.params.artifactId);
       if (!art) throw new ApiError(ApiCodes.notFound, "artifact not found", 404);
+      sendArtifact(req, reply, art);
+    },
+  );
 
-      const { createReadStream, statSync } = await import("node:fs");
-      const storageKey = art.storage_key as string;
-      const file = resolveWithin(dataPaths(ctx.config.dataDir).jobsDir, job.id, storageKey);
-      const stat = statSync(file);
-      reply.header("content-type", art.media_type as string);
-      reply.header("content-length", stat.size);
-      reply.header(
-        "content-disposition",
-        `attachment; filename="${encodeURIComponent(art.filename as string)}"`,
-      );
-      return reply.send(createReadStream(file));
+  // NLO-P2: the canonical artifact download endpoint (job-agnostic).
+  // Ownership: artifacts of token-created jobs are restricted to the owning
+  // token or an admin token; unowned artifacts follow the loopback model.
+  app.get<{ Params: { artifactId: string } }>(
+    `${base}/artifacts/:artifactId/download`,
+    (req, reply) => {
+      const art = ctx.artifacts.getById(req.params.artifactId);
+      if (!art) throw new ApiError(ApiCodes.notFound, "artifact not found", 404);
+      sendArtifact(req, reply, art);
     },
   );
 
@@ -326,6 +388,7 @@ export function registerJobRoutes(
     ) {
       ctx.jobs.setStatus(job.id, "CANCELLED", { errorMessage: "cancelled by user" });
       ctx.jobs.appendEvent(job.id, "cancelled", "job cancelled");
+      ctx.webhooks.publish(job.id, "job.cancelled");
       return { ok: true, cancelled: true, status: "CANCELLED" };
     }
     throw new ApiError(ApiCodes.invalidState, "job cannot be cancelled in this state", 409);

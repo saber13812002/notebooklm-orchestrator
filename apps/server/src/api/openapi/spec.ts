@@ -155,7 +155,11 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
       { name: "proxies", description: "VLESS proxy node management + health." },
       { name: "meta", description: "Health, provider capability, settings, secrets." },
       { name: "tokens", description: "API token management (admin)." },
-      { name: "orchestrator", description: "Cross-product RAG orchestration (radio RAG + NotebookLM)." },
+      {
+        name: "orchestrator",
+        description: "Cross-product RAG orchestration (radio RAG + NotebookLM).",
+      },
+      { name: "webhooks", description: "Webhook endpoint management + delivery log (admin)." },
     ],
     security: [],
     components: {
@@ -251,7 +255,7 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
         },
         JobResult: {
           type: "object",
-          required: ["jobId", "status", "notebook", "source", "summary", "provenance"],
+          required: ["jobId", "status", "notebook", "source", "summary", "provenance", "artifacts"],
           properties: {
             jobId: { type: "string" },
             status: { type: "string" },
@@ -294,6 +298,101 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
               description:
                 "Where the result came from: a real provider run, the mock provider, or unconfirmed.",
             },
+            artifacts: {
+              type: "array",
+              description: "Stored output artifacts (podcast audio, MP3 variants).",
+              items: { $ref: "#/components/schemas/Artifact" },
+            },
+          },
+        },
+        Artifact: {
+          type: "object",
+          description:
+            "A stored artifact with metadata verified by NLO at write time (null = not reported, never guessed).",
+          required: ["id", "filename", "mediaType", "size", "source", "createdAt", "downloadUrl"],
+          properties: {
+            id: { type: "string", example: "art_0123456789abcdef" },
+            filename: { type: "string" },
+            mediaType: { type: "string", example: "audio/wav" },
+            size: { type: "integer", minimum: 0 },
+            source: { type: "string", enum: ["provider", "application"] },
+            durationSeconds: { type: ["number", "null"] },
+            codec: { type: ["string", "null"] },
+            sampleRate: { type: ["integer", "null"] },
+            channels: { type: ["integer", "null"] },
+            bitrate: { type: ["integer", "null"] },
+            sourceArtifactId: {
+              type: ["string", "null"],
+              description:
+                "For application-produced artifacts: the artifact they were derived from.",
+            },
+            sha256: {
+              type: ["string", "null"],
+              description: "SHA-256 of the stored file, when verified.",
+            },
+            provenance: { type: ["string", "null"], enum: ["real", "mock", "unknown", null] },
+            createdAt: { type: "string", format: "date-time" },
+            downloadUrl: {
+              type: "string",
+              description: "Canonical download endpoint for this artifact.",
+            },
+          },
+        },
+        WebhookEndpoint: {
+          type: "object",
+          description:
+            "A webhook delivery target. The HMAC signing secret is stored in the vault; the plaintext is returned exactly once (create/rotate).",
+          required: [
+            "id",
+            "name",
+            "url",
+            "hasSecret",
+            "events",
+            "enabled",
+            "createdAt",
+            "updatedAt",
+          ],
+          properties: {
+            id: { type: "string", example: "whk_0123456789abcdef" },
+            name: { type: "string", minLength: 1, maxLength: 64 },
+            url: { type: "string", format: "uri", description: "http(s) delivery URL." },
+            hasSecret: { type: "boolean" },
+            events: {
+              type: "array",
+              description: "Event filter; empty = all events.",
+              items: {
+                type: "string",
+                enum: [
+                  "job.created",
+                  "job.running",
+                  "job.succeeded",
+                  "job.failed",
+                  "job.cancelled",
+                  "job.needs_attention",
+                ],
+              },
+            },
+            enabled: { type: "boolean" },
+            createdAt: { type: "string", format: "date-time" },
+            updatedAt: { type: "string", format: "date-time" },
+          },
+        },
+        WebhookDelivery: {
+          type: "object",
+          description: "One outbox delivery. The log never exposes payloads or signing secrets.",
+          required: ["id", "eventType", "status", "attempts", "createdAt"],
+          properties: {
+            id: { type: "string", example: "dlv_0123456789abcdef" },
+            jobId: { type: ["string", "null"] },
+            eventType: { type: "string", example: "job.succeeded" },
+            status: { type: "string", enum: ["pending", "delivered", "dead"] },
+            attempts: { type: "integer", minimum: 0 },
+            lastStatus: { type: ["integer", "null"] },
+            lastError: { type: ["string", "null"] },
+            createdAt: { type: "string", format: "date-time" },
+            lastAttemptAt: { type: ["string", "null"], format: "date-time" },
+            deliveredAt: { type: ["string", "null"], format: "date-time" },
+            deadAt: { type: ["string", "null"], format: "date-time" },
           },
         },
         OrchestratorAskRequest: {
@@ -323,18 +422,29 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
         },
         OrchestratorAskResponse: {
           type: "object",
-          required: ["question", "answer", "selected_variant", "trace_id", "collection", "sources", "notebooklm", "timings"],
+          required: [
+            "question",
+            "answer",
+            "selected_variant",
+            "trace_id",
+            "collection",
+            "sources",
+            "notebooklm",
+            "timings",
+          ],
           properties: {
             question: { type: "string" },
             answer: { type: "string" },
             selected_variant: { type: "string", enum: ["06b", "4b", "rrf"] },
             trace_id: {
               type: ["string", "null"],
-              description: "Real trace id from the radio RAG API (uuid4 hex); null when the API did not report one.",
+              description:
+                "Real trace id from the radio RAG API (uuid4 hex); null when the API did not report one.",
             },
             collection: {
               type: ["string", "null"],
-              description: "Real collection value from the radio RAG API; null when no citation reported one.",
+              description:
+                "Real collection value from the radio RAG API; null when no citation reported one.",
             },
             sources: {
               type: "array",
@@ -534,20 +644,25 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
         post: {
           tags: ["orchestrator"],
           ...bearerParams(),
-          summary: "Radio-ma'arif RAG orchestrator: one question -> RAG answer + NotebookLM consolidation.",
+          summary:
+            "Radio-ma'arif RAG orchestrator: one question -> RAG answer + NotebookLM consolidation.",
           description:
-            "Calls the radio RAG v1 API (POST /api/v1/chat/completions, variant from the body) and returns the answer with the real 12-field contract values (trace_id, collection, rrf_score, ranked cited sources). When notebooklm.enabled (default true), the Q&A transcript is also stored as a real text-to-notebook job on this server and polled until a terminal state or NLO_ORCH_NLO_TIMEOUT_MS; a timeout does not fail the request — the notebooklm section then carries the job id, current status and timedOut=true. Errors: 503 runtime_not_configured when NLO_RADIO_TOKEN is not set; 502 provider_unavailable when the radio RAG API is unreachable or errors (details.stage=\"radio\").",
+            'Calls the radio RAG v1 API (POST /api/v1/chat/completions, variant from the body) and returns the answer with the real 12-field contract values (trace_id, collection, rrf_score, ranked cited sources). When notebooklm.enabled (default true), the Q&A transcript is also stored as a real text-to-notebook job on this server and polled until a terminal state or NLO_ORCH_NLO_TIMEOUT_MS; a timeout does not fail the request — the notebooklm section then carries the job id, current status and timedOut=true. Errors: 503 runtime_not_configured when NLO_RADIO_TOKEN is not set; 502 provider_unavailable when the radio RAG API is unreachable or errors (details.stage="radio").',
           requestBody: {
             required: true,
             content: {
-              "application/json": { schema: { $ref: "#/components/schemas/OrchestratorAskRequest" } },
+              "application/json": {
+                schema: { $ref: "#/components/schemas/OrchestratorAskRequest" },
+              },
             },
           },
           responses: {
             "200": {
               description: "Consolidated answer (radio RAG + optional NotebookLM job).",
               content: {
-                "application/json": { schema: { $ref: "#/components/schemas/OrchestratorAskResponse" } },
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/OrchestratorAskResponse" },
+                },
               },
             },
             "400": errorResponse("validation"),
@@ -636,6 +751,27 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
                 "application/octet-stream": { schema: { type: "string", format: "binary" } },
               },
             },
+            "404": errorResponse("not_found"),
+          },
+        },
+      },
+      "/artifacts/{artifactId}/download": {
+        get: {
+          tags: ["jobs"],
+          ...bearerParams(),
+          summary:
+            "Download a stored artifact (canonical endpoint). Token-owned artifacts require the owning token or an admin token (403 otherwise).",
+          parameters: [idParam("artifactId")],
+          responses: {
+            "200": {
+              description:
+                "File bytes with content-type, content-length and an attachment content-disposition.",
+              content: {
+                "application/octet-stream": { schema: { type: "string", format: "binary" } },
+              },
+            },
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
             "404": errorResponse("not_found"),
           },
         },
@@ -1113,6 +1249,173 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
             },
             "401": errorResponse("unauthorized"),
             "403": errorResponse("forbidden"),
+          },
+        },
+      },
+      // ---------------- webhooks (admin) ----------------
+      "/webhooks": {
+        get: {
+          tags: ["webhooks"],
+          ...bearerParams(),
+          summary: "List webhook endpoints (admin).",
+          responses: {
+            "200": {
+              description: "Endpoints (never include the secret value).",
+              content: jsonContent(listEnvelope({ $ref: "#/components/schemas/WebhookEndpoint" })),
+            },
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
+          },
+        },
+        post: {
+          tags: ["webhooks"],
+          ...bearerParams(),
+          summary:
+            "Create a webhook endpoint (admin). The signing secret is returned exactly once.",
+          requestBody: {
+            required: true,
+            content: jsonContent({
+              type: "object",
+              required: ["name", "url"],
+              properties: {
+                name: { type: "string", minLength: 1, maxLength: 64 },
+                url: { type: "string", format: "uri" },
+                secret: {
+                  type: "string",
+                  minLength: 16,
+                  maxLength: 128,
+                  description: "HMAC-SHA256 secret; generated when omitted.",
+                },
+                events: { type: "array", items: { type: "string" } },
+              },
+            }),
+          },
+          responses: {
+            "201": {
+              description: "Created endpoint, with the one-time `secret` field.",
+              content: jsonContent({
+                type: "object",
+                required: [
+                  "id",
+                  "name",
+                  "url",
+                  "hasSecret",
+                  "events",
+                  "enabled",
+                  "createdAt",
+                  "updatedAt",
+                ],
+                properties: {
+                  id: { type: "string" },
+                  name: { type: "string" },
+                  url: { type: "string" },
+                  hasSecret: { type: "boolean" },
+                  events: { type: "array", items: { type: "string" } },
+                  enabled: { type: "boolean" },
+                  secret: { type: "string", description: "One-time plaintext signing secret." },
+                  createdAt: { type: "string", format: "date-time" },
+                  updatedAt: { type: "string", format: "date-time" },
+                },
+              }),
+            },
+            "400": errorResponse("validation"),
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
+            "409": errorResponse("conflict"),
+          },
+        },
+      },
+      "/webhooks/{id}": {
+        get: {
+          tags: ["webhooks"],
+          ...bearerParams(),
+          summary: "Get one webhook endpoint (admin).",
+          parameters: [idParam()],
+          responses: {
+            "200": {
+              description: "The endpoint.",
+              content: jsonContent({ $ref: "#/components/schemas/WebhookEndpoint" }),
+            },
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
+            "404": errorResponse("not_found"),
+          },
+        },
+        patch: {
+          tags: ["webhooks"],
+          ...bearerParams(),
+          summary:
+            "Update a webhook endpoint (admin). Supplying `secret` rotates it (returned once).",
+          parameters: [idParam()],
+          requestBody: {
+            required: true,
+            content: jsonContent({
+              type: "object",
+              properties: {
+                name: { type: "string", minLength: 1, maxLength: 64 },
+                url: { type: "string", format: "uri" },
+                secret: { type: "string", minLength: 16, maxLength: 128 },
+                events: { type: "array", items: { type: "string" } },
+                enabled: { type: "boolean" },
+              },
+            }),
+          },
+          responses: {
+            "200": jsonResponse("Updated endpoint (secret included only when rotated)."),
+            "400": errorResponse("validation"),
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
+            "404": errorResponse("not_found"),
+          },
+        },
+        delete: {
+          tags: ["webhooks"],
+          ...bearerParams(),
+          summary: "Delete a webhook endpoint (admin; also removes its vault secret).",
+          parameters: [idParam()],
+          responses: {
+            "204": { description: "Deleted." },
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
+            "404": errorResponse("not_found"),
+          },
+        },
+      },
+      "/webhooks/{id}/deliveries": {
+        get: {
+          tags: ["webhooks"],
+          ...bearerParams(),
+          summary: "Delivery log for an endpoint (admin; no payloads, no secrets).",
+          parameters: [idParam()],
+          responses: {
+            "200": {
+              description: "Newest-first delivery rows.",
+              content: jsonContent(listEnvelope({ $ref: "#/components/schemas/WebhookDelivery" })),
+            },
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
+            "404": errorResponse("not_found"),
+          },
+        },
+      },
+      "/webhooks/{id}/test": {
+        post: {
+          tags: ["webhooks"],
+          ...bearerParams(),
+          summary: "Enqueue a manual test delivery (admin).",
+          parameters: [idParam()],
+          responses: {
+            "202": {
+              description: "Queued.",
+              content: jsonContent({
+                type: "object",
+                required: ["ok", "deliveryId"],
+                properties: { ok: { type: "boolean" }, deliveryId: { type: "string" } },
+              }),
+            },
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
+            "404": errorResponse("not_found"),
           },
         },
       },

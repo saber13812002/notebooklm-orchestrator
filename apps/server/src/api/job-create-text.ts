@@ -30,6 +30,14 @@ export interface CreateJobFromTextBody {
     category?: string | null;
   } | null;
   summary?: { enabled?: boolean; prompt?: string | null } | null;
+  /** NLO-P2 (podcast): optional Audio Overview generation after the notebook workflow. */
+  podcast?: {
+    enabled: boolean;
+    instructions?: string | null;
+    language?: "en" | "fa" | null;
+    format?: "deep_dive" | "brief" | "critique" | "debate" | null;
+    length?: "short" | "default" | "long" | null;
+  } | null;
 }
 
 export async function createJobFromText(
@@ -100,6 +108,7 @@ export async function createJobFromText(
         customer: body.metadata?.customer?.trim() || null,
         category: body.metadata?.category?.trim() || null,
       },
+      podcast: body.podcast ?? null,
       preferredAccountId: null,
       preferredNodeId: null,
     },
