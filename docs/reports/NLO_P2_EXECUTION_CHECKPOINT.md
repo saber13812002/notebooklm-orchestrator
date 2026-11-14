@@ -74,16 +74,92 @@ Not done (explicit — do NOT claim otherwise):
   UNIT-VERIFIED).
 - Production host: s52 decommissioned; `172.30.0.133` redeployment
   pending (Phase G addendum) — no production change made in this mission.
-- No push to GitHub/GitLab (awaiting user approval).
+- No live acceptance claim anywhere for NLO-P2 (Gate E still BLOCKED).
 
-## 4. Next actions (require user decision)
+## 4. Deployment (2026-11-14 — user-approved, executed)
+
+User order (2026-11-14): bring the new version up locally and on the
+production server. Push had already been performed by the user from the IDE
+mid-mission (`git ls-remote origin main` → `278273a2e9f8fabb137d6ecdb3a51c1745dd8352`
+= local `main`), so the deploy path found `origin/main` already at the target.
+
+### 4.1 Local (workstation)
+
+Both instances run the current tree (`278273a`) as background terminals:
+`set NLO_PORT=4870&& npx tsx apps/server/src/main.ts` and the same with
+`NLO_PORT=4871` (shared `data/`, the documented dev convention).
+
+Verified per instance (curl, 2026-11-14 ~11:33–11:36Z):
+
+- `/api/health` → `{"ok":true,"service":"notebooklm-orchestrator",…}`
+- `/api/health/ready` → `{"ok":true,"ready":true,"provider":{"name":"python-worker","configured":true,"issues":[]},"proxyRuntime":{"state":"available","name":"xray"},"liveDisabled":true}`
+- `GET /` (web UI) → `HTTP/1.1 200 OK` (490 B index, `text/html`)
+- `GET /api/openapi.json` → `HTTP/1.1 200 OK` (91 766 B, `application/json`)
+- `GET /api/v1/webhooks` → `200` `{"items":[],"total":0}` — NLO-P2 webhook
+  admin route is live on both instances
+- Boot log shows the NLO-P2 dispatcher: `[nlo] webhooks: dispatcher started
+(interval=5000ms, allowLoopback=false, allowlist=0 entries)`
+- Readiness probe worker cycle: spawn → ping ok → clean shutdown, `pending=0`
+
+### 4.2 Production server (172.30.0.133, host `AI-TOOLS`)
+
+Deployed via `bash deploy/deploy.sh origin/main` over SSH (git-based path,
+per `docs/deployment/s52-deploy.md`). Result: **DEPLOY SUCCESS: `278273a`**.
+
+Evidence (from the deploy run + post-deploy checks):
+
+- Previous good: `8abf18a` (rollback:
+  `ROLLBACK=1 bash deploy/deploy.sh 8abf18aea5ff2356f37f1eee779cd35c531b29a9`)
+- Working tree clean; DB + env backed up to `data/backups/`
+  (`nlo-20261114T114000Z-278273a.sqlite` 233 472 B,
+  `env-20261114T114000Z-278273a.env`)
+- `git checkout 8abf18a -> 278273a`; dependencies unchanged in
+  `8abf18a..278273a` → `npm ci` / venv sync correctly skipped
+- `sudo systemctl restart nlo` → service **active**; `data/deployed-commit`
+  now records `278273a`
+- Post-restart: `/api/health` `{"ok":true,…}`; `/api/health/ready`
+  `{"ok":true,"ready":true,"provider":{"name":"python-worker",…},"proxyRuntime":{"state":"available","name":"xray"},"liveDisabled":true}`;
+  port `4870` listening (loopback bind — external reach requires the
+  documented SSH port-forward, no proxy in front)
+- **Migration 0006 applied at boot**: `schema_migrations` rows
+  `1..5` pre-existing, `6` → `2026-11-14T11:40:01.243Z`; tables
+  `webhook_endpoints` + `webhook_deliveries` present in the production DB
+- Journal: `[nlo] listening on http://127.0.0.1:4870`,
+  `[nlo] webhooks: dispatcher started (interval=5000ms, allowLoopback=false, allowlist=0 entries)`
+- Server-side regression suite (run by deploy.sh): **285/286** — one flaky
+  failure in `test/webhooks.test.ts` (HMAC delivery tick, timing-dependent).
+  Re-run in isolation on the server: **16/16 pass**; re-run in isolation
+  locally: **16/16 pass**. Not a regression.
+- Journal warning: one Python worker `SIGABRT`
+  (`_enter_buffered_busy … at interpreter shutdown, possibly due to daemon
+threads`) during the first readiness-probe close cycle at 11:40:06;
+  the next cycle (11:40:48) exited `code=0 signal=none pending=0`. Known
+  CPython shutdown artifact on the probe's close path, `pending=0`, service
+  healthy. Noted for the worker hardening follow-up, not a deploy blocker.
+- `liveDisabled: true` on the server: the new code is DEPLOYED, not
+  live-verified. No NLO-P2 `LIVE-VERIFIED` claim is made.
+
+### 4.3 Honest status after deployment
+
+- **Local 4870 + 4871**: running `278273a`, verified (unit/integration
+  level + HTTP smoke).
+- **Production 172.30.0.133:4870**: running `278273a`, verified
+  (health/ready/migration/service/regression as above).
+- **Gate E (live acceptance) remains BLOCKED** — deploying the code does
+  not make the pipeline live-verified. FFmpeg is still not installed
+  locally; the transcode adapter reports `not_configured` honestly.
+
+## 5. Next actions (require user decision)
 
 1. Live acceptance run (Gate E) in the user's live environment —
-   runbook: `docs/testing/AUDIO_LIVE_ACCEPTANCE.md`.
+   runbook: `docs/testing/AUDIO_LIVE_ACCEPTANCE.md` (now possible against
+   the production host if a live session + proxy are configured there).
 2. FFmpeg install decision + live transcode smoke (runbook:
    `docs/operations/FFMPEG_RUNBOOK.md`).
-3. Push approval (GitHub, then mirrored GitLab per dual-repo policy).
-4. Production redeployment on `172.30.0.133` (Phase G addendum).
+3. Mirror to GitLab per dual-repo policy (one-way GitHub → GitLab).
+4. Optional hardening: CPython worker SIGABRT on shutdown (daemon-thread
+   stdin lock) — reproducible on the probe close path; track as follow-up.
 
-Until then the mission stands at
-**IMPLEMENTATION_COMPLETE_LIVE_ACCEPTANCE_BLOCKED** and stops here.
+Until Gate E passes, the mission stands at
+**IMPLEMENTATION_COMPLETE_LIVE_ACCEPTANCE_BLOCKED** (now: deployed to local +
+production, live acceptance pending).

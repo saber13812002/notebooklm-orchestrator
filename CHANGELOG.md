@@ -62,6 +62,29 @@ only with a recorded live run; otherwise "planned".
   `MOCK_PROVIDER_INTEGRATION_VERIFIED`; negative control exit 1
   (`FAILED proxy`, fail-closed egress).
 
+### Deployed (2026-11-14, user-approved — local + production)
+
+- **Local**: `278273a` running on `127.0.0.1:4870` and `127.0.0.1:4871`
+  (shared `data/`); verified: `/api/health` + `/api/health/ready`
+  `ready:true` (python-worker + xray), web UI `200`, OpenAPI `200`
+  (91 766 B), `GET /api/v1/webhooks` → `200 {"items":[],"total":0}`
+  (NLO-P2 webhook admin route live).
+- **Production `172.30.0.133` (host `AI-TOOLS`)**: `deploy.sh origin/main`
+  → **DEPLOY SUCCESS `278273a`** (previous good `8abf18a`; DB + env
+  backed to `data/backups/`; deps unchanged → install steps skipped;
+  service active; `data/deployed-commit` = `278273a`; migration `0006`
+  applied at boot `2026-11-14T11:40:01Z`, tables `webhook_endpoints` +
+  `webhook_deliveries` present; `/api/health` + `/api/health/ready`
+  green; port 4870 loopback-only per security invariant).
+- Server regression suite during deploy: **285/286** — one timing-flaky
+  `webhooks.test.ts` case (HMAC tick), passes in isolation on server and
+  local (16/16 each); not a regression.
+- Journal note: one Python worker `SIGABRT` on the first readiness-probe
+  close (CPython `_enter_buffered_busy`, `pending=0`); next cycle
+  `code=0`; tracked as a hardening follow-up.
+- **Still NOT live-verified**: deploying the code ≠ live acceptance;
+  `liveDisabled: true` on the server; Gate E remains BLOCKED.
+
 ### Notes
 
 - **Live NOT verified**: no Google session / verified egress route / FFmpeg
@@ -70,7 +93,10 @@ only with a recorded live run; otherwise "planned".
   `docs/reports/LIVE_AUDIO_ACCEPTANCE_<date>.md`.
 - Backups: full git bundle `data/backups/nlo-p2-resume.bundle` (SHA-256
   `920b90e8473dede3ad7aa80af381c23d8a423ee6aaebc37d2ae92408b3eac543`) taken
-  before the first code change. No push (awaiting user approval).
+  before the first code change. Push to `origin/main` was performed by the
+  user from the IDE during the mission (verified `278273a`); deployment on
+  2026-11-14 (see `### Deployed` above and
+  `docs/reports/NLO_P2_EXECUTION_CHECKPOINT.md` §4).
 
 ## [2026-11-10] — Mission NLO-MASTER-2026-11, Phase 3 (unified text/audio workflow): 3.1 document sources + 3.3 audio title fallback — **IMPLEMENTED + UNIT TESTED** (Live NOT verified)
 
