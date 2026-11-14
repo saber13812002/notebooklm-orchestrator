@@ -21,7 +21,9 @@
 - شروع سریع (نصب + mock + حالت زنده + Docker): [`docs/development/quick-start.md`](docs/development/quick-start.md)
 - معماری: [`docs/architecture/overview.md`](docs/architecture/overview.md)،
   [`proxy-design.md`](docs/architecture/proxy-design.md)،
-  [`provider-evaluation.md`](docs/architecture/provider-evaluation.md)
+  [`provider-evaluation.md`](docs/architecture/provider-evaluation.md)،
+  [`AUDIO_PIPELINE_ARCHITECTURE.md`](docs/architecture/AUDIO_PIPELINE_ARCHITECTURE.md)
+  (پیپ‌لاین صوتی NLO-P2: پادکست + artifacts + webhooks)
 - استقرار: [`docs/deployment/s52-deploy.md`](docs/deployment/s52-deploy.md)
 - امنیت (threat model): [`docs/security/threat-model.md`](docs/security/threat-model.md)
 - برنامه توسعه: [`docs/development/plan.md`](docs/development/plan.md)
@@ -32,7 +34,11 @@
   [`PHASE_C_LIVE_ACCEPTANCE.md`](docs/reports/PHASE_C_LIVE_ACCEPTANCE.md)
   (پذیرش زنده‌ی فاز C: استقرار `b5e9ad3` روی s52 در ۲۰۲۶-۱۰-۲۸T13:43Z؛
   OpenAPI/Swagger + auth + idempotency + نمونه‌های cURL/TS/Python تأیید شدند؛
-  **شغل زنده‌ی NotebookLM انجام نشد** — دروازه‌ی region خروجی، گزارش §8.2/F7)
+  **شغل زنده‌ی NotebookLM انجام نشد** — دروازه‌ی region خروجی، گزارش §8.2/F7) و
+  [`PHASE_NLO_P2_IMPLEMENTATION.md`](docs/reports/PHASE_NLO_P2_IMPLEMENTATION.md)
+  (پیپ‌لاین صوتی NLO-P2: متن/فایل → پادکست واقعی → اعتبارسنجی → MP3 → دانلود →
+  webhook؛ **implemented + integration-tested**؛ زنده: **NOT TESTED** —
+  دروازه‌ی Gate E بازم است)
 - مستندات مشتری (Wiki): [`docs/wiki/`](docs/wiki/)
 - مستندات API (OpenAPI/Swagger/`/api/v1`/Token Auth):
   [`docs/api/README.md`](docs/api/README.md) — spec روی `/api/openapi.json`،
@@ -119,6 +125,9 @@ Swagger UI: `http://127.0.0.1:4871/api/docs` · OpenAPI:
 | `NLO_VAULT_KEY`                | —                          | کلید vault (hex 64 کاراکتر)؛ در نبودش فایل `0600` ساخته می‌شود                          |
 | `NLO_MAX_UPLOAD_BYTES`         | `209715200`                | سقف حجم آپلود صوت                                                                       |
 | `NLO_ALLOWED_AUDIO_EXTENSIONS` | `wav,mp3,m4a,ogg,flac`     | whitelist پسوند                                                                         |
+| `NLO_FFMPEG_BIN`               | —                          | اختیاری: مسیر باینری ffmpeg برای transcode پادکست به MP3 (در نبود آن غیرفعال می‌ماند)   |
+| `NLO_MP3_TARGET_KBPS`          | `56`                       | بیت‌ریت هدف MP3 (کامل‌شده به بازه‌ی 8..320)                                             |
+| `NLO_WEBHOOK_ALLOWLIST`        | —                          | پیش‌پیشوند URLهای مجاز برای egress webhook (fail-closed؛ خالی = هیچ URLی مجاز نیست)     |
 | `NLO_LIVE_TESTS`               | `0`                        | درگه تست‌های زنده (فقط توسعه)                                                           |
 | `NLO_ALLOW_DIRECT_EGRESS`      | `0`                        | **فقط توسعه**: رفع fail-closed — در عملیات نگه‌دارید                                    |
 | `NLO_API_AUTH`                 | `0`                        | `1` = اجبار توکن برای روت‌های غیرمعاف `/api/v1` (پیش‌فرض: اختیاری)                      |
@@ -188,37 +197,41 @@ Envelope خطای یکنواخت: `{"error":{"code","message","details?"}}` (ک�
 
 مستندات کامل + مثال‌های cURL/TypeScript/Python: [`docs/api/README.md`](docs/api/README.md).
 
-| گروه    | روت‌ها                                                                                                                                                                                                                                                                                                                                                                                           |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Job     | `POST /api/jobs` (multipart: `prompt`, `title?`, `preferredAccountId?`, `preferredNodeId?` + فایل `audio`) → `201 {id, status}`؛ `GET /api/jobs` (فیلتر+pagination)؛ `GET /api/jobs/:id`؛ `…/events`؛ `…/attempts`؛ `…/artifacts`؛ `GET /api/jobs/:id/artifacts/:artifactId` (دانلود)؛ `GET /api/jobs/:id/audio` / `…/audio/download`؛ `POST /api/jobs/:id/cancel`؛ `POST /api/jobs/:id/requeue` |
-| Account | `POST /api/accounts`، `GET /api/accounts`، `GET /api/accounts/:id`، `POST /api/accounts/:id/health` + روت‌های session                                                                                                                                                                                                                                                                            |
-| Proxy   | `POST /api/proxies` (URI VLESS)، `POST /api/proxies/manual`، `GET /api/proxies`، `POST /api/proxies/ping-all`، `GET /api/proxies/runtime`                                                                                                                                                                                                                                                        |
-| دیگه    | `GET/PUT /api/settings`، `GET /api/secrets` (redacted)، `GET /api/provider`، `GET /api/health`، `GET /api/health/ready`، `POST /api/health/account`، `POST /api/health/egress`                                                                                                                                                                                                                   |
+| گروه     | روت‌ها                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Job      | `POST /api/jobs` (multipart: `prompt`, `title?`, `preferredAccountId?`, `preferredNodeId?` + فایل `audio`) → `201 {id, status}`؛ `GET /api/jobs` (فیلتر+pagination)؛ `GET /api/jobs/:id`؛ `…/events`؛ `…/attempts`؛ `…/artifacts`؛ `GET /api/jobs/:id/artifacts/:artifactId` (دانلود)؛ `GET /api/artifacts/:artifactId/download` (دانلود artifact)؛ `GET /api/jobs/:id/audio` / `…/audio/download`؛ `POST /api/jobs/:id/cancel`؛ `POST /api/jobs/:id/requeue` |
+| Account  | `POST /api/accounts`، `GET /api/accounts`، `GET /api/accounts/:id`، `POST /api/accounts/:id/health` + روت‌های session                                                                                                                                                                                                                                                                                                                                         |
+| Proxy    | `POST /api/proxies` (URI VLESS)، `POST /api/proxies/manual`، `GET /api/proxies`، `POST /api/proxies/ping-all`، `GET /api/proxies/runtime`                                                                                                                                                                                                                                                                                                                     |
+| Webhooks | `POST /api/v1/webhooks` (ایجاد؛ secret یک‌بار برگردانده می‌شود)، `GET /api/v1/webhooks`، `GET/PATCH/DELETE /api/v1/webhooks/:id`، `GET /api/v1/webhooks/:id/deliveries`، `POST /api/v1/webhooks/:id/test` (admin) — outbox + HMAC + egressِ fail-closed                                                                                                                                                                                                       |
+| دیگه     | `GET/PUT /api/settings`، `GET /api/secrets` (redacted)، `GET /api/provider`، `GET /api/health`، `GET /api/health/ready`، `POST /api/health/account`، `POST /api/health/egress`                                                                                                                                                                                                                                                                                |
 
 عملیات طولانی **async** هستند: ایجاد job شناسه‌ی قابل‌پیگیری `j_<hex32>`
-می‌دهد و وضعیت/رودیدار/خروجی‌ها از API قابل‌دسترسی‌اند. Webhook: **planned**
-(Phase G). مدل اعتماد پیش‌فرض هنوز loopback است؛ برای مصرف‌کننده‌های بیرونی،
-Token Auth روی `/api/v1` (اختیاری یا اجباری) از فاز C موجود است.
+می‌دهد و وضعیت/رودیدار/خروجی‌ها از API قابل‌دسترسی‌اند. Webhook:
+**implemented + tested** (NLO-P2 — outbox، امضای HMAC، egressِ fail-closed؛
+تحویل زنده‌ی خارجی: NOT TESTED). مدل اعتماد پیش‌فرض هنوز loopback است؛
+برای مصرف‌کننده‌های بیرونی، Token Auth روی `/api/v1` (اختیاری یا اجباری)
+از فاز C موجود است.
 
 ## وضعیت واقعی قابلیت‌ها (صادقانه)
 
-| قابلیت                                                            | وضعیت                                                                                                                      |
-| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Job audio + prompt → پاسخ (provider واقعی)                        | implemented + **live-verified**                                                                                            |
-| Mock provider (توسعه آفلاین)                                      | implemented + tested                                                                                                       |
-| مدیریت حساب گوگل (cookie/storage-state)                           | implemented + live-verified                                                                                                |
-| Nودهای VLESS + پروکسی Xray + fail-closed egress                   | implemented + live-verified (egress guard: unit-tested)                                                                    |
-| آرشیو job (manifest/timeline/artifacts) + دانلود                  | implemented + tested                                                                                                       |
-| Docker (اجرای محلی)                                               | implemented (image self-contained)                                                                                         |
-| استقرار git-based + rollback                                      | implemented + verified on s52 (۲۰۲۶-۱۰-۲۸)؛ هاست قدیمی — استقرار مجدد روی هاست جدید در فاز G                               |
-| OpenAPI / Swagger / `/api/v1`                                     | implemented + tested + production-smoke-verified (Phase C؛ spec↔live drift-checked؛ پذیرش زنده ۲۰۲۶-۱۰-۲۸ روی s52)         |
-| Token Auth برای مصرف‌کنندگان بیرونی (scopes + rate limit + audit) | implemented + tested + verified on deployed code (Phase C؛ optional/enforced؛ حالت اجباری روی نسخه‌ی استقرارشده آزمایش شد) |
-| First-admin bootstrap (CLI آفلاین، بدون endpoint عمومی)           | implemented + tested (Phase 2؛ فعال‌سازی اجباری auth روی s52 هنوز انجام نشده — مقرر در Phase بعد)                          |
-| Idempotency-Key / Correlation IDs                                 | implemented + tested + verified on deployed code (Phase C)                                                                 |
-| Webhooks                                                          | **planned** (Phase G)                                                                                                      |
-| انتشار API به بیرون (`nlo.ai.ismc.ir` + TLS)                      | **planned** (Phase F؛ DNS A record وجود دارد، مسیر proxy نه)                                                               |
-| انتشار مستندات در Wiki.js                                         | **in progress** (محتوای Markdown در `docs/wiki/`)                                                                          |
-| Google Drive / DOCX / خروجی‌های Studio / Download Manager         | **planned** (Phase G)                                                                                                      |
+| قابلیت                                                                                 | وضعیت                                                                                                                      |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Job audio + prompt → پاسخ (provider واقعی)                                             | implemented + **live-verified**                                                                                            |
+| Pipeline پادکست: متن/فایل → پادکست واقعی → artifact → MP3 (اختیاری) → دانلود → webhook | implemented + **integration-tested** (NLO-P2؛ matrix 19 سناریوی fault) — پذیرش زنده **BLOCKED** (Gate E)                   |
+| Mock provider (توسعه آفلاین)                                                           | implemented + tested                                                                                                       |
+| مدیریت حساب گوگل (cookie/storage-state)                                                | implemented + live-verified                                                                                                |
+| Nودهای VLESS + پروکسی Xray + fail-closed egress                                        | implemented + live-verified (egress guard: unit-tested)                                                                    |
+| آرشیو job (manifest/timeline/artifacts) + دانلود                                       | implemented + tested                                                                                                       |
+| Docker (اجرای محلی)                                                                    | implemented (image self-contained)                                                                                         |
+| استقرار git-based + rollback                                                           | implemented + verified on s52 (۲۰۲۶-۱۰-۲۸)؛ هاست قدیمی — استقرار مجدد روی هاست جدید در فاز G                               |
+| OpenAPI / Swagger / `/api/v1`                                                          | implemented + tested + production-smoke-verified (Phase C؛ spec↔live drift-checked؛ پذیرش زنده ۲۰۲۶-۱۰-۲۸ روی s52)         |
+| Token Auth برای مصرف‌کنندگان بیرونی (scopes + rate limit + audit)                      | implemented + tested + verified on deployed code (Phase C؛ optional/enforced؛ حالت اجباری روی نسخه‌ی استقرارشده آزمایش شد) |
+| First-admin bootstrap (CLI آفلاین، بدون endpoint عمومی)                                | implemented + tested (Phase 2؛ فعال‌سازی اجباری auth روی s52 هنوز انجام نشده — مقرر در Phase بعد)                          |
+| Idempotency-Key / Correlation IDs                                                      | implemented + tested + verified on deployed code (Phase C)                                                                 |
+| Webhooks (outbox + امضای HMAC + API مدیریت)                                            | implemented + tested (NLO-P2) — تحویل زنده‌ی خارجی: **NOT TESTED**                                                         |
+| انتشار API به بیرون (`nlo.ai.ismc.ir` + TLS)                                           | **planned** (Phase F؛ DNS A record وجود دارد، مسیر proxy نه)                                                               |
+| انتشار مستندات در Wiki.js                                                              | **in progress** (محتوای Markdown در `docs/wiki/`)                                                                          |
+| Google Drive / DOCX / خروجی‌های Studio / Download Manager                              | **planned** (Phase G)                                                                                                      |
 
 محدودیت‌های شناخته‌شده و وضعیت دقیق پیاده‌سازی:
 [`docs/architecture/provider-evaluation.md`](docs/architecture/provider-evaluation.md) (بخش ۵).

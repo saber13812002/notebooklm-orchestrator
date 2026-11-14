@@ -8,6 +8,70 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-14] — Mission NLO-P2-RESUME: REAL AUDIO PIPELINE (text/file → podcast) — **IMPLEMENTED + INTEGRATION TESTED** (Live NOT verified)
+
+### Added
+
+- **Python worker audio ops** (`generate_audio`, `audio_status`,
+  `download_audio`) in the existing `nbl_worker.py` JSON-line protocol — no
+  new worker process (29 worker tests).
+- **TS provider adapter audio ops** (`generateAudio`, `getAudioStatus`,
+  `downloadAudio`) with capability matrix, error-code mapping, and ambiguity
+  classification (30 provider tests).
+- **Audio lifecycle in the EXISTING job engine**: stages
+  `audio_generation` → `artifact_download` → `artifact_store` →
+  `mp3_transcode`; resume-never-resubmit (the external task id is persisted
+  before polling; a restart re-polls the same task — event
+  `podcast_resume_kept`); abort + deadline semantics in the poll loop.
+- **Artifact model + storage hardening** (migration
+  `0006_audio_artifacts.sql`): audio metadata columns (duration/codec/
+  sample-rate/channels/bitrate, sha256, provenance, source_artifact_id —
+  NULL = "producer did not report it"), `job_stages` audit table; audio
+  signature sniffing + WAV header parse; 0-byte / oversize (default 200 MiB)
+  gates; safe temp → final naming inside the job output dir.
+- **Secure artifact download API**: `GET /api(/v1)/artifacts/:artifactId/download`
+  (ownership-scoped, ETag = sha256, Content-Disposition from the stored
+  filename).
+- **Optional MP3 transcode** (`NLO_FFMPEG_BIN`, `NLO_MP3_TARGET_KBPS`,
+  default 56, clamped 8..320): never fatal — `not_configured` / `failed` is
+  reported honestly in the result metadata + events; the original WAV always
+  stays canonical.
+- **Webhook delivery infrastructure** (independent of Telegram/Bale): outbox
+  design, fail-closed SSRF allowlist, HMAC-SHA256 signing
+  (`x-nlo-signature: t=…,v1=…`), exponential backoff (2 s ×2, cap 5 min),
+  dead-lettering after 8 attempts, admin API (`/webhooks` CRUD +
+  `:id/deliveries` + `:id/test`) on both `/api` and `/api/v1` (v1 admin-scoped);
+  OpenAPI spec + the bidirectional spec↔route drift test updated.
+- **E2E scenario `text-to-podcast`** in `nlo-e2e.ts` (exit codes 0/1/2/3;
+  mock results capped at `MOCK_PROVIDER_INTEGRATION_VERIFIED` by the shared
+  e2e contract) + local test environment suite (2/2, incl. the fail-closed
+  negative control).
+- **Fault-injection / recovery matrix**: 19 scenarios FI-01…FI-19, each
+  asserting the recorded terminal state, stage rows, and event ledger (19/19).
+- **Documentation**: 3 architecture + 4 testing + 4 operations docs and the
+  reports `PHASE_NLO_P2_{IMPLEMENTATION,TEST_RESULTS,BLOCKERS}.md`.
+
+### Verified
+
+- `apps/server` **286/286** (24 files); `packages/shared` **110/110**
+  (11 files); `apps/web` **30/30** (4 files) — fresh run 2026-11-14
+  (Node v24.14.0, Windows, no FFmpeg).
+- `typecheck`, `lint`, `build` clean; `format:check` flags only 7
+  pre-existing files (verified not in this change set).
+- Gate D (local E2E at the mock boundary): scenario exit 0 with verdict
+  `MOCK_PROVIDER_INTEGRATION_VERIFIED`; negative control exit 1
+  (`FAILED proxy`, fail-closed egress).
+
+### Notes
+
+- **Live NOT verified**: no Google session / verified egress route / FFmpeg
+  on the dev machine — Gate E is a manual procedure
+  (`docs/testing/AUDIO_LIVE_ACCEPTANCE.md`); results will be recorded in
+  `docs/reports/LIVE_AUDIO_ACCEPTANCE_<date>.md`.
+- Backups: full git bundle `data/backups/nlo-p2-resume.bundle` (SHA-256
+  `920b90e8473dede3ad7aa80af381c23d8a423ee6aaebc37d2ae92408b3eac543`) taken
+  before the first code change. No push (awaiting user approval).
+
 ## [2026-11-10] — Mission NLO-MASTER-2026-11, Phase 3 (unified text/audio workflow): 3.1 document sources + 3.3 audio title fallback — **IMPLEMENTED + UNIT TESTED** (Live NOT verified)
 
 ### Added (Phase 3.1 — committed at `e973451`; CHANGELOG entry added retroactively in this commit, per the 2026-11-10 full-project audit)

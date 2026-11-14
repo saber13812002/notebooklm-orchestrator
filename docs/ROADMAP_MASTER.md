@@ -6,7 +6,19 @@
 > Source: user-provided "MASTER EXECUTION ROADMAP v2.0" (2026-11-01) +
 > "ADDENDUM — SERVER ENDPOINT MIGRATION".
 >
-> **Current position (2026-11-09):** Master mission **NLO-MASTER-2026-11**
+> **Current position (2026-11-14):** Mission **NLO-P2-RESUME-2026-11** —
+> the real audio pipeline (text/file → real NotebookLM podcast → validated
+> artifact → optional MP3 56 kbps → download API → webhooks) is
+> **IMPLEMENTATION_COMPLETE_LIVE_ACCEPTANCE_BLOCKED**: implemented in the
+> existing engine (no second engine/worker), 19-scenario fault matrix,
+> server 286/286 + shared 110/110 + web 30/30, Gates A–D green, live Gate E
+> blocked on Google session / verified egress / FFmpeg. Reports:
+> [`PHASE_NLO_P2_IMPLEMENTATION.md`](reports/PHASE_NLO_P2_IMPLEMENTATION.md),
+> [`PHASE_NLO_P2_TEST_RESULTS.md`](reports/PHASE_NLO_P2_TEST_RESULTS.md),
+> [`PHASE_NLO_P2_BLOCKERS.md`](reports/PHASE_NLO_P2_BLOCKERS.md). No push
+> (awaiting user approval); no production change.
+>
+> **Prior position (2026-11-09):** Master mission **NLO-MASTER-2026-11**
 > **Phase 2 — PROXY, SESSION AND REAL AUDIO RELIABILITY: VERIFIED-COMPLETED**
 > (close-out 2026-11-09, zero code changes —
 > [`PHASE_2_AUDIO_RELIABILITY.md`](reports/PHASE_2_AUDIO_RELIABILITY.md)).

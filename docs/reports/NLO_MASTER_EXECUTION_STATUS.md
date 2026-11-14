@@ -8,30 +8,38 @@
 > the evidence.
 
 - **Mission ID:** NLO-MASTER-2026-11
-- **Current date:** 2026-11-06 (Asia/Tehran, UTC+3:30)
-- **Last updated:** 2026-11-09T16:26Z (UTC) — **Master Phase 2 CLOSE-OUT**:
-  "Proxy, session and real audio reliability" **VERIFIED-COMPLETED** (zero
-  code changes; report `PHASE_2_AUDIO_RELIABILITY.md`). Prior:
-  2026-11-09T15:28Z — Reconciliation (Phase 1 + out-of-phase audio-live
-  mission re-verified; see section below). Prior: 2026-11-06T23:40Z —
-  out-of-phase mission **NLO-PHASE-2-AUDIO-LIVE-2026-11** completed (live
-  audio verified)
+- **Current date:** 2026-11-14 (Asia/Tehran, UTC+3:30)
+- **Last updated:** 2026-11-14T06:15Z (UTC) — **Out-of-phase mission
+  NLO-P2-RESUME-2026-11**: the real audio pipeline (text/file → real
+  NotebookLM podcast → validated artifact → optional MP3 56 kbps → download
+  API → webhooks) is **IMPLEMENTATION_COMPLETE_LIVE_ACCEPTANCE_BLOCKED**
+  (master Phase 4 + Phase 5 substance implemented and integration-tested in
+  the existing engine; server 286/286 + shared 110/110 + web 30/30; Gates A–D
+  green; live Gate E blocked on Google session / verified egress / FFmpeg).
+  Reports: `PHASE_NLO_P2_IMPLEMENTATION.md`, `PHASE_NLO_P2_TEST_RESULTS.md`,
+  `PHASE_NLO_P2_BLOCKERS.md`; no push (awaiting user approval). Prior:
+  2026-11-09T16:26Z — **Master Phase 2 CLOSE-OUT**: "Proxy, session and real
+  audio reliability" **VERIFIED-COMPLETED** (zero code changes; report
+  `PHASE_2_AUDIO_RELIABILITY.md`). Prior: 2026-11-09T15:28Z — Reconciliation
+  (Phase 1 + out-of-phase audio-live mission re-verified; see section below).
+  Prior: 2026-11-06T23:40Z — out-of-phase mission
+  **NLO-PHASE-2-AUDIO-LIVE-2026-11** completed (live audio verified)
 - **Authoritative preflight report:** [`docs/reports/NLO_MASTER_PREFLIGHT.md`](NLO_MASTER_PREFLIGHT.md)
 
 ---
 
 ## Phase table
 
-| #   | Phase (working label)                                                                       | Status                                                           | Deliverable                                          |
-| --- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ---------------------------------------------------- |
-| 0   | Preflight audit                                                                             | **COMPLETED**                                                    | `docs/reports/NLO_MASTER_PREFLIGHT.md`               |
-| 1   | Stabilization (worker-wedge fix, local env repair, git hygiene)                             | **VERIFIED-COMPLETED** (reconciled 2026-11-09)                   | `docs/reports/PHASE_1_STABILIZATION.md`              |
-| 2   | Proxy, session and real audio reliability (re-scoped 2026-11-09)                            | **VERIFIED-COMPLETED** (close-out 2026-11-09; zero code changes) | `docs/reports/PHASE_2_AUDIO_RELIABILITY.md`          |
-| 3   | Unified text/audio workflow                                                                 | PENDING (next action)                                            | `docs/reports/PHASE_3_UNIFIED_INPUT_AND_NOTEBOOK.md` |
-| 4   | Deep Dive generation + audio conversion (MP3 56 kbps) + artifact publishing                 | PENDING (live gate B9; B6 — ffmpeg absent)                       | TBD at phase kickoff                                 |
-| 5   | Webhooks + integration (HMAC, retry/backoff, SSRF guard; state machine, E2E, OpenAPI drift) | PENDING — needs blocker B8 (user input)                          | TBD at phase kickoff                                 |
-| 6   | Production deploy + verification (`172.30.0.133`)                                           | PENDING (B5 sudo gate; prod 7 commits behind `origin/main`)      | `docs/reports/PHASE_6_DEPLOY.md`                     |
-| F   | Final acceptance                                                                            | PENDING                                                          | `docs/reports/NLO_MASTER_FINAL_ACCEPTANCE.md`        |
+| #   | Phase (working label)                                                                       | Status                                                                                                                                                                                           | Deliverable                                          |
+| --- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| 0   | Preflight audit                                                                             | **COMPLETED**                                                                                                                                                                                    | `docs/reports/NLO_MASTER_PREFLIGHT.md`               |
+| 1   | Stabilization (worker-wedge fix, local env repair, git hygiene)                             | **VERIFIED-COMPLETED** (reconciled 2026-11-09)                                                                                                                                                   | `docs/reports/PHASE_1_STABILIZATION.md`              |
+| 2   | Proxy, session and real audio reliability (re-scoped 2026-11-09)                            | **VERIFIED-COMPLETED** (close-out 2026-11-09; zero code changes)                                                                                                                                 | `docs/reports/PHASE_2_AUDIO_RELIABILITY.md`          |
+| 3   | Unified text/audio workflow                                                                 | PENDING (next action)                                                                                                                                                                            | `docs/reports/PHASE_3_UNIFIED_INPUT_AND_NOTEBOOK.md` |
+| 4   | Deep Dive generation + audio conversion (MP3 56 kbps) + artifact publishing                 | **IMPLEMENTED + INTEGRATION-TESTED** (out-of-phase NLO-P2-RESUME 2026-11-14; live acceptance **BLOCKED** at Gate E — B9; B6 resolved as optional transcode, `not_configured` when ffmpeg absent) | `docs/reports/PHASE_NLO_P2_IMPLEMENTATION.md`        |
+| 5   | Webhooks + integration (HMAC, retry/backoff, SSRF guard; state machine, E2E, OpenAPI drift) | **IMPLEMENTED + TESTED** (out-of-phase NLO-P2-RESUME 2026-11-14: outbox, HMAC, SSRF fail-closed, admin API, OpenAPI drift test; live delivery to an external endpoint NOT TESTED)                | `docs/reports/PHASE_NLO_P2_TEST_RESULTS.md`          |
+| 6   | Production deploy + verification (`172.30.0.133`)                                           | PENDING (B5 sudo gate; prod 7 commits behind `origin/main`)                                                                                                                                      | `docs/reports/PHASE_6_DEPLOY.md`                     |
+| F   | Final acceptance                                                                            | PENDING                                                                                                                                                                                          | `docs/reports/NLO_MASTER_FINAL_ACCEPTANCE.md`        |
 
 > **Renumbering note (2026-11-09 close-out):** the preflight working labels
 > (2=Webhook infrastructure, 3=Deep Dive, 4=Audio conversion, 5=Integration)
