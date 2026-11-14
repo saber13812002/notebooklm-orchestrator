@@ -1,13 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import type { DatabaseSync } from "node:sqlite";
+import { existsSync, renameSync, rmSync, statSync } from "node:fs";
 import { backoffMs, classifyError, isRetryableError, safeName, resolveWithin } from "@nlo/shared";
 import type { Job, FailureClass } from "@nlo/shared";
 import type { JobsRepo } from "../domain/jobs.repo.js";
 import type { AccountRow, AccountsRepo } from "../domain/accounts.repo.js";
 import type { AuthSessionsRepo } from "../domain/auth-sessions.repo.js";
 import type { ProxiesRepo } from "../domain/proxies.repo.js";
-import { JobArchive } from "../domain/archive.js";
+import { JobArchive, sha256OfFile } from "../domain/archive.js";
+import { audioMimeToExt, readWavInfo, sniffAudioMime } from "../domain/artifact-validate.js";
+import { ArtifactRepo } from "../domain/artifacts.repo.js";
+import { JobStagesRepo } from "../domain/stages.repo.js";
+import { transcodeToMp3 } from "../media/transcode.js";
 import { ProviderFailure, type NotebookLMProvider } from "../providers/types.js";
 import type { ProxyManager } from "../proxy/proxy-manager.js";
 import type { ProxyRuntime, TunnelHandle } from "../proxy/runtime.js";
@@ -51,6 +54,28 @@ export interface JobRunnerDeps {
   log: (msg: string) => void;
   sleep?: (ms: number) => Promise<void>;
   rng?: () => number;
+  /** NLO-P2: podcast polling budget in ms (default 25 minutes). */
+  podcastDeadlineMs?: number;
+  /** NLO-P2: hard cap on the stored podcast artifact size (default 200 MiB). */
+  maxPodcastBytes?: number;
+  /** NLO-P2: absolute path to the ffmpeg executable used for MP3 transcoding.
+   *  Unset (or a path that does not exist) → the original artifact stays
+   *  canonical and the job reports transcode status "not_configured". The
+   *  application never installs ffmpeg itself. */
+  ffmpegBin?: string;
+  /** NLO-P2: target MP3 bitrate in kbps (default 56, clamped to 8..320). */
+  mp3TargetKbps?: number;
+  /** NLO-P2: hard timeout for a single transcode (ms, default 5 minutes). */
+  transcodeTimeoutMs?: number;
+  /** NLO-P2: artifact registry (the single writer for the artifacts table). */
+  artifacts: ArtifactRepo;
+  /** NLO-P2: per-stage persistence for the podcast pipeline. Optional so
+   *  older test harnesses keep working; when absent, stage rows are simply
+   *  not recorded. */
+  stages?: JobStagesRepo;
+  /** NLO-P2 (webhooks): publisher for job.running + terminal events.
+   *  Optional so older test harnesses keep working; absent = no emission. */
+  webhooks?: { publish: (jobId: string, eventType: string) => void };
 }
 
 const sleepDefault = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -182,6 +207,7 @@ export class JobRunner {
         const job = this.d.jobs.getOrThrow(jobId);
         this.d.jobs.setStatus(jobId, "RUNNING", { accountId: account.id, nodeId });
         this.logEvent(jobId, archive, "running", `attempt ${job.attempt + 1}`);
+        this.d.webhooks?.publish(jobId, "job.running");
         const credentialRef = account.authSecretRef ?? `session:${account.id}`;
         const attemptStart = new Date().toISOString();
         const attemptNo = job.attempt + 1;
@@ -202,6 +228,9 @@ export class JobRunner {
             textPath: this.textPathInArchive(jobId),
             textTitle: job.input.text ? (job.input.title ?? null) : null,
             notebookTitle: job.input.title ?? `nlo-${jobId.slice(0, 16)}`,
+            // NLO-P2: podcast-enabled jobs report notebook operation IDs so
+            // the runner can drive the audio pipeline in the same notebook.
+            podcast: job.input.podcast?.enabled ?? false,
             tunnel: handle,
             egress: this.d.egress,
             signal: controller.signal,
@@ -247,7 +276,44 @@ export class JobRunner {
           const stored = result.artifacts.map((a, i) =>
             archive.storeArtifact(a.path, a.name, i + 1),
           );
-          this.storeArtifacts(jobId, stored, result.artifacts);
+          this.storeArtifacts(
+            jobId,
+            stored,
+            result.artifacts,
+            this.provenanceFrom(result.providerMeta.simulated),
+          );
+
+          // NLO-P2 (podcast): after the base notebook workflow succeeds,
+          // generate the Audio Overview in the created notebook, poll the
+          // EXTERNAL operation (resumable across restarts via the persisted
+          // task id), then download, signature-validate, hash and store the
+          // audio as a job artifact. A null return means this instance
+          // yielded (a restart recovery re-queued the job and another
+          // instance re-took it) — no further status change here.
+          let podcastMeta: Record<string, unknown> | null = null;
+          if (job.input.podcast?.enabled) {
+            podcastMeta = await this.runPodcastPipeline({
+              jobId,
+              job,
+              account,
+              handle,
+              controller,
+              credentialRef,
+              resultMeta: result.providerMeta,
+              archive,
+            });
+            if (podcastMeta === null) {
+              this.logEvent(
+                jobId,
+                archive,
+                "podcast_yielded",
+                "job status changed during podcast polling (restart recovery); this instance stands down",
+              );
+              this.finalizeArchive(jobId, archive);
+              return this.d.jobs.getOrThrow(jobId);
+            }
+          }
+
           this.d.jobs.recordAttempt(jobId, attemptNo, account.id, nodeId, attemptStart, "ok", {
             provider: this.d.provider.name,
           });
@@ -263,7 +329,9 @@ export class JobRunner {
             typeof v === "string" && v.length > 0 ? v : null;
           this.d.jobs.setStatus(jobId, "SUCCEEDED", {
             answerMarkdown: result.answerMarkdown,
-            resultProviderMeta: result.providerMeta,
+            resultProviderMeta: podcastMeta
+              ? { ...result.providerMeta, podcast: podcastMeta }
+              : result.providerMeta,
             progress: 100,
             // Clear error fields carried over from a previous failed attempt
             // (setStatus preserves prior values when the patch omits them,
@@ -323,6 +391,31 @@ export class JobRunner {
       return this.d.jobs.getOrThrow(jobId);
     } finally {
       this.active.delete(jobId);
+      this.emitTerminal(jobId);
+    }
+  }
+
+  /**
+   * NLO-P2 (webhooks): emit the terminal webhook for a job that just settled.
+   * Reads the FRESH status from the DB (the last setStatus wins) so a cancel
+   * that landed during a late success reports CANCELLED, not SUCCEEDED.
+   * Never throws — webhook emission must not break the runner.
+   */
+  private emitTerminal(jobId: string): void {
+    if (!this.d.webhooks) return;
+    try {
+      const job = this.d.jobs.get(jobId);
+      if (!job) return;
+      const byStatus: Record<string, string> = {
+        SUCCEEDED: "job.succeeded",
+        FAILED: "job.failed",
+        CANCELLED: "job.cancelled",
+        NEEDS_ATTENTION: "job.needs_attention",
+      };
+      const ev = byStatus[job.status];
+      if (ev) this.d.webhooks.publish(jobId, ev);
+    } catch {
+      /* never break the runner over webhook emission */
     }
   }
 
@@ -573,31 +666,467 @@ export class JobRunner {
     return existsSync(p) ? p : null;
   }
 
+  /**
+   * NLO-P2: podcast pipeline (the audio stage of the 17-stage lifecycle).
+   *
+   * Stage map (persisted via progress + timeline events + operation ids):
+   *   90  podcast generation submitted / resumed
+   *   95  polling the external generation task
+   *   98  downloading the completed artifact
+   *   99  artifact signature-validated, hashed and stored
+   *
+   * Idempotency: the external task id is persisted to
+   * jobs.operation_ids_json as soon as it is known, so a restart
+   * re-submission is a RESUME (poll first, keep the prior task unless it
+   * failed) and never a blind duplicate. The polling loop re-reads the
+   * job status every iteration: if restart recovery moved the job out of
+   * RUNNING, this instance yields (returns null) instead of settling it.
+   */
+  private async runPodcastPipeline(args: {
+    jobId: string;
+    job: Job;
+    archive: JobArchive;
+    account: AccountRow;
+    handle: TunnelHandle;
+    controller: AbortController;
+    credentialRef: string;
+    resultMeta: Record<string, unknown>;
+  }): Promise<Record<string, unknown> | null> {
+    const { jobId, job, archive, account, handle, controller, credentialRef, resultMeta } = args;
+    const provider = this.d.provider;
+    // Bind to the provider: these are class methods that use `this`.
+    const generateAudio = provider.generateAudio?.bind(provider);
+    const getAudioStatus = provider.getAudioStatus?.bind(provider);
+    const downloadAudio = provider.downloadAudio?.bind(provider);
+    if (!generateAudio || !getAudioStatus || !downloadAudio) {
+      throw new ProviderFailure({
+        failureClass: "invalid_input",
+        message: "podcast requested but the active provider does not support audio generation",
+        ambiguous: false,
+        needsReauth: false,
+      });
+    }
+
+    const notebookId =
+      typeof resultMeta.notebookId === "string" && resultMeta.notebookId.length > 0
+        ? resultMeta.notebookId
+        : null;
+    if (!notebookId) {
+      throw new ProviderFailure({
+        failureClass: "invalid_input",
+        message:
+          "podcast requested but the base job did not report a notebook id; audio generation needs an existing notebook",
+        ambiguous: false,
+        needsReauth: false,
+      });
+    }
+
+    const podcast = job.input.podcast;
+    const setStage = (p: number, note: string): void => this.d.jobs.setProgress(jobId, p, note);
+
+    // NLO-P2: per-stage persistence (job_stages). Each pipeline stage is
+    // recorded with its attempt, deadline and external operation id. A
+    // yield (restart recovery) deliberately leaves the open stage
+    // in_progress: that row IS the checkpoint for the restarted process.
+    const stages = this.d.stages;
+    const attemptNo = job.attempt + 1;
+    let openStage: string | null = null;
+    const beginStage = (stage: string, deadlineMs?: number): void => {
+      openStage = stage;
+      stages?.begin(jobId, stage, { attempt: attemptNo, deadlineMs });
+    };
+    const endStage = (state: "completed" | "failed", lastError?: string): void => {
+      if (!openStage) return;
+      if (state === "completed") stages?.complete(jobId, openStage);
+      else stages?.fail(jobId, openStage, lastError ?? "failed");
+      openStage = null;
+    };
+
+    try {
+      // --- stage 90: submit (or resume) the external generation -----------
+      beginStage("audio_generation", this.d.podcastDeadlineMs ?? 25 * 60_000);
+      const gen = await generateAudio({
+        jobId,
+        accountId: account.id,
+        credentialRef,
+        notebookId,
+        sourceIds: null,
+        prompt: (podcast?.instructions ?? "").trim() || (job.input.prompt ?? "").trim() || null,
+        language: podcast?.language ?? job.input.language ?? null,
+        audioFormat: podcast?.format ?? null,
+        audioLength: podcast?.length ?? null,
+        resumeTaskId: this.d.jobs.getOrThrow(jobId).operationIds?.audioTaskId ?? null,
+        tunnel: handle,
+        egress: this.d.egress,
+        signal: controller.signal,
+        onProgress: (_p, note) => setStage(90, note),
+      });
+
+      const taskId = gen.status.taskId;
+      if (!taskId) {
+        throw new ProviderFailure({
+          failureClass: "provider",
+          message:
+            "audio generation did not return a task id (cannot track the external operation)",
+          ambiguous: true,
+          needsReauth: false,
+        });
+      }
+      // Persist BEFORE polling: a crash any time after this line must resume,
+      // not re-submit.
+      this.d.jobs.patchOperationIds(jobId, { audioTaskId: taskId });
+      stages?.setExternal(jobId, "audio_generation", taskId, taskId);
+      this.logEvent(
+        jobId,
+        archive,
+        gen.resumed ? "podcast_resume_kept" : "podcast_submitted",
+        `${gen.resumed ? "resumed" : "submitted"} external podcast generation task ${taskId}`,
+        { taskId, resumed: gen.resumed, priorStatus: gen.priorStatus },
+      );
+
+      // --- stage 95: poll the external task until terminal ------------------
+      const deadline = Date.now() + (this.d.podcastDeadlineMs ?? 25 * 60_000);
+      let st = gen.status;
+      let polls = 0;
+      for (;;) {
+        if (controller.signal.aborted) {
+          throw new ProviderFailure({
+            failureClass: "provider",
+            message: "cancelled while polling podcast generation",
+            ambiguous: false,
+            needsReauth: false,
+          });
+        }
+        const cur = this.d.jobs.get(jobId);
+        if (!cur || cur.status !== "RUNNING") return null; // yield (restart recovery)
+        if (st.isComplete) break;
+        if (st.isFailed) {
+          throw new ProviderFailure({
+            failureClass: "provider",
+            message: `podcast generation failed: ${st.error ?? st.status ?? "unknown error"}`,
+            ambiguous: false,
+            needsReauth: false,
+          });
+        }
+        polls += 1;
+        if (Date.now() >= deadline) {
+          throw new ProviderFailure({
+            failureClass: "provider",
+            message:
+              "podcast generation did not complete within the polling budget; the external task may still complete server-side",
+            ambiguous: true,
+            needsReauth: false,
+          });
+        }
+        await (this.d.sleep ?? sleepDefault)(
+          backoffMs(polls, { baseMs: 5000, capMs: 60_000, rng: this.d.rng }),
+        );
+        const res = await getAudioStatus({
+          jobId,
+          accountId: account.id,
+          credentialRef,
+          notebookId,
+          taskId,
+          tunnel: handle,
+          egress: this.d.egress,
+          signal: controller.signal,
+          onProgress: (_p, note) => setStage(95, note),
+        });
+        st = res.status;
+      }
+      endStage("completed");
+
+      this.logEvent(
+        jobId,
+        archive,
+        "podcast_completed",
+        `external podcast generation task ${taskId} completed`,
+        { taskId },
+      );
+
+      // --- stage 98: download into a temp name inside the job output dir --
+      beginStage("artifact_download");
+      const hex = randomUUID().replace(/-/g, "").slice(0, 12);
+      const tmpPath = resolveWithin(this.d.jobsDir, jobId, "output", `podcast-tmp-${hex}`);
+      const dl = await downloadAudio({
+        jobId,
+        accountId: account.id,
+        credentialRef,
+        notebookId,
+        artifactId: taskId,
+        destPath: tmpPath,
+        tunnel: handle,
+        egress: this.d.egress,
+        signal: controller.signal,
+        onProgress: (_p, note) => setStage(98, note),
+      });
+      if (!dl.ready || !dl.path) {
+        rmSync(tmpPath, { force: true });
+        throw new ProviderFailure({
+          failureClass: "provider",
+          message: "podcast artifact was not ready after confirmed completion",
+          ambiguous: true,
+          needsReauth: false,
+        });
+      }
+      endStage("completed");
+
+      // NLO-P2 hardening: an empty or oversized artifact is never stored.
+      const downloadedSize = statSync(dl.path).size;
+      if (downloadedSize === 0) {
+        rmSync(tmpPath, { force: true });
+        throw new ProviderFailure({
+          failureClass: "invalid_input",
+          message: "podcast artifact is empty (0 bytes); refusing to store",
+          ambiguous: false,
+          needsReauth: false,
+        });
+      }
+      const maxPodcastBytes = this.d.maxPodcastBytes ?? 200 * 1024 * 1024;
+      if (downloadedSize > maxPodcastBytes) {
+        rmSync(tmpPath, { force: true });
+        throw new ProviderFailure({
+          failureClass: "invalid_input",
+          message: `podcast artifact exceeds the size limit (${downloadedSize} > ${maxPodcastBytes} bytes)`,
+          ambiguous: false,
+          needsReauth: false,
+        });
+      }
+
+      // --- stage 99: validate (signature), rename, hash, store -----------
+      beginStage("artifact_store");
+      const mime = sniffAudioMime(dl.path);
+      if (!mime) {
+        rmSync(tmpPath, { force: true });
+        throw new ProviderFailure({
+          failureClass: "invalid_input",
+          message: "podcast artifact has an unrecognized audio signature",
+          ambiguous: false,
+          needsReauth: false,
+        });
+      }
+      const finalName = `podcast-${hex}${audioMimeToExt(mime)}`;
+      const finalPath = resolveWithin(this.d.jobsDir, jobId, "output", finalName);
+      renameSync(dl.path, finalPath);
+      const size = statSync(finalPath).size;
+      const sha256 = sha256OfFile(finalPath);
+      // NLO-P2: decode the container from the file itself (independent of
+      // the sniffed signature) and persist verified metadata. A WAV that
+      // does not parse is rejected, never stored as a black box.
+      const wavInfo = mime === "audio/wav" ? readWavInfo(finalPath) : null;
+      if (mime === "audio/wav" && !wavInfo) {
+        rmSync(finalPath, { force: true });
+        throw new ProviderFailure({
+          failureClass: "invalid_input",
+          message: "podcast WAV artifact is not parseable (missing or broken fmt/data chunk)",
+          ambiguous: false,
+          needsReauth: false,
+        });
+      }
+      const artifactId = this.insertArtifactRow(
+        jobId,
+        finalName,
+        mime,
+        size,
+        `output/${finalName}`,
+        {
+          sha256,
+          provenance: this.provenanceFrom(resultMeta.simulated),
+          durationSeconds: wavInfo?.durationSeconds ?? null,
+          codec: wavInfo?.codec ?? null,
+          sampleRate: wavInfo?.sampleRate ?? null,
+          channels: wavInfo?.channels ?? null,
+        },
+      );
+      endStage("completed");
+      setStage(99, `podcast: artifact stored (${finalName})`);
+      this.logEvent(
+        jobId,
+        archive,
+        "podcast_artifact_stored",
+        `podcast artifact stored as ${finalName}`,
+        {
+          artifactId,
+          mediaType: mime,
+          size,
+          sha256,
+        },
+      );
+
+      // NLO-P2: best-effort MP3 (56 kbps) transcode of the stored artifact.
+      // The ORIGINAL artifact is always canonical: a missing ffmpeg (not
+      // configured or not found on disk) and even a failed transcode are
+      // non-fatal — they are recorded as a stage row + event + an honest
+      // `transcode` block in the result metadata.
+      const provenance = this.provenanceFrom(resultMeta.simulated);
+      const sourceDuration = wavInfo?.durationSeconds ?? dl.durationSeconds ?? null;
+      let transcode: Record<string, unknown>;
+      const ffmpegBin = this.d.ffmpegBin;
+      if (!ffmpegBin || !existsSync(ffmpegBin)) {
+        const reason = ffmpegBin
+          ? "ffmpeg executable not found at the configured path"
+          : "ffmpeg not configured";
+        this.logEvent(jobId, archive, "podcast_transcode_skipped", reason, {
+          ffmpegBin: ffmpegBin ?? null,
+        });
+        transcode = { status: "not_configured", reason };
+      } else {
+        const targetKbps = this.d.mp3TargetKbps ?? 56;
+        const timeoutMs = this.d.transcodeTimeoutMs ?? 5 * 60_000;
+        beginStage("mp3_transcode", timeoutMs);
+        const mp3Name = `podcast-${hex}.mp3`;
+        const mp3Path = resolveWithin(this.d.jobsDir, jobId, "output", mp3Name);
+        const res = await transcodeToMp3({
+          ffmpegBin,
+          inputPath: finalPath,
+          outputPath: mp3Path,
+          targetKbps,
+          timeoutMs,
+        });
+        if (res.ok && res.path && res.size) {
+          const mp3Sha = sha256OfFile(res.path);
+          const mp3ArtifactId = this.insertArtifactRow(
+            jobId,
+            mp3Name,
+            "audio/mpeg",
+            res.size,
+            `output/${mp3Name}`,
+            {
+              sha256: mp3Sha,
+              provenance,
+              durationSeconds: sourceDuration,
+              codec: "mp3",
+              bitrate: targetKbps,
+              sourceArtifactId: artifactId,
+            },
+          );
+          endStage("completed");
+          setStage(99, `podcast: mp3 transcode stored (${mp3Name})`);
+          this.logEvent(jobId, archive, "podcast_transcode_stored", mp3Name, {
+            artifactId: mp3ArtifactId,
+            mediaType: "audio/mpeg",
+            size: res.size,
+            sha256: mp3Sha,
+            bitrate: targetKbps,
+            sourceArtifactId: artifactId,
+          });
+          transcode = {
+            status: "ok",
+            artifactId: mp3ArtifactId,
+            filename: mp3Name,
+            size: res.size,
+            sha256: mp3Sha,
+            bitrate: targetKbps,
+            sourceArtifactId: artifactId,
+          };
+        } else {
+          rmSync(mp3Path, { force: true });
+          const reason = res.reason ?? "transcode failed";
+          endStage("failed", reason);
+          this.logEvent(jobId, archive, "podcast_transcode_failed", reason, {
+            exitCode: res.exitCode ?? null,
+          });
+          transcode = {
+            status: "failed",
+            reason,
+            exitCode: res.exitCode ?? null,
+          };
+        }
+      }
+
+      return {
+        taskId,
+        resumed: gen.resumed,
+        priorStatus: gen.priorStatus,
+        durationSeconds: sourceDuration,
+        artifactTitle: dl.artifactTitle ?? null,
+        mediaType: mime,
+        size,
+        sha256,
+        codec: wavInfo?.codec ?? null,
+        sampleRate: wavInfo?.sampleRate ?? null,
+        channels: wavInfo?.channels ?? null,
+        provenance,
+        artifactId,
+        storedAs: `output/${finalName}`,
+        transcode,
+      };
+    } catch (err) {
+      endStage("failed", err instanceof Error ? err.message : String(err));
+      throw err;
+    }
+  }
+
+  /**
+   * Insert one row into the artifacts table via the ArtifactRepo
+   * (server-generated id + key; metadata only when actually verified).
+   */
+  private insertArtifactRow(
+    jobId: string,
+    filename: string,
+    mediaType: string,
+    size: number,
+    storageKey: string,
+    extra: {
+      sha256?: string | null;
+      durationSeconds?: number | null;
+      codec?: string | null;
+      sampleRate?: number | null;
+      channels?: number | null;
+      bitrate?: number | null;
+      provenance?: string | null;
+      sourceArtifactId?: string | null;
+    } = {},
+  ): string {
+    return this.d.artifacts.create({
+      jobId,
+      filename,
+      mediaType,
+      size,
+      source: "provider",
+      storageKey,
+      sha256: extra.sha256 ?? null,
+      durationSeconds: extra.durationSeconds ?? null,
+      codec: extra.codec ?? null,
+      sampleRate: extra.sampleRate ?? null,
+      channels: extra.channels ?? null,
+      bitrate: extra.bitrate ?? null,
+      provenance: extra.provenance ?? null,
+      sourceArtifactId: extra.sourceArtifactId ?? null,
+    });
+  }
+
+  /** "mock" | "real" | "unknown" — from the provider's own `simulated`
+   *  report, never assumed (null or missing => "unknown"). */
+  private provenanceFrom(sim: unknown): string {
+    return sim === true ? "mock" : sim === false ? "real" : "unknown";
+  }
+
   private storeArtifacts(
     jobId: string,
     stored: { safeName: string; size: number }[],
     metas: { name: string; mediaType: string }[],
+    provenance: string,
   ): void {
-    const db = this.d.jobs as unknown as { db: { raw: DatabaseSync; now(): string } };
     for (let i = 0; i < stored.length; i++) {
       const s = stored[i];
       const m = metas[i];
       if (!s) continue;
-      const id = `art_${randomUUID().replace(/-/g, "").slice(0, 16)}`;
-      db.db.raw
-        .prepare(
-          "INSERT INTO artifacts (id, job_id, filename, media_type, size, source, storage_key, created_at) VALUES (?,?,?,?,?,?,?,?)",
-        )
-        .run(
-          id,
-          jobId,
-          m?.name ?? s.safeName,
-          m?.mediaType ?? "application/octet-stream",
-          s.size,
-          "provider",
-          `output/artifacts/${s.safeName}`,
-          db.db.now(),
-        );
+      const file = resolveWithin(this.d.jobsDir, jobId, "output", "artifacts", s.safeName);
+      let sha: string | null = null;
+      try {
+        sha = sha256OfFile(file);
+      } catch {
+        sha = null; // hashing is best-effort; the row is still recorded
+      }
+      this.insertArtifactRow(
+        jobId,
+        m?.name ?? s.safeName,
+        m?.mediaType ?? "application/octet-stream",
+        s.size,
+        `output/artifacts/${s.safeName}`,
+        { sha256: sha, provenance },
+      );
     }
   }
 

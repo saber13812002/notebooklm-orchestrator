@@ -8,6 +8,7 @@ import {
   type TestParts,
 } from "./helpers.js";
 import { AuthSessionsRepo } from "../src/domain/auth-sessions.repo.js";
+import { ArtifactRepo } from "../src/domain/artifacts.repo.js";
 import { JobRunner } from "../src/queue/job-runner.js";
 
 /**
@@ -52,6 +53,7 @@ function setup() {
     log: () => {},
     sleep: () => Promise.resolve(),
     rng: () => 0,
+    artifacts: new ArtifactRepo(parts.db),
   });
   return node.id;
 }

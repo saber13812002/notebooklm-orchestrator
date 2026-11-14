@@ -137,6 +137,23 @@ export class JobsRepo {
       .run(Math.max(0, Math.min(100, Math.round(progress))), note, this.db.now(), id);
   }
 
+  /**
+   * NLO-P2: merge external operation ids into the job row WITHOUT a status
+   * transition. Mid-RUNNING bookkeeping: the state machine forbids a
+   * RUNNING -> RUNNING setStatus, but the podcast task id must be persisted
+   * the moment the external operation exists — it is the restart-recovery
+   * anchor (a re-queued attempt resumes the same operation, never
+   * re-submits blind).
+   */
+  patchOperationIds(id: string, merge: Record<string, string>): Job {
+    const current = this.getOrThrow(id);
+    const next: Record<string, string> = { ...(current.operationIds ?? {}), ...merge };
+    this.db.raw
+      .prepare("UPDATE jobs SET operation_ids_json = ?, updated_at = ? WHERE id = ?")
+      .run(JSON.stringify(next), this.db.now(), id);
+    return this.getOrThrow(id);
+  }
+
   list(filter: {
     status?: JobStatus | JobStatus[];
     accountId?: string;

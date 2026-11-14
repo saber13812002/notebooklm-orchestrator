@@ -2,6 +2,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Db } from "../src/db/db.js";
 import { AccountsRepo } from "../src/domain/accounts.repo.js";
+import { ArtifactRepo } from "../src/domain/artifacts.repo.js";
 import { JobsRepo } from "../src/domain/jobs.repo.js";
 import { ProxiesRepo } from "../src/domain/proxies.repo.js";
 import { MockProviderEgress } from "../src/proxy/egress.js";
@@ -120,6 +121,7 @@ function buildRunner(parts: TestParts, provider: NotebookLMProvider): JobRunner 
     log: () => {},
     sleep: () => Promise.resolve(), // retries without real backoff
     rng: () => 0,
+    artifacts: new ArtifactRepo(parts.db),
   });
 }
 
@@ -318,6 +320,7 @@ describe("queue recovery: a dead/timed-out job must not wedge the single-worker 
       log: () => {},
       sleep: () => Promise.resolve(),
       rng: () => 0,
+      artifacts: new ArtifactRepo(db2),
     });
     queue = new Queue(runner2, 20, () => {});
     queue.start();

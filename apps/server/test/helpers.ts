@@ -5,7 +5,9 @@ import path from "node:path";
 import { loadConfig, dataPaths } from "../src/config.js";
 import { Db } from "../src/db/db.js";
 import { AccountsRepo } from "../src/domain/accounts.repo.js";
+import { ArtifactRepo } from "../src/domain/artifacts.repo.js";
 import { JobsRepo } from "../src/domain/jobs.repo.js";
+import { JobStagesRepo } from "../src/domain/stages.repo.js";
 import { ProxiesRepo } from "../src/domain/proxies.repo.js";
 import { SecretVault } from "../src/secrets/vault.js";
 import { MockProvider } from "../src/providers/mock-provider.js";
@@ -22,6 +24,8 @@ export interface TestParts {
   accounts: AccountsRepo;
   proxies: ProxiesRepo;
   jobs: JobsRepo;
+  artifacts: ArtifactRepo;
+  stages: JobStagesRepo;
   runtime: MockProxyRuntime;
   egress: MockProviderEgress;
   proxyManager: ProxyManager;
@@ -45,6 +49,8 @@ export function makeParts(): TestParts {
   const accounts = new AccountsRepo(db);
   const proxies = new ProxiesRepo(db);
   const jobs = new JobsRepo(db);
+  const artifacts = new ArtifactRepo(db);
+  const stages = new JobStagesRepo(db);
   const runtime = new MockProxyRuntime();
   const egress = new MockProviderEgress(
     async (_tunnel, target) => ({ status: 200, body: `mock upstream response for ${target}` }),
@@ -77,6 +83,8 @@ export function makeParts(): TestParts {
     // Instant backoff for fast, deterministic tests.
     sleep: () => Promise.resolve(),
     rng: () => 0,
+    artifacts,
+    stages,
   });
 
   return {
@@ -86,6 +94,8 @@ export function makeParts(): TestParts {
     accounts,
     proxies,
     jobs,
+    artifacts,
+    stages,
     runtime,
     egress,
     proxyManager,
@@ -165,13 +175,25 @@ export function markUnhealthy(proxies: ProxiesRepo, nodeId: string, error = "fai
 export function createJob(
   jobs: JobsRepo,
   prompt = "test prompt",
-  extra: { preferredNodeId?: string | null; preferredAccountId?: string | null } = {},
+  extra: {
+    preferredNodeId?: string | null;
+    preferredAccountId?: string | null;
+    /** NLO-P2: enable the podcast pipeline on this job. */
+    podcast?: {
+      enabled: boolean;
+      instructions?: string | null;
+      language?: "en" | "fa" | null;
+      format?: "deep_dive" | "brief" | "critique" | "debate" | null;
+      length?: "short" | "default" | "long" | null;
+    } | null;
+  } = {},
 ): Job {
   return jobs.create({
     input: {
       prompt,
       inputType: "audio",
       audio: { originalName: "", mediaType: "", size: 0, sha256: "", providerConfirmed: false },
+      podcast: extra.podcast ?? null,
       preferredAccountId: extra.preferredAccountId ?? null,
       preferredNodeId: extra.preferredNodeId ?? null,
     },
