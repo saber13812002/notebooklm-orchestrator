@@ -8,6 +8,50 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-15] — Mission NLO-P4-0: UNIVERSAL MODULAR ARCHITECTURE RESEARCH & DESIGN — **PROPOSED** (docs only — zero code changes)
+
+### Added
+
+- **23 mission documents** (all new, docs-only): 4 ecosystem research docs, 6
+  architecture docs, 7 ADRs (`docs/architecture/decisions/ADR-001` …
+  `ADR-007`), 2 product specs (`docs/product/`), 2 testing/acceptance docs
+  (`docs/testing/`), 1 implementation prompt roadmap for **P4-1…P4-8**
+  (`docs/roadmap/NLO_P4_IMPLEMENTATION_PROMPT_ROADMAP.md`, ~72 SP), and the
+  final report `docs/reports/NLO_P4_0_ARCHITECTURE_DISCOVERY.md` (25 questions,
+  final status table, quality gates A–F).
+- **Target architecture (PROPOSED, not implemented):** Provider Registry +
+  capability contracts + conformance suite C1–C7 ("declared = tested,
+  undeclared = unavailable"); Egress Gateway over the existing proxy manager
+  (fail-closed preserved, `tunnelEnv` coupling removed); Account Manager
+  (4 credential kinds, keepalive K=240 min, 5-step routing, 9-state session
+  machine preserved); universal content intake (PDF/MD/video/URL +
+  untrusted-content rule, LLM enrichment best-effort); templates T1–T4 as
+  versioned data; manual retry from last safe checkpoint (`/retry`,
+  `/checkpoints`, `/recheck`); UNKNOWN_EXTERNAL_STATE poll-first rule;
+  per-`FailureClass` failover matrix (no new job statuses); MCP as server
+  (9 tools, Streamable-HTTP, per-tool scopes) and client (`mcp_client`
+  provider kind via static mapping files); 8 bounded contexts in a modular
+  monolith (microservices explicitly not on the P4 path).
+
+### Verified
+
+- Source audit at `main @ 76cd5f03` (server core, providers, auth/sessions/
+  accounts/repositories, shared, web, tests, CI) with a dependency/coupling
+  map; baseline capability status table with honest labels.
+- Ecosystem facts verified 2026-11-15 with named sources: **no official
+  NotebookLM/Gemini Notebook API** (consumer or Enterprise); Google rebrand to
+  *Gemini Notebook* 2026-07-16; no ecosystem project has proxy support;
+  nblpy (pinned 0.8.5, upstream 0.8.6) supports the T3/T4 generation ops —
+  so T3/T4 are a worker-surface gap, not a capability gap.
+
+### Notes
+
+- **No implementation, no migrations, no runtime changes, no pushes** — every
+  P4 capability above is PROPOSED; implementation starts with P4-1 only after
+  owner approval. The four master docs (README, this CHANGELOG,
+  `docs/ROADMAP_MASTER.md`, `docs/reports/NLO_MASTER_EXECUTION_STATUS.md`)
+  were updated with PROPOSED/PLANNED statuses only.
+
 ## [2026-11-14] — Mission NLO-P2-RESUME: REAL AUDIO PIPELINE (text/file → podcast) — **IMPLEMENTED + INTEGRATION TESTED** (Live NOT verified)
 
 ### Added

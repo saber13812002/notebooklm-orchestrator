@@ -24,6 +24,11 @@
   [`provider-evaluation.md`](docs/architecture/provider-evaluation.md)،
   [`AUDIO_PIPELINE_ARCHITECTURE.md`](docs/architecture/AUDIO_PIPELINE_ARCHITECTURE.md)
   (پیپ‌لاین صوتی NLO-P2: پادکست + artifacts + webhooks)
+- طراحی P4 (پلتفرم ماژولار — **فقط پژوهش/طراحی، بدون پیاده‌سازی**):
+ گزارش نهایی [`docs/reports/NLO_P4_0_ARCHITECTURE_DISCOVERY.md`](docs/reports/NLO_P4_0_ARCHITECTURE_DISCOVERY.md)،
+ معماری هدف [`docs/architecture/NLO_P4_TARGET_ARCHITECTURE.md`](docs/architecture/NLO_P4_TARGET_ARCHITECTURE.md)،
+ ADRها [`docs/architecture/decisions/`](docs/architecture/decisions/) (ADR-001…ADR-007)،
+ نقشه‌ی راه اجرا [`docs/roadmap/NLO_P4_IMPLEMENTATION_PROMPT_ROADMAP.md`](docs/roadmap/NLO_P4_IMPLEMENTATION_PROMPT_ROADMAP.md)
 - استقرار: [`docs/deployment/s52-deploy.md`](docs/deployment/s52-deploy.md)
 - امنیت (threat model): [`docs/security/threat-model.md`](docs/security/threat-model.md)
 - برنامه توسعه: [`docs/development/plan.md`](docs/development/plan.md)
@@ -232,6 +237,7 @@ Envelope خطای یکنواخت: `{"error":{"code","message","details?"}}` (ک�
 | انتشار API به بیرون (`nlo.ai.ismc.ir` + TLS)                                           | **planned** (Phase F؛ DNS A record وجود دارد، مسیر proxy نه)                                                               |
 | انتشار مستندات در Wiki.js                                                              | **in progress** (محتوای Markdown در `docs/wiki/`)                                                                          |
 | Google Drive / DOCX / خروجی‌های Studio / Download Manager                              | **planned** (Phase G)                                                                                                      |
+| P4: پلتفرم ماژولار (Provider Registry، Account/Egress Manager، intake جامع، T1–T4، retry از checkpoint، failover، MCP server+client) | **PROPOSED** (طراحی کامل ۲۰۲۶-۱۱-۱۵؛ پیاده‌سازی شروع نشده — P4-1…P4-8 در انتظار تأیید owner؛ جزئیات: [`NLO_P4_0_ARCHITECTURE_DISCOVERY.md`](docs/reports/NLO_P4_0_ARCHITECTURE_DISCOVERY.md)) |
 
 محدودیت‌های شناخته‌شده و وضعیت دقیق پیاده‌سازی:
 [`docs/architecture/provider-evaluation.md`](docs/architecture/provider-evaluation.md) (بخش ۵).

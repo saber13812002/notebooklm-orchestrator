@@ -98,6 +98,32 @@ rule set):
 | 17    | Production E2E + release                                                 | open                                                  |
 | 18    | Final governance                                                         | open                                                  |
 
+## 2a. P4 — Modular platform program (design complete 2026-11-15 — PROPOSED)
+
+Mission **NLO-P4-0** (universal modular architecture & ecosystem discovery)
+completed 2026-11-15 as **research/design only, zero code changes**. The
+implementation program **P4-1…P4-8** (~72 SP) is **PROPOSED** — nothing starts
+before owner approval. Per-phase implementation prompts, SP estimates, scope,
+and per-path acceptance gates:
+[`docs/roadmap/NLO_P4_IMPLEMENTATION_PROMPT_ROADMAP.md`](roadmap/NLO_P4_IMPLEMENTATION_PROMPT_ROADMAP.md).
+Final report with the 25-question record and the area/status/evidence table:
+[`docs/reports/NLO_P4_0_ARCHITECTURE_DISCOVERY.md`](reports/NLO_P4_0_ARCHITECTURE_DISCOVERY.md).
+
+| Phase | Title                                                                                  | Status (2026-11-15)            |
+| ----- | -------------------------------------------------------------------------------------- | ------------------------------ |
+| P4-1  | Foundations: Provider Registry + Egress Gateway + DB job lock + conformance C1–C6       | PROPOSED (next — awaiting approval) |
+| P4-2  | Universal intake (PDF/MD/video/URL) + templates T1–T4 + untrusted-content rule          | PROPOSED                       |
+| P4-3  | Account Manager (4 credential kinds, keepalive, 5-step routing) + egress policy         | PROPOSED                       |
+| P4-4  | Manual retry (checkpoint) + UNKNOWN_EXTERNAL_STATE + provider failover matrix           | PROPOSED                       |
+| P4-5  | Content engines T3/T4 (vertical infographic, reels/shorts worker ops)                   | PROPOSED                       |
+| P4-6  | MCP server (9 tools, per-tool scopes, four-path parity reference scenario)              | PROPOSED                       |
+| P4-7  | MCP client + new transports (external MCP providers, Android gRPC, Enterprise host)     | PROPOSED                       |
+| P4-8  | Hardening: full four-path matrix re-run, parity report, standards audit, live evidence  | PROPOSED                       |
+
+> P4 is additive to the 18-phase master roadmap: it consumes the existing
+> deployment posture (systemd `nlo`, git-based deploy) unchanged, and each
+> phase is independently shippable and revertible (AGENTS.md §8).
+
 ## 3. Mandatory per-phase report template
 
 Every phase ends with a report in `docs/reports/` containing:
