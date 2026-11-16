@@ -22,6 +22,14 @@ import type { ProxyRuntime } from "./runtime.js";
  *     closed — direct is not a fallback for a broken route.
  */
 
+// P4-1D boundary seam (audit map §4.4): Job Orchestration may touch the
+// proxy context only via `proxy/gateway.js` + `proxy/egress.js`. These
+// type-only re-exports let orchestration import the ProxyManager /
+// ProxyRuntime types from the seam instead of reaching into the proxy
+// files directly. Zero runtime effect (type imports are erased).
+export type { ProxyManager } from "./proxy-manager.js";
+export type { ProxyRuntime } from "./runtime.js";
+
 export type EgressPolicy = "tunnel-required" | "direct-allowed";
 
 export interface EgressAcquireContext {

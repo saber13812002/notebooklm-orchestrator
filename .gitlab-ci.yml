@@ -4,6 +4,13 @@
 # the source of truth; this file exists so the internal mirror can run the same
 # checks as soon as a runner is provisioned for this project.
 #
+# Jobs (same set as GitHub CI):
+#   quality     : lint → format:check → typecheck → test → build
+#   conformance : provider conformance suites C1–C6 (mock level; C7 is a
+#                 manual live gate and is never run in CI)
+#   secret-scan : git-grep gate over tracked files (no new dependency)
+#   docker      : image build (gated behind BUILD_DOCKER=1)
+#
 # STATUS: ready, NOT yet active — no runner has been registered for this
 # project (provisioning requires maintainer approval; see
 # docs/operations/gitlab-sync.md). Until then, this pipeline will not run and
@@ -38,6 +45,109 @@ quality:
     - npm run typecheck
     - npm test
     - npm run build
+
+conformance:
+  stage: quality
+  image: node:22-bookworm
+  script:
+    - npm ci
+    # Runs the six suites, prints the provider × C1–C6 table, and exits
+    # non-zero unless all six are PASS. C7 (live) is never run here.
+    - npx tsx apps/server/test/conformance/runner.ts
+
+secret-scan:
+  stage: quality
+  image: node:22-bookworm
+  script:
+    - |
+      bash <<'NLO_SECRET_SCAN'
+      set -uo pipefail
+
+      # NLO-P4-1D (audit map §4.4): git-grep secret scan over the INDEX
+      # (git ls-files) — no new dependency. Any match on a tracked file
+      # fails CI unless the file is on a documented allowlist.
+      #
+      # Documented vless allowlist (reviewed in P4-1D):
+      #   apps/server/scripts/_add-nodes.py — ops script holding the
+      #     production node UUID (kept so the script stays runnable).
+      #   apps/server/test/api.test.ts      — test fixture on TEST-NET
+      #     (203.0.113.x) with a fixed fake UUID.
+      #   .github/workflows/ci.yml          — this scan's own planted
+      #   .gitlab-ci.yml                    — self-test fixture line
+      #                                      (a vless URI with a fake
+      #                                      UUID, needed to prove the
+      #                                      gate detects secrets).
+
+      # Host class covers domain hosts (production nodes use *.kelmora.ir
+      # etc.), not just IP literals.
+      VLESS_PATTERN='vless://[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}@[A-Za-z0-9.-]+'
+      VLESS_ALLOWLIST='^(apps/server/scripts/_add-nodes\.py|apps/server/test/api\.test\.ts|\.github/workflows/ci\.yml|\.gitlab-ci\.yml)$'
+
+      tmp_hits="$(mktemp)"
+      trap 'rm -f "$tmp_hits"' EXIT
+
+      scan_pattern() {
+        # $1 ERE pattern; $2 allowlist ERE on the file path ('^$' = none);
+        # $3 ERE limiting which files are scanned (default: all).
+        local pattern="$1" allowlist="$2" extre="${3:-.*}" file line n
+        : > "$tmp_hits"
+        while IFS= read -r -d '' file; do
+          if ! printf '%s\n' "$file" | grep -qE "$extre"; then
+            continue
+          fi
+          grep -nI -E -e "$pattern" -- "$file" 2>/dev/null | while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            if ! printf '%s\n' "$file" | grep -qE "$allowlist"; then
+              printf '%s:%s\n' "$file" "$line" >> "$tmp_hits"
+            fi
+          done
+        done < <(git ls-files -z)
+        n="$(wc -l < "$tmp_hits" | tr -d '[:space:]')"
+        if [ "$n" -gt 0 ]; then
+          echo "secret-scan: $n un-allowlisted hit(s) — pattern: $pattern"
+          sed 's/^/  /' "$tmp_hits"
+          return 1
+        fi
+        return 0
+      }
+
+      status=0
+
+      scan_pattern '-----BEGIN (RSA|EC|DSA|OPENSSH|PGP)? PRIVATE KEY-----' '^$' || status=1
+      scan_pattern 'AIza[0-9A-Za-z_-]{35}' '^$' || status=1
+      scan_pattern '\bsk-[A-Za-z0-9]{8,}' '^$' || status=1
+      scan_pattern 'ghp_[A-Za-z0-9]{16,}' '^$' || status=1
+      scan_pattern 'xox[baprs]-[A-Za-z0-9-]{8,}' '^$' || status=1
+      scan_pattern 'NLO_(API_TOKEN|VAULT_KEY|JWT_SECRET)=[A-Za-z0-9_]{20,}' '^$' || status=1
+      scan_pattern "$VLESS_PATTERN" "$VLESS_ALLOWLIST" || status=1
+      # A sha256-length hex literal in TS/JS source is almost always a
+      # hardcoded key/secret (e.g. the vault key); allow it nowhere.
+      scan_pattern '[A-Fa-f0-9]{64}' '^$' '\.(ts|js)$' || status=1
+
+      # Self-test (proves the gate actually works): plant a vless://
+      # secret in a tracked temp file, expect detection, then remove it.
+      fixture="secret-scan-selftest-fixture.$$.ts"
+      echo "export const planted = 'vless://aaaa0000-b1b1-c2c2-d3d3-4e4e4e4e4e4e@scan-fixture.example:443#selftest';" > "$fixture"
+      git add -- "$fixture"
+      if scan_pattern "$VLESS_PATTERN" "$VLESS_ALLOWLIST" '\.ts$'; then
+        echo "secret-scan SELF-TEST FAILED: the planted fixture was not detected"
+        status=1
+      fi
+      git rm -f -- "$fixture" 2>/dev/null || { git reset -q -- "$fixture" 2>/dev/null; rm -f "$fixture"; }
+
+      # Leave the index exactly as we found it.
+      if ! git diff --quiet --cached; then
+        echo "secret-scan: the git index was modified by the scan (unexpected)"
+        status=1
+      fi
+
+      if [ "$status" -eq 0 ]; then
+        echo "secret-scan: OK (no un-allowlisted secret patterns in tracked files)"
+      else
+        echo "secret-scan: FAILED"
+        exit 1
+      fi
+      NLO_SECRET_SCAN
 
 docker:
   stage: docker

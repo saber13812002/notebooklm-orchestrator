@@ -13,9 +13,15 @@ import { JobStagesRepo } from "../domain/stages.repo.js";
 import { JobLocks, DEFAULT_LOCK_TTL_MS } from "../domain/jobs.lock.js";
 import { transcodeToMp3 } from "../media/transcode.js";
 import { ProviderFailure, type NotebookLMProvider } from "../providers/types.js";
-import { EgressGateway, type EgressEndpoint } from "../proxy/gateway.js";
-import type { ProxyManager } from "../proxy/proxy-manager.js";
-import type { ProxyRuntime } from "../proxy/runtime.js";
+// P4-1D boundary seam (audit map §4.4): proxy types are imported through
+// the gateway so the lint rule can allow exactly proxy/gateway.js +
+// proxy/egress.js for the orchestration context.
+import {
+  EgressGateway,
+  type EgressEndpoint,
+  type ProxyManager,
+  type ProxyRuntime,
+} from "../proxy/gateway.js";
 import type { SecretVault } from "../secrets/vault.js";
 import type { ProviderEgress } from "../proxy/egress.js";
 

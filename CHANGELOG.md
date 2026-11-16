@@ -8,6 +8,79 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-16] — Mission NLO-P4-1D: PROVIDER CONFORMANCE SUITE + CI SECURITY GATES — **IMPLEMENTED + TESTED** (Live NOT verified)
+
+### Added
+
+- **`apps/server/test/conformance/`** — the provider conformance suite
+  (C1–C6) per [`docs/architecture/NLO_PROVIDER_CAPABILITY_CONTRACTS.md`](docs/architecture/NLO_PROVIDER_CAPABILITY_CONTRACTS.md)
+  §4: `runner.ts` (descriptor lint, suite discovery, provider × C1–C6 table,
+  exit-code gate) plus six suites (34 tests):
+  - **C1 declaration** — descriptor lint vs `providerDescriptorSchema`
+    (unknown op → error; stale `verifiedAt` >90d → warning, not failure).
+  - **C2 capability honesty** — one test per declared operation
+    (`c2:notebooklm.web:<op>`, 13 ops) + an undeclared-operation probe.
+  - **C3 lifecycle** — externalId persisted before the first poll; cancel
+    settles exactly once.
+  - **C4 failure classes** — auth → `AUTH_REQUIRED`, rate_limit →
+    `RATE_LIMITED`, transient → DEGRADED at maxAttempts, ambiguous →
+    `NEEDS_ATTENTION` with no auto-retry.
+  - **C5 concurrency** — 3 concurrent podcast jobs against
+    `maxConcurrent=1`: no aliasing, no wedge.
+  - **C6 egress boundary** — every provider call goes through the tunnel;
+    tunnel death mid-job → job FAILS class `proxy` (fail-closed, never a
+    direct fallback); no proxy node → FAILS before any egress; null
+    endpoint → `DirectEgressBlockedError`.
+- **ESLint module-boundary rules** (`eslint.config.js`) — the provider layer
+  may not import proxy/queue internals directly; it names dependencies
+  through the `proxy/gateway.js` type re-exports.
+- **CI jobs (both pipelines)** — `conformance` (runner; C7 is never run in
+  CI) and `secret-scan` (git-grep gate over `git ls-files`, no new
+  dependency): 8 patterns (PEM private keys, Google API keys, OpenAI-style
+  `sk-`, GitHub PAT, Slack tokens, `NLO_*` env secrets in file form,
+  sha256-length hex in TS/JS, `vless://<uuid>@`). Documented allowlist:
+  `apps/server/scripts/_add-nodes.py` (production node UUID, script stays
+  runnable), `apps/server/test/api.test.ts` (TEST-NET fixture), and the two
+  CI files themselves (they contain the scan's own planted fixture line).
+  A self-test plants a fixture, expects detection, and leaves the git index
+  exactly as found.
+
+### Changed
+
+- **`.github/workflows/ci.yml`** / **`.gitlab-ci.yml`** — the two new jobs,
+  mirrored with identical scripts (GitLab runs the secret-scan in a
+  `bash <<'…'` heredoc, since its default shell is dash).
+- **`apps/server/src/proxy/gateway.ts`** — re-exports the `ProxyManager` /
+  `ProxyRuntime` types so the provider layer can name its dependencies
+  without importing the proxy module directly.
+- **`apps/server/src/queue/job-runner.ts`** — consolidated provider/proxy
+  imports through the gateway module.
+- **`docs/testing/E2E_TEST_STRATEGY.md`** — new §5: conformance C1–C6 (CI,
+  mock level) vs C7 (manual live gate, never CI) + the secret-scan gate.
+
+### Verified
+
+- Conformance suite: **6 files / 34 tests passed**; runner table for
+  `notebooklm.web`: C1–C6 all **PASS**, C7 **NOT RUN** (exit 0).
+- secret-scan: extracted script executed against this checkout — clean;
+  the planted-fixture self-test detected the fixture; index left unmodified
+  (exit 0).
+- All workspaces: `npm test` green; `tsc --noEmit` clean; ESLint clean;
+  Prettier applied to touched files.
+- **Level of verification: Unit/Integration (in-process, mock provider)
+  passed. Live NOT verified** — C7 (live conformance) is a manual gate and
+  was not run.
+
+### Notes
+
+- Rollback: test files + lint rules + CI config; reverts cleanly, no
+  runtime behavior change.
+- During verification the vless pattern was broadened from IP-only hosts to
+  domain hosts (production nodes use domain hosts); the allowlist was
+  extended accordingly and the self-test proves the gate still detects.
+- No push, no production deployment. P4-1D is the last workstream of
+  Mission NLO-P4-1.
+
 ## [2026-11-16] — Mission NLO-P4-1C: DURABLE JOB EXECUTION LOCKS (settle-once) — **IMPLEMENTED + TESTED** (Live NOT verified)
 
 ### Added
@@ -37,7 +110,7 @@ only with a recorded live run; otherwise "planned".
 - **`apps/server/src/queue/job-runner.ts`** — `JobRunnerDeps` gains
   `locks?: JobLocks` + `lockTtlMs?`. `run()` acquires the lock at entry (after
   the CREATED/QUEUED gate): on refusal it logs `lock: <id> is held by another
-  instance; standing down` and returns the job untouched. The lease is
+instance; standing down` and returns the job untouched. The lease is
   refreshed on every attempt (retries + podcast), and the lock is released in
   the **outer `finally`** — covering every exit path (SUCCEEDED,
   handleFailure terminal, proxy-fail-closed FAILED, validation/selection
@@ -257,7 +330,7 @@ only with a recorded live run; otherwise "planned".
   map; baseline capability status table with honest labels.
 - Ecosystem facts verified 2026-11-15 with named sources: **no official
   NotebookLM/Gemini Notebook API** (consumer or Enterprise); Google rebrand to
-  *Gemini Notebook* 2026-07-16; no ecosystem project has proxy support;
+  _Gemini Notebook_ 2026-07-16; no ecosystem project has proxy support;
   nblpy (pinned 0.8.5, upstream 0.8.6) supports the T3/T4 generation ops —
   so T3/T4 are a worker-surface gap, not a capability gap.
 

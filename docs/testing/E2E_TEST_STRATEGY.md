@@ -45,3 +45,31 @@ scenario stage uniqueness.
 
 Full scenario definitions: [`E2E_SCENARIOS.md`](E2E_SCENARIOS.md). Four-path matrix:
 [`ACCEPTANCE_MATRIX.md`](ACCEPTANCE_MATRIX.md).
+
+## 5. Provider conformance (NLO-P4-1D) — C1–C6 in CI, C7 manual
+
+Provider conformance (contract in
+[`../architecture/NLO_PROVIDER_CAPABILITY_CONTRACTS.md`](../architecture/NLO_PROVIDER_CAPABILITY_CONTRACTS.md)
+§4) is a separate, always-on level: a provider may be reported `active` only
+while C1–C6 are green for it.
+
+| Suite          | Proves                                                                                                      | Runs                               |
+| -------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| C1 declaration | descriptor lint vs `providerDescriptorSchema` (unknown op → error; stale `verifiedAt` >90d → warning)       | CI (mock)                          |
+| C2 honesty     | one test per declared operation + an undeclared-operation probe                                             | CI (mock)                          |
+| C3 lifecycle   | externalId persisted before first poll; cancel settles exactly once                                         | CI (mock)                          |
+| C4 failure     | auth/rate_limit/transient/ambiguous map to the documented classes; ambiguous is never auto-retried          | CI (mock)                          |
+| C5 concurrency | `maxConcurrent` honored: no aliasing, no wedge under 3 simultaneous jobs                                    | CI (mock)                          |
+| C6 egress      | all provider traffic goes through the approved tunnel; tunnel death mid-job → `proxy` failure (fail-closed) | CI (mock)                          |
+| C7 live        | the same flows against real NotebookLM over real egress                                                     | **manual gate only — never in CI** |
+
+Runner: `npx tsx apps/server/test/conformance/runner.ts` — prints the
+provider × C1–C6 table and exits non-zero unless all six are PASS. The
+`conformance` CI job runs it in both pipelines (GitHub Actions + internal
+GitLab mirror). C1–C6 green is **mock-level** evidence only — it does not
+prove live execution (see §1 and the honesty rule in `CHANGELOG.md`).
+
+The same CI carries a `secret-scan` job: a git-grep gate over tracked files
+(private keys, cloud/API key shapes, `NLO_*` env secrets, sha256-length hex
+in TS/JS, `vless://<uuid>@` URIs) with a documented allowlist and a
+planted-fixture self-test that proves the gate detects secrets.
