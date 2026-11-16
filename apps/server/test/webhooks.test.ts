@@ -101,7 +101,12 @@ function makeStack(
     dispatcher,
     fetchCalls,
     advance: (ms: number) => {
-      nowMs += ms;
+      // Outbox rows are stamped with REAL wall clock (db.now()) at publish,
+      // while the dispatcher runs on this fake clock (origin: stack creation).
+      // Under parallel test load the wall-clock gap between stack creation and
+      // publish can exceed the advance, leaving due rows invisible to tick().
+      // Catch up to wall clock (+10ms margin) so a due tick always drains.
+      nowMs = Math.max(nowMs + ms, Date.now() + 10);
     },
     dispose: () => {
       db.close();

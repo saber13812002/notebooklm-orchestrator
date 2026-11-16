@@ -19,6 +19,7 @@ import { ProviderRegistry } from "./providers/registry.js";
 import { MockProxyRuntime, createXrayProxyRuntime, type ProxyRuntime } from "./proxy/runtime.js";
 import { MockProviderEgress } from "./proxy/egress.js";
 import { ProxyManager } from "./proxy/proxy-manager.js";
+import { EgressGateway } from "./proxy/gateway.js";
 import { fetchThroughTunnel } from "./proxy/connect-proxy.js";
 import { JobRunner } from "./queue/job-runner.js";
 import { Queue } from "./queue/queue.js";
@@ -44,6 +45,8 @@ export interface AppContext {
   runtime: ProxyRuntime;
   egress: MockProviderEgress;
   proxyManager: ProxyManager;
+  /** NLO-P4-1B: egress gateway — the single acquisition point for provider egress. */
+  gateway: EgressGateway;
   runner: JobRunner;
   queue: Queue;
   /** NLO-P2 (webhooks): outbox delivery (endpoints, deliveries, dispatcher). */
@@ -153,9 +156,22 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     { log: (msg) => console.log(`[nlo:proxy] ${msg}`) },
   );
 
+  // NLO-P4-1B: the egress gateway is the single acquisition point for
+  // provider egress routes: it wraps the proxy manager's selection and
+  // hands out endpoint descriptors (loopback port + staged-health
+  // evidence) — never raw tunnel handles. Fail-closed by default; direct
+  // egress only when NLO_ALLOW_DIRECT_EGRESS is set AND no node exists.
+  const gateway = new EgressGateway({
+    proxyManager,
+    proxies,
+    runtime,
+    allowDirect: config.allowDirectEgress,
+    log: (msg) => console.log(`[nlo:egress] ${msg}`),
+  });
+
   // Provider selection is EXPLICIT and observable: config.provider decides.
   // There is no silent fallback: "python-worker" must actually start.
-  // The worker gets the proxy manager so auth ops (login/verify) route
+  // The worker gets the egress gateway so auth ops (login/verify) route
   // through the same verified tunnels as jobs (fail-closed).
   const provider: NotebookLMProvider =
     config.provider === "python-worker"
@@ -166,16 +182,7 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
           loginBrowser: config.loginBrowser,
           jobTimeoutMs: config.jobTimeoutMs,
           allowDirect: config.allowDirectEgress,
-          proxyManager,
-          proxiesRepo: {
-            countEnabled: () => proxies.list().filter((n) => n.enabled).length,
-            listEnabled: () =>
-              proxies
-                .list()
-                .filter((n) => n.enabled)
-                .map((n) => ({ id: n.id })),
-            health: (nodeId) => proxies.health(nodeId),
-          },
+          egressGateway: gateway,
           log: (msg) => console.log(`[nlo:worker] ${msg}`),
         })
       : new MockProvider();
@@ -205,6 +212,7 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     proxies,
     provider,
     proxyManager,
+    gateway,
     runtime,
     vault,
     egress,
@@ -246,6 +254,7 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     runtime,
     egress,
     proxyManager,
+    gateway,
     runner,
     queue,
     webhooks,

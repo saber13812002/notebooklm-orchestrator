@@ -1,6 +1,6 @@
 # ADR-004: Egress Gateway (egress as a platform service, fail-closed preserved)
 
-**Status:** `PROPOSED` (NLO-P4-0) · **Date:** 2026-11-15 · **Baseline:** `main @ 76cd5f03`
+**Status:** `IMPLEMENTED` (core, NLO-P4-1B, 2026-11-16) — proposed NLO-P4-0 2026-11-15 · **Baseline:** `main @ 76cd5f03`
 **Companion:** [`NLO_ACCOUNT_SESSION_PROXY_ARCHITECTURE.md`](../NLO_ACCOUNT_SESSION_PROXY_ARCHITECTURE.md) §4, research [`NLO_PROXY_EGRESS_RESEARCH.md`](../../research/NLO_PROXY_EGRESS_RESEARCH.md)
 
 ## Context
@@ -36,3 +36,31 @@ The ecosystem survey confirms **no other project has any proxy support** — thi
 - Coupling point (tunnelEnv): [`NLO_P4_TARGET_ARCHITECTURE.md`](../NLO_P4_TARGET_ARCHITECTURE.md) §2.
 - Ecosystem "no proxy anywhere": [`NLO_PROXY_EGRESS_RESEARCH.md`](../../research/NLO_PROXY_EGRESS_RESEARCH.md) §3.
 - SSRF guard: [`packages/shared/src/ssrf.ts`](../../../packages/shared/src/ssrf.ts) + `test/ssrf.test.ts`.
+
+## Implementation (NLO-P4-1B, 2026-11-16 — implemented + unit/integration tested)
+
+Shipped in this commit (core of the decision):
+
+- **`apps/server/src/proxy/gateway.ts`** — `EgressGateway` with `acquire(ctx, policy)` / `release(endpoint)`.
+  - `acquire` returns `EgressAcquisition { endpoint, reason, rejected }`; `EgressEndpoint { nodeId, localPort, expectedEgressIp, evidenceRef }` is the **provider-facing descriptor** — providers never see a `TunnelHandle` again.
+  - Policies: `tunnel-required` (any `selectAuto` failure ⇒ `EgressAcquireError`, original message preserved) and `direct-allowed` (direct only on `no enabled proxy node configured` AND `allowDirect` — the fail-closed `NLO_ALLOW_DIRECT_EGRESS` semantics, verbatim).
+  - `evidenceRef` = `proxy_health:<nodeId>@<lastCheckedAt>` from the `ProxiesRepo.health` row; `expectedEgressIp` from the same row.
+  - `release` is idempotent (`WeakSet`) and delegates to `runtime.stopTunnel(nodeId)`.
+  - Static `endpointEnv(endpoint)` (the 8 proxy env vars, `127.0.0.1` host) and `browserProxy(endpoint)` are the ONLY places the worker gets egress configuration.
+- **`tunnelEnv` coupling removed:** `PythonWorkerProvider` now takes `egressGateway?: EgressGateway`; auth ops acquire with `direct-allowed` (and do **not** release — the tunnel outlives the request, matching the previous per-session lifecycle); `runJob`/`prepareAudio` use the runner-supplied endpoint.
+- **Provider request types:** all four request types in [`providers/types.ts`](../../../apps/server/src/providers/types.ts) carry `endpoint: EgressEndpoint | null` + `egress: ProviderEgress`; `null` ⇒ fail-closed `DirectEgressBlockedError` in the provider egress adapter.
+- **Job runner:** acquires once per job at start (before RUNNING), logs `proxy_selected` with the `acq.reason`, releases in `finally`. Fail-closed message preserved: `no approved proxy route available (fail-closed): …`.
+- **Wiring:** `AppContext.gateway` (single instance) feeds both the python worker and the job runner; `test/helpers.ts` builds one over the mock runtime (`allowDirect: false`).
+
+Tests (mock level — **Live NOT verified**):
+
+- `test/egress-gateway.test.ts` — 11 tests: acquire under both policies, health evidence mapping, release idempotency + no-op for direct endpoints, `endpointEnv` shape.
+- `test/fail-closed.test.ts` — new `describe("egress gateway (P4-1B)")`: gateway-level fail-closed with no nodes, runner job FAILED without a node (0 egress attempts), healthy-node acquisition + SUCCEEDED job with all attempts `viaTunnel`, unhealthy-node rejection, release closes the loopback listener (verified by connect → `ECONNREFUSED`).
+- Full server suite: 26 files / 312 tests green; shared suite: 128 green. Typecheck + lint clean.
+
+Still **planned** (not implemented, honest status):
+
+- Account↔node **affinity** (decision 4) — not implemented; the affinity data model does not exist yet.
+- **Per-node concurrency cap / acquisition queue** (decision 3, `max_concurrent_tunnels`) — not implemented; selection is the existing `selectAuto` (health-first).
+- **Mid-job re-acquisition on proxy failure** (decision 5) — not implemented; a proxy failure still fails the job attempt (retry policy may re-run on another node, which *does* re-acquire).
+- Provider-side egress policy **data on `ProviderDescriptor`** — the policy is currently chosen by the caller (`tunnel-required` for jobs, `direct-allowed` for auth); the per-descriptor field lands with the conformance suite (P4-1D, C6).

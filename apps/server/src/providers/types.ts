@@ -1,6 +1,6 @@
 import type { FailureClass } from "@nlo/shared";
+import type { EgressEndpoint } from "../proxy/gateway.js";
 import type { ProviderEgress } from "../proxy/egress.js";
-import type { TunnelHandle } from "../proxy/runtime.js";
 
 /**
  * Provider abstraction. The application never talks to NotebookLM directly;
@@ -58,10 +58,11 @@ export interface ProviderJobRequest {
    */
   podcast?: boolean | null;
   /**
-   * The ONLY network route the provider may use. `null` means "no approved
-   * tunnel" — a live provider MUST then refuse (fail-closed). Mock ignores.
+   * The ONLY network route the provider may use (gateway-acquired endpoint).
+   * `null` means "no approved route" — a live provider MUST then refuse
+   * (fail-closed). Mock ignores.
    */
-  tunnel: TunnelHandle | null;
+  endpoint: EgressEndpoint | null;
   egress: ProviderEgress;
   signal: AbortSignal;
   onProgress: (progress: number, note: string) => void;
@@ -184,7 +185,7 @@ export interface ProviderAudioGenerateRequest {
   /** Previously recorded task id — poll first, resubmit ONLY on proven failure. */
   resumeTaskId?: string | null;
   /** The ONLY network route; `null` => fail-closed refusal in live providers. */
-  tunnel: TunnelHandle | null;
+  endpoint: EgressEndpoint | null;
   egress: ProviderEgress;
   signal: AbortSignal;
   onProgress: (progress: number, note: string) => void;
@@ -209,7 +210,7 @@ export interface ProviderAudioStatusRequest {
   notebookId: string;
   /** The task id returned by generateAudio (== the artifact id). */
   taskId: string;
-  tunnel: TunnelHandle | null;
+  endpoint: EgressEndpoint | null;
   egress: ProviderEgress;
   signal: AbortSignal;
   onProgress: (progress: number, note: string) => void;
@@ -235,7 +236,7 @@ export interface ProviderAudioDownloadRequest {
   destPath: string;
   /** Hard size limit (bytes); an oversized transfer is removed + reported as an error. */
   maxBytes?: number | null;
-  tunnel: TunnelHandle | null;
+  endpoint: EgressEndpoint | null;
   egress: ProviderEgress;
   signal: AbortSignal;
   onProgress: (progress: number, note: string) => void;

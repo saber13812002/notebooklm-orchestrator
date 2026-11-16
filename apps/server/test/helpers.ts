@@ -14,6 +14,7 @@ import { MockProvider } from "../src/providers/mock-provider.js";
 import { MockProxyRuntime } from "../src/proxy/runtime.js";
 import { MockProviderEgress } from "../src/proxy/egress.js";
 import { ProxyManager } from "../src/proxy/proxy-manager.js";
+import { EgressGateway } from "../src/proxy/gateway.js";
 import { JobRunner } from "../src/queue/job-runner.js";
 import type { Job } from "@nlo/shared";
 
@@ -29,6 +30,8 @@ export interface TestParts {
   runtime: MockProxyRuntime;
   egress: MockProviderEgress;
   proxyManager: ProxyManager;
+  /** NLO-P4-1B: egress gateway over the proxy manager (fail-closed, no direct egress). */
+  gateway: EgressGateway;
   provider: MockProvider;
   runner: JobRunner;
   jobsDir: string;
@@ -68,6 +71,14 @@ export function makeParts(): TestParts {
       selfHealTarget: { host: "93.184.216.34", port: 443 },
     },
   );
+  const gateway = new EgressGateway({
+    proxyManager,
+    proxies,
+    runtime,
+    // Tests are fail-closed by default: direct egress only when a test
+    // explicitly allows it (a gateway built with allowDirect: true).
+    allowDirect: false,
+  });
   const provider = new MockProvider();
   const runner = new JobRunner({
     jobs,
@@ -75,6 +86,7 @@ export function makeParts(): TestParts {
     proxies,
     provider,
     proxyManager,
+    gateway,
     runtime,
     vault,
     egress,
@@ -99,6 +111,7 @@ export function makeParts(): TestParts {
     runtime,
     egress,
     proxyManager,
+    gateway,
     provider,
     runner,
     jobsDir,

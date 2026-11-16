@@ -85,3 +85,23 @@ ProxyRuntime (interface)
 3. `XrayProxyRuntime` فعال‌سازی می‌شود (env `NLO_PROXY_RUNTIME=xray`)
 4. egress verification واقعی: health-check + تست egress IP + reachability destination
 5. فقط بعد از آن، jobهای live مجاز می‌شوند (و live provider هم جدا تأیید می‌خواهد)
+
+## ۸. Egress Gateway (NLO-P4-1B — پیاده‌سازی‌شده + mock-tested)
+
+تا P4-1B، تصمیم egress **داخل فراخوانی provider** بود: `tunnelEnv` (متغیرهای proxy) مستقیم روی worker تزریق می‌شد. حالا تصمیم egress یک **سرویس پلتفرم** است — [`EgressGateway`](../../apps/server/src/proxy/gateway.ts) (ADR-004):
+
+```
+EgressGateway
+  ├── acquire(ctx, policy) → EgressAcquisition { endpoint, reason, rejected[] }
+  │     ├── policy "tunnel-required": selectAuto؛ هر خطا → EgressAcquireError (fail-closed، پیام اصلی حفظ)
+  │     └── policy "direct-allowed": direct فقط وقتی هیچ نود enabled نباشد AND NLO_ALLOW_DIRECT_EGRESS=1
+  ├── release(endpoint) → idempotent (WeakSet) → runtime.stopTunnel(nodeId)
+  └── endpointEnv(endpoint) → ۸ متغیر env proxy روی 127.0.0.1 (تنها منبع env برای worker)
+```
+
+- **`EgressEndpoint { nodeId, localPort, expectedEgressIp, evidenceRef }`** = descriptor سمت provider؛ provider **هرگز** `TunnelHandle` نمی‌بیند. `evidenceRef` = `proxy_health:<nodeId>@<lastCheckedAt>` (ردیف health که نود را واجد شرایط کرده — قابل audit).
+- **Job runner** قبل از RUNNING یک `acquire` انجام می‌دهد، `proxy_selected` log می‌زند (با `reason`)، و در `finally` `release` می‌کند.
+- **Auth ops** (login/refresh روی python worker) با `direct-allowed` acquire می‌شوند و release **نمی‌کنند** (tunnel عمر session را دارد).
+- `endpoint: null` در requestهای provider → `DirectEgressBlockedError` (fail-closed در آدرسور egress provider).
+- **تست‌ها:** `test/egress-gateway.test.ts` (۱۱ تست) + `describe` جدید در `test/fail-closed.test.ts` (۵ تست: بدون نود → fail-closed؛ نود سالم → SUCCEEDED با همه attempts `viaTunnel`؛ نود ناسالم → reject؛ release → listener بسته می‌شود، observable با connect→ECONNREFUSED).
+- **حداکثر:** affinity account↔node، سقف concurrency per-node، و re-acquire میانه‌ی job هنوز **planned** (در ADR-004 مستند).

@@ -34,7 +34,7 @@ import {
   MockProviderEgress,
   type ProviderEgress,
 } from "../src/proxy/egress.js";
-import type { TunnelHandle } from "../src/proxy/runtime.js";
+import type { EgressEndpoint } from "../src/proxy/gateway.js";
 
 const FIXTURE = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -42,7 +42,12 @@ const FIXTURE = path.join(
   "fake-audio-worker.mjs",
 );
 
-const TUNNEL: TunnelHandle = { nodeId: "n1", host: "127.0.0.1", port: 12345 };
+const ENDPOINT: EgressEndpoint = {
+  nodeId: "n1",
+  localPort: 12345,
+  expectedEgressIp: "198.51.100.7",
+  evidenceRef: "proxy_health:n1@test",
+};
 const JOB = "j_0123456789abcdef";
 const NB = "nb_test";
 const ACCT = "acct1";
@@ -67,7 +72,7 @@ function genReq(
     accountId: ACCT,
     credentialRef: `session:${ACCT}`,
     notebookId: NB,
-    tunnel: TUNNEL,
+    endpoint: ENDPOINT,
     egress,
     signal: new AbortController().signal,
     onProgress: () => {},
@@ -86,7 +91,7 @@ function statusReq(
     credentialRef: `session:${ACCT}`,
     notebookId: NB,
     taskId,
-    tunnel: TUNNEL,
+    endpoint: ENDPOINT,
     egress,
     signal: new AbortController().signal,
     onProgress: () => {},
@@ -107,7 +112,7 @@ function dlReq(
     notebookId: NB,
     artifactId,
     destPath,
-    tunnel: TUNNEL,
+    endpoint: ENDPOINT,
     egress,
     signal: new AbortController().signal,
     onProgress: () => {},
@@ -168,7 +173,7 @@ describe("MockProvider audio ops (deterministic, offline)", () => {
 
   it("generateAudio: fail-closed without a tunnel (no direct egress)", async () => {
     const p = new MockProvider();
-    await expect(p.generateAudio(genReq(makeEgress(), { tunnel: null }))).rejects.toThrow(
+    await expect(p.generateAudio(genReq(makeEgress(), { endpoint: null }))).rejects.toThrow(
       DirectEgressBlockedError,
     );
     p.dispose();
@@ -386,7 +391,7 @@ describe("PythonWorkerProvider audio ops (fake worker, real protocol, no venv)",
       accountId: ACCT,
       credentialRef: `session:${ACCT}`,
       notebookId: "nb_pw",
-      tunnel: null,
+      endpoint: null,
       egress: makeEgress(),
       signal: new AbortController().signal,
       onProgress: () => {},
@@ -404,7 +409,7 @@ describe("PythonWorkerProvider audio ops (fake worker, real protocol, no venv)",
       credentialRef: `session:${ACCT}`,
       notebookId: "nb_pw",
       taskId,
-      tunnel: null,
+      endpoint: null,
       egress: makeEgress(),
       signal: new AbortController().signal,
       onProgress: () => {},
@@ -424,7 +429,7 @@ describe("PythonWorkerProvider audio ops (fake worker, real protocol, no venv)",
       notebookId: "nb_pw",
       artifactId,
       destPath,
-      tunnel: null,
+      endpoint: null,
       egress: makeEgress(),
       signal: new AbortController().signal,
       onProgress: () => {},

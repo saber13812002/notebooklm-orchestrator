@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import net from "node:net";
 import { SsrfBlockedError } from "@nlo/shared";
 import {
   addAccount,
@@ -27,6 +28,17 @@ afterEach(() => parts.dispose());
 function noDirectEgress(): void {
   const direct = parts.egress.attempts.filter((a) => !a.viaTunnel);
   expect(direct, "no direct (tunnel-less) egress may ever be attempted").toHaveLength(0);
+}
+
+/** Dial 127.0.0.1:<port>; resolves on connect, rejects on refusal. */
+function netConnect(port: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const s = net.connect({ host: "127.0.0.1", port }, () => {
+      s.destroy();
+      resolve();
+    });
+    s.on("error", reject);
+  });
 }
 
 function setupWithNode() {
@@ -287,5 +299,72 @@ describe("no eligible account", () => {
     expect(result.status).toBe("FAILED");
     expect(result.errorClass).toBe("auth");
     noDirectEgress();
+  });
+});
+
+describe("egress gateway (P4-1B): fail-closed at the gateway API", () => {
+  it("acquire(tunnel-required) rejects when no node is configured", async () => {
+    parts = makeParts();
+    await expect(parts.gateway.acquire({}, "tunnel-required")).rejects.toThrow(
+      /no enabled proxy node/i,
+    );
+  });
+
+  it("a runner job with no node fails proxy-class with zero egress attempts", async () => {
+    parts = makeParts();
+    addAccount(parts.accounts, "acct-1");
+    const job = createJob(parts.jobs);
+    const result = await parts.runner.run(job.id);
+    expect(result.status).toBe("FAILED");
+    expect(result.errorClass).toBe("proxy");
+    expect(result.errorMessage).toMatch(/fail-closed/i);
+    expect(parts.egress.attempts).toHaveLength(0);
+    noDirectEgress();
+  });
+
+  it("acquire(tunnel-required) returns the node's endpoint and the job's traffic stays in-tunnel", async () => {
+    parts = makeParts();
+    addAccount(parts.accounts, "acct-1");
+    const node = addNode(parts.proxies, parts.vault, "n1");
+    markHealthy(parts.proxies, node.id);
+    const acq = await parts.gateway.acquire({}, "tunnel-required");
+    expect(acq.endpoint.nodeId).toBe(node.id);
+    expect(acq.endpoint.localPort).toBeGreaterThan(0);
+    expect(acq.endpoint.expectedEgressIp).toBe("198.51.100.7");
+    expect(acq.endpoint.evidenceRef).toMatch(/^proxy_health:/);
+
+    const job = createJob(parts.jobs);
+    const result = await parts.runner.run(job.id);
+    expect(result.status).toBe("SUCCEEDED");
+    expect(parts.egress.attempts.length).toBeGreaterThan(0);
+    expect(parts.egress.attempts.every((a) => a.viaTunnel)).toBe(true);
+    expect(parts.egress.attempts.every((a) => a.tunnelNodeId === node.id)).toBe(true);
+    noDirectEgress();
+  });
+
+  it("acquire(tunnel-required) fails closed when all nodes are unhealthy", async () => {
+    parts = makeParts();
+    const n1 = addNode(parts.proxies, parts.vault, "n1");
+    const n2 = addNode(parts.proxies, parts.vault, "n2", 20);
+    markHealthy(parts.proxies, n1.id);
+    markHealthy(parts.proxies, n2.id);
+    markUnhealthy(parts.proxies, n1.id, "down");
+    markUnhealthy(parts.proxies, n2.id, "down");
+    parts.runtime.setScenario(n1.id, "down");
+    parts.runtime.setScenario(n2.id, "down");
+    await expect(parts.gateway.acquire({}, "tunnel-required")).rejects.toThrow(/fail-closed/i);
+  });
+
+  it("release stops the loopback listener (tunnel down) and is idempotent", async () => {
+    setupWithNode();
+    const acq = await parts.gateway.acquire({}, "tunnel-required");
+    const port = acq.endpoint.localPort!;
+    // The tunnel's loopback listener is up before release.
+    await expect(netConnect(port)).resolves.toBeUndefined();
+    await parts.gateway.release(acq.endpoint);
+    // After release the listener is gone (connection refused).
+    await expect(netConnect(port)).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    // Idempotent: a second release is a no-op, not an error.
+    await expect(parts.gateway.release(acq.endpoint)).resolves.toBeUndefined();
   });
 });

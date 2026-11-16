@@ -8,6 +8,93 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-16] — Mission NLO-P4-1B: PROVIDER EGRESS GATEWAY (tunnel → endpoint) — **IMPLEMENTED + TESTED** (Live NOT verified)
+
+### Added
+
+- **`apps/server/src/proxy/gateway.ts`** — `EgressGateway`, the single
+  acquisition point for provider egress (ADR-004, core):
+  `acquire(ctx, policy)` → `EgressAcquisition { endpoint, reason, rejected }`
+  over `ProxyManager.selectAuto`; `release(endpoint)` idempotent
+  (`WeakSet`), delegating to `runtime.stopTunnel(nodeId)`; static
+  `endpointEnv(endpoint)` (the 8 proxy env vars, host `127.0.0.1`) and
+  `browserProxy(endpoint)` — the ONLY places a provider gets egress config.
+  `EgressEndpoint { nodeId, localPort, expectedEgressIp, evidenceRef }` is
+  the provider-facing descriptor: `evidenceRef = proxy_health:<nodeId>@<lastCheckedAt>`
+  and `expectedEgressIp` both from the `ProxiesRepo.health` row. Policies:
+  `tunnel-required` (any selection failure ⇒ `EgressAcquireError`, original
+  fail-closed message preserved) and `direct-allowed` (direct egress only on
+  "no enabled proxy node configured" AND `NLO_ALLOW_DIRECT_EGRESS=1` — the
+  existing fail-closed semantics, verbatim).
+- **`apps/server/test/egress-gateway.test.ts`** — 11 tests: acquire under
+  both policies, health-evidence mapping, direct-endpoint shape, release
+  idempotency + no-op for direct endpoints, `endpointEnv`/`browserProxy`
+  output.
+- **`apps/server/test/fail-closed.test.ts`** — new
+  `describe("egress gateway (P4-1B)")` (5 tests): gateway-level
+  fail-closed with no nodes (reject, no direct), runner job with no node →
+  FAILED + `fail-closed` + 0 egress attempts, healthy node → acquire
+  returns the node's loopback port + expected egress IP + evidence ref and
+  the job SUCCEEDS with all attempts `viaTunnel`, all-unhealthy nodes →
+  reject, and release closes the loopback listener (observed by
+  connect → `ECONNREFUSED`, second release is a no-op).
+
+### Changed
+
+- **Provider egress signature (tunnel → endpoint):** all four request types
+  in `apps/server/src/providers/types.ts` now carry
+  `endpoint: EgressEndpoint | null` + `egress: ProviderEgress` (was
+  `tunnel: TunnelHandle | null`); `null` ⇒ fail-closed
+  `DirectEgressBlockedError` in the provider egress adapter
+  (`apps/server/src/proxy/egress.ts`). `MockProvider` updated to match.
+  `TunnelHandle` stays proxy-internal (`runtime.ts`); providers never see a
+  tunnel object.
+- **`apps/server/src/providers/python-worker/python-worker-provider.ts`** —
+  the `tunnelEnv` coupling is **removed** (the audit's coupling point #1):
+  provider opts now take `egressGateway?: EgressGateway` (the old
+  `proxyManager`/`proxiesRepo` opts are gone). Auth ops (login/refresh)
+  acquire with `direct-allowed` and do NOT release (the tunnel outlives the
+  request, as before); `runJob`/`prepareAudio` use the runner-supplied
+  endpoint via `EgressGateway.endpointEnv`.
+- **`apps/server/src/queue/job-runner.ts`** — acquires once per job before
+  RUNNING (preferred node from job input), logs `proxy_selected` with the
+  acquisition `reason`, releases in `finally`. Fail-closed message
+  preserved: `no approved proxy route available (fail-closed): …`.
+- **`apps/server/src/app-context.ts`** — constructs the single
+  `AppContext.gateway` (with `allowDirect: config.allowDirectEgress`) and
+  feeds it to both the python worker and the job runner; the old
+  `proxyManager`/`proxiesRepo` python-worker opts are gone.
+- **`apps/server/test/helpers.ts`** — test harness builds a gateway over
+  the mock runtime (`allowDirect: false`) and passes it to the runner.
+- **`apps/server/test/provider-audio.test.ts`** — migrated to `EgressEndpoint`.
+- **`apps/server/test/webhooks.test.ts`** — flake fix: the test dispatcher
+  runs on a fake clock while outbox rows are stamped with real wall clock
+  at publish; `advance()` now catches up to wall clock (+10 ms margin) so
+  `dueTick` drains deterministically under parallel test load (pre-existing
+  race, surfaced under P4-1B load).
+
+### Verified
+
+- `apps/server`: full suite **26 files / 312 tests passed** (incl. egress
+  gateway 11/11, fail-closed with the new gateway describe, provider-audio
+  30/30, e2e text-to-podcast 2/2); `packages/shared`: 12 files /
+  128 tests passed. `tsc --noEmit` clean (server + shared); ESLint clean on
+  all touched files; Prettier applied to touched files.
+- **Level of verification: Unit/Integration (in-process, mock provider)
+  passed. Live NOT verified** — no live run was performed for this change;
+  the Xray runtime remains a stub, as before.
+
+### Notes
+
+- No migrations, no push, no production deployment.
+- ADR-004 status moved `PROPOSED` → `IMPLEMENTED` (core) with an explicit
+  "still planned" list (account↔node affinity, per-node concurrency cap,
+  mid-job re-acquisition, per-descriptor egress policy data — the latter
+  lands with the P4-1D conformance suite). `docs/architecture/proxy-design.md`
+  gained §8 (Egress Gateway).
+- Workstreams P4-1C (durable job locks) and P4-1D (conformance + CI)
+  follow as separate commits.
+
 ## [2026-11-16] — Mission NLO-P4-1A: PROVIDER REGISTRY + CAPABILITIES API — **IMPLEMENTED + TESTED** (Live NOT verified)
 
 ### Added

@@ -118,6 +118,9 @@ export class MockProxyRuntime implements ProxyRuntime {
     // dial ONLY this address; anything else has no route in the mock world.
     const server = await new Promise<Server>((resolve, reject) => {
       const s = createServer((socket) => {
+        // Swallow client-side teardown noise (ECONNRESET) so it never
+        // surfaces as an uncaught exception in tests.
+        socket.on("error", () => {});
         this.dialed.push(`127.0.0.1:${this.portOf(node.id)}`);
         if (scenario === "crash") {
           socket.destroy(new Error("mock tunnel crashed"));

@@ -12,8 +12,9 @@ import { ArtifactRepo } from "../domain/artifacts.repo.js";
 import { JobStagesRepo } from "../domain/stages.repo.js";
 import { transcodeToMp3 } from "../media/transcode.js";
 import { ProviderFailure, type NotebookLMProvider } from "../providers/types.js";
+import { EgressGateway, type EgressEndpoint } from "../proxy/gateway.js";
 import type { ProxyManager } from "../proxy/proxy-manager.js";
-import type { ProxyRuntime, TunnelHandle } from "../proxy/runtime.js";
+import type { ProxyRuntime } from "../proxy/runtime.js";
 import type { SecretVault } from "../secrets/vault.js";
 import type { ProviderEgress } from "../proxy/egress.js";
 
@@ -76,6 +77,9 @@ export interface JobRunnerDeps {
   /** NLO-P2 (webhooks): publisher for job.running + terminal events.
    *  Optional so older test harnesses keep working; absent = no emission. */
   webhooks?: { publish: (jobId: string, eventType: string) => void };
+  /** NLO-P4-1B: egress gateway. Optional: when absent, the runner builds a
+   *  default gateway from proxyManager + proxies + runtime (same behavior). */
+  gateway?: EgressGateway;
 }
 
 const sleepDefault = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -84,8 +88,21 @@ const TERMINAL = ["SUCCEEDED", "FAILED", "CANCELLED"];
 
 export class JobRunner {
   private active = new Map<string, AbortController>();
+  private gwCache?: EgressGateway;
 
   constructor(private readonly d: JobRunnerDeps) {}
+
+  /** The egress gateway (injected, or built once from the classic deps). */
+  private gw(): EgressGateway {
+    return (
+      this.d.gateway ??
+      (this.gwCache ??= new EgressGateway({
+        proxyManager: this.d.proxyManager,
+        proxies: this.d.proxies,
+        runtime: this.d.runtime,
+      }))
+    );
+  }
 
   queuedIds(): string[] {
     // Newly created jobs enter as CREATED; they are validated on first pick-up.
@@ -148,28 +165,32 @@ export class JobRunner {
         }
         this.logEvent(jobId, archive, "account_selected", `account ${account.label}`);
 
-        // --- select proxy (fail-closed) ----------------------------------
+        // --- select proxy (fail-closed, via the egress gateway) -----------
         this.d.jobs.setStatus(jobId, "WAITING_FOR_PROXY");
-        let handle: TunnelHandle | null = null;
+        let endpoint: EgressEndpoint | null = null;
         let nodeId: string | null = null;
         try {
-          // selectAuto() validates (config + fresh healthy check) AND starts
-          // the tunnel; it throws when no node can provide a real route.
-          // When health is merely STALE (10-min TTL passed), it runs the real
-          // staged check against the NotebookLM target first (self-heal), so
-          // a previously-verified node keeps working without manual clicks.
-          const sel = await this.d.proxyManager.selectAuto(
-            this.d.jobs.getOrThrow(jobId).input.preferredNodeId,
+          // The gateway wraps selectAuto(): it validates (config + fresh
+          // healthy check) AND starts the tunnel, throwing when no node can
+          // provide a real route. When health is merely STALE (10-min TTL
+          // passed), the manager self-heals by running the real staged check
+          // against the NotebookLM target first, so a previously-verified
+          // node keeps working without manual clicks. The endpoint carries
+          // the loopback port + the staged-health evidence (egress IP +
+          // evidence ref) that made the node eligible.
+          const acq = await this.gw().acquire(
+            { preferredNodeId: this.d.jobs.getOrThrow(jobId).input.preferredNodeId },
+            "tunnel-required",
           );
-          nodeId = sel.node.id;
-          handle = sel.handle;
+          endpoint = acq.endpoint;
+          nodeId = endpoint.nodeId;
           this.logEvent(
             jobId,
             archive,
             "proxy_selected",
-            `node ${sel.node.config.name}; tunnel ${sel.handle.host}:${sel.handle.port} — ${sel.reason}`,
+            `node ${endpoint.nodeId}; tunnel 127.0.0.1:${endpoint.localPort} — ${acq.reason}`,
           );
-          for (const r of sel.rejected) {
+          for (const r of acq.rejected) {
             this.logEvent(
               jobId,
               archive,
@@ -231,7 +252,7 @@ export class JobRunner {
             // NLO-P2: podcast-enabled jobs report notebook operation IDs so
             // the runner can drive the audio pipeline in the same notebook.
             podcast: job.input.podcast?.enabled ?? false,
-            tunnel: handle,
+            endpoint,
             egress: this.d.egress,
             signal: controller.signal,
             onProgress: (p, note) => this.d.jobs.setProgress(jobId, p, note),
@@ -296,7 +317,7 @@ export class JobRunner {
               jobId,
               job,
               account,
-              handle,
+              endpoint,
               controller,
               credentialRef,
               resultMeta: result.providerMeta,
@@ -371,7 +392,10 @@ export class JobRunner {
           this.d.jobs.setStatus(jobId, "WAITING_FOR_ACCOUNT");
           // The loop re-selects account + proxy and runs again.
         } finally {
-          if (nodeId) await this.d.runtime.stopTunnel(nodeId).catch(() => {});
+          if (endpoint)
+            await this.gw()
+              .release(endpoint)
+              .catch(() => {});
         }
       }
     } catch (err) {
@@ -687,12 +711,12 @@ export class JobRunner {
     job: Job;
     archive: JobArchive;
     account: AccountRow;
-    handle: TunnelHandle;
+    endpoint: EgressEndpoint;
     controller: AbortController;
     credentialRef: string;
     resultMeta: Record<string, unknown>;
   }): Promise<Record<string, unknown> | null> {
-    const { jobId, job, archive, account, handle, controller, credentialRef, resultMeta } = args;
+    const { jobId, job, archive, account, endpoint, controller, credentialRef, resultMeta } = args;
     const provider = this.d.provider;
     // Bind to the provider: these are class methods that use `this`.
     const generateAudio = provider.generateAudio?.bind(provider);
@@ -756,7 +780,7 @@ export class JobRunner {
         audioFormat: podcast?.format ?? null,
         audioLength: podcast?.length ?? null,
         resumeTaskId: this.d.jobs.getOrThrow(jobId).operationIds?.audioTaskId ?? null,
-        tunnel: handle,
+        endpoint,
         egress: this.d.egress,
         signal: controller.signal,
         onProgress: (_p, note) => setStage(90, note),
@@ -827,7 +851,7 @@ export class JobRunner {
           credentialRef,
           notebookId,
           taskId,
-          tunnel: handle,
+          endpoint,
           egress: this.d.egress,
           signal: controller.signal,
           onProgress: (_p, note) => setStage(95, note),
@@ -855,7 +879,7 @@ export class JobRunner {
         notebookId,
         artifactId: taskId,
         destPath: tmpPath,
-        tunnel: handle,
+        endpoint,
         egress: this.d.egress,
         signal: controller.signal,
         onProgress: (_p, note) => setStage(98, note),

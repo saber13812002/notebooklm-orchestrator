@@ -18,6 +18,7 @@ import {
   type ProviderJobRequest,
   type ProviderJobResult,
 } from "../types.js";
+import { EgressGateway, type EgressAcquisition, type EgressEndpoint } from "../../proxy/gateway.js";
 import { WorkerError, WorkerSupervisor } from "./worker.js";
 import { isAmbiguousCode, type WorkerOp } from "./protocol.js";
 
@@ -27,8 +28,8 @@ import { isAmbiguousCode, type WorkerOp } from "./protocol.js";
  *
  * Honesty:
  *  - name is "python-worker" and it is never reported as mock.
- *  - A job without an approved tunnel FAILS (fail-closed) — there is no
- *    direct-egress fallback in the job path.
+ *  - A job without an approved egress endpoint FAILS (fail-closed) — there
+ *    is no direct-egress fallback in the job path.
  *  - Capability levels below are live-untested until the live E2E passes.
  *
  * Session model:
@@ -38,13 +39,6 @@ import { isAmbiguousCode, type WorkerOp } from "./protocol.js";
  *    importing an existing storage_state.json. It is NEVER served over HTTP.
  *  - credentialRef format: "session:<accountId>".
  */
-/** Minimal structural view of a proxy selection (avoids a hard dependency
- *  on the proxy layer; ProxyManager.select satisfies this). */
-interface AuthTunnelSelection {
-  node: { id: string; config: { name: string } };
-  handle: { host: string; port: number };
-}
-
 export class PythonWorkerProvider implements NotebookLMProvider {
   readonly name = "python-worker";
 
@@ -63,18 +57,12 @@ export class PythonWorkerProvider implements NotebookLMProvider {
        * node is configured at all. Jobs are ALWAYS fail-closed regardless.
        */
       allowDirect?: boolean;
-      /** Selects/starts a tunnel for auth ops (login/verify) — fail-closed.
-       *  selectAuto self-heals stale health checks (runs the real staged
-       *  check against the NotebookLM target) before failing. */
-      proxyManager?: {
-        selectAuto: (preferredNodeId: string | null) => Promise<AuthTunnelSelection>;
-      };
-      /** Configured nodes (direct auth only when none exist). */
-      proxiesRepo?: {
-        countEnabled: () => number;
-        listEnabled: () => { id: string }[];
-        health: (nodeId: string) => { lastCheckedAt: string | null } | null;
-      };
+      /** Egress gateway (P4-1B): acquires the endpoint for auth ops
+       *  (login/verify) — fail-closed. The gateway's selectAuto self-heals
+       *  stale health checks (runs the real staged check against the
+       *  NotebookLM target) before failing. When absent, the legacy
+       *  allowDirect-only behavior applies (verify-live scripts). */
+      egressGateway?: EgressGateway;
       log?: (line: string) => void;
     },
   ) {
@@ -133,19 +121,18 @@ export class PythonWorkerProvider implements NotebookLMProvider {
   /**
    * Auth ops (login/verify) must reach the real service. When any proxy node
    * is configured, a tunnel is REQUIRED (same fail-closed policy as jobs):
-   * select() validates config + fresh health and starts the tunnel. Only when
-   * NO node exists at all does direct egress proceed (an explicit, logged
-   * configuration choice).
+   * the gateway's selectAuto validates config + fresh health and starts the
+   * tunnel. Only when NO node exists at all does direct egress proceed (an
+   * explicit, logged configuration choice via NLO_ALLOW_DIRECT_EGRESS).
+   *
+   * Note: auth ops do NOT release the endpoint — the tunnel is kept alive
+   * while the interactive worker runs (legacy behavior, unchanged).
    */
-  private async acquireAuthTunnel(): Promise<{
-    nodeId: string;
-    handle: { host: string; port: number } | null;
-    browserProxy: { server: string } | null;
-  }> {
-    const pm = this.opts.proxyManager;
-    const repo = this.opts.proxiesRepo;
-    const enabled = repo?.listEnabled() ?? [];
-    if (!pm || enabled.length === 0) {
+  private async acquireAuthEndpoint(): Promise<EgressEndpoint> {
+    const gw = this.opts.egressGateway;
+    if (!gw) {
+      // Legacy path (no gateway, e.g. verify-live scripts): direct egress
+      // only when explicitly enabled; otherwise fail-closed.
       if (!this.opts.allowDirect) {
         throw new ProviderFailure({
           failureClass: "proxy",
@@ -158,37 +145,33 @@ export class PythonWorkerProvider implements NotebookLMProvider {
       this.log(
         "auth op proceeding with DIRECT egress (no proxy node configured; NLO_ALLOW_DIRECT_EGRESS=1)",
       );
-      return { nodeId: "", handle: null, browserProxy: null };
+      return { nodeId: "", localPort: null, expectedEgressIp: null, evidenceRef: null };
     }
-    // selectAuto self-heals stale health (10-min TTL passed) by running the
-    // real staged check against the NotebookLM target before failing — the
-    // server keeps the user from doing anything, and there is never a
-    // direct-egress fallback.
-    const sel = await pm.selectAuto(null);
-    this.log(
-      `auth op routed through node ${sel.node.config.name} (tunnel ${sel.handle.host}:${sel.handle.port})`,
-    );
-    const server = `http://${sel.handle.host}:${sel.handle.port}`;
-    return {
-      nodeId: sel.node.id,
-      handle: { host: sel.handle.host, port: sel.handle.port },
-      browserProxy: { server },
-    };
-  }
-
-  /** Env for a job's worker so notebooklm-py routes through the tunnel. */
-  private tunnelEnv(tunnel: { host: string; port: number }): Record<string, string> {
-    const proxy = `http://${tunnel.host}:${tunnel.port}`;
-    return {
-      HTTP_PROXY: proxy,
-      HTTPS_PROXY: proxy,
-      ALL_PROXY: proxy,
-      http_proxy: proxy,
-      https_proxy: proxy,
-      all_proxy: proxy,
-      NO_PROXY: "127.0.0.1,localhost",
-      no_proxy: "127.0.0.1,localhost",
-    };
+    // The gateway's selectAuto self-heals stale health (10-min TTL passed)
+    // by running the real staged check against the NotebookLM target before
+    // failing — and there is never a direct-egress fallback when nodes exist
+    // but are unhealthy.
+    let acq: EgressAcquisition;
+    try {
+      acq = await gw.acquire({ preferredNodeId: null }, "direct-allowed");
+    } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
+      const message = /no enabled proxy node configured/.test(raw)
+        ? "no proxy route available for auth (fail-closed): configure a proxy node or set NLO_ALLOW_DIRECT_EGRESS=1"
+        : `no proxy route available for auth (fail-closed): ${raw}`;
+      throw new ProviderFailure({
+        failureClass: "proxy",
+        message,
+        ambiguous: false,
+        needsReauth: false,
+      });
+    }
+    if (acq.endpoint.localPort !== null) {
+      this.log(
+        `auth op routed through node ${acq.endpoint.nodeId} (tunnel 127.0.0.1:${acq.endpoint.localPort})`,
+      );
+    }
+    return acq.endpoint;
   }
 
   capabilities() {
@@ -298,11 +281,11 @@ export class PythonWorkerProvider implements NotebookLMProvider {
     }
     // Verification talks to the REAL service: route through a verified tunnel
     // (fail-closed when nodes exist). The tunnel is kept alive while used.
-    const tunnel = await this.acquireAuthTunnel();
+    const endpoint = await this.acquireAuthEndpoint();
     const w = new WorkerSupervisor({
       pythonBin: this.opts.pythonBin,
       workerPath: this.opts.workerPath,
-      env: tunnel.handle ? this.tunnelEnv(tunnel.handle) : {},
+      env: EgressGateway.endpointEnv(endpoint),
       // Through a residential proxy the round-trip to Google can be slow;
       // give verification generous headroom (5 min supervisor / 2 min per
       // inner request) rather than killing a healthy session check.
@@ -353,11 +336,11 @@ export class PythonWorkerProvider implements NotebookLMProvider {
     opts: { timeoutSec?: number; headless?: boolean; browser?: string } = {},
   ): Promise<{ email: string | null }> {
     const sessionPath = this.sessionPathFor(accountId);
-    const tunnel = await this.acquireAuthTunnel();
+    const endpoint = await this.acquireAuthEndpoint();
     const w = new WorkerSupervisor({
       pythonBin: this.opts.pythonBin,
       workerPath: this.opts.workerPath,
-      env: tunnel.handle ? this.tunnelEnv(tunnel.handle) : {},
+      env: EgressGateway.endpointEnv(endpoint),
       requestTimeoutMs: (opts.timeoutSec ?? 600) * 1000 + 120_000,
       correlationId: `login:${accountId}`,
       log: this.log,
@@ -369,7 +352,7 @@ export class PythonWorkerProvider implements NotebookLMProvider {
         timeoutSec: opts.timeoutSec ?? 600,
         headless: opts.headless ?? false,
         browser: opts.browser ?? this.opts.loginBrowser ?? "chromium",
-        proxy: tunnel.browserProxy,
+        proxy: EgressGateway.browserProxy(endpoint),
       });
       try {
         chmodSync(sessionPath, 0o600);
@@ -404,11 +387,11 @@ export class PythonWorkerProvider implements NotebookLMProvider {
     },
   ): Promise<{ email: string | null }> {
     const sessionPath = this.sessionPathFor(accountId);
-    const tunnel = await this.acquireAuthTunnel();
+    const endpoint = await this.acquireAuthEndpoint();
     const w = new WorkerSupervisor({
       pythonBin: this.opts.pythonBin,
       workerPath: this.opts.workerPath,
-      env: tunnel.handle ? this.tunnelEnv(tunnel.handle) : {},
+      env: EgressGateway.endpointEnv(endpoint),
       requestTimeoutMs: (opts.timeoutSec ?? 180) * 1000 + 120_000,
       correlationId: `browser-import:${accountId}`,
       log: this.log,
@@ -440,7 +423,7 @@ export class PythonWorkerProvider implements NotebookLMProvider {
   }
 
   async runJob(req: ProviderJobRequest): Promise<ProviderJobResult> {
-    if (!req.tunnel && !this.opts.allowDirect) {
+    if (!req.endpoint && !this.opts.allowDirect) {
       throw new ProviderFailure({
         failureClass: "proxy",
         message:
@@ -487,7 +470,7 @@ export class PythonWorkerProvider implements NotebookLMProvider {
     const w = new WorkerSupervisor({
       pythonBin: this.opts.pythonBin,
       workerPath: this.opts.workerPath,
-      env: req.tunnel ? this.tunnelEnv(req.tunnel) : {},
+      env: EgressGateway.endpointEnv(req.endpoint),
       requestTimeoutMs: this.opts.jobTimeoutMs ?? 30 * 60_000,
       correlationId: `job:${req.jobId}`,
       log: this.log,
@@ -575,8 +558,12 @@ export class PythonWorkerProvider implements NotebookLMProvider {
           turnNumber: r.turnNumber,
           references: r.references,
           checkedAt: r.checkedAt,
-          route: req.tunnel
-            ? { nodeId: req.tunnel.nodeId, host: req.tunnel.host, port: req.tunnel.port }
+          route: req.endpoint
+            ? {
+                nodeId: req.endpoint.nodeId,
+                localPort: req.endpoint.localPort,
+                expectedEgressIp: req.endpoint.expectedEgressIp,
+              }
             : null,
         },
         artifacts: [],
@@ -627,18 +614,18 @@ export class PythonWorkerProvider implements NotebookLMProvider {
 
   /**
    * Shared pre-flight + worker construction for the audio ops: fail-closed
-   * tunnel check, credential resolution, session existence (auth/needsReauth).
+   * endpoint check, credential resolution, session existence (auth/needsReauth).
    */
   private prepareAudioWorker(
     req: {
       jobId: string;
       accountId: string;
       credentialRef: string;
-      tunnel: { nodeId: string; host: string; port: number } | null;
+      endpoint: EgressEndpoint | null;
     },
     correlation: string,
   ): { sessionPath: string; w: WorkerSupervisor } {
-    if (!req.tunnel && !this.opts.allowDirect) {
+    if (!req.endpoint && !this.opts.allowDirect) {
       throw new ProviderFailure({
         failureClass: "proxy",
         message:
@@ -659,7 +646,7 @@ export class PythonWorkerProvider implements NotebookLMProvider {
     const w = new WorkerSupervisor({
       pythonBin: this.opts.pythonBin,
       workerPath: this.opts.workerPath,
-      env: req.tunnel ? this.tunnelEnv(req.tunnel) : {},
+      env: EgressGateway.endpointEnv(req.endpoint),
       requestTimeoutMs: this.opts.jobTimeoutMs ?? 30 * 60_000,
       correlationId: correlation,
       log: this.log,

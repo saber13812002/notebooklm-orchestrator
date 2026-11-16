@@ -209,10 +209,10 @@ export class MockProvider implements NotebookLMProvider {
       }
 
       // The "ask" call goes through the egress boundary, exactly like a real
-      // worker. A null tunnel or a broken scenario throws here (fail-closed);
+      // worker. A null endpoint or a broken scenario throws here (fail-closed);
       // the runner classifies the raw error (proxy/connectivity/...) and
       // decides retry vs. terminal.
-      await req.egress.request(req.tunnel, "notebooklm.google.com:443", {
+      await req.egress.request(req.endpoint, "notebooklm.google.com:443", {
         method: "POST",
         path: "/batchexecute",
         headers: { "content-type": "application/json" },
@@ -391,8 +391,8 @@ export class MockProvider implements NotebookLMProvider {
       req.onProgress(35, "mock: prior task failed — re-submitting");
     }
 
-    // Egress boundary, exactly like runJob (fail-closed: no tunnel => throw).
-    await req.egress.request(req.tunnel, "notebooklm.google.com:443", {
+    // Egress boundary, exactly like runJob (fail-closed: no endpoint => throw).
+    await req.egress.request(req.endpoint, "notebooklm.google.com:443", {
       method: "POST",
       path: "/artifacts/generate_audio",
       headers: { "content-type": "application/json" },
