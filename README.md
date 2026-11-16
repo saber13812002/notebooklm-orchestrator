@@ -237,7 +237,7 @@ Envelope خطای یکنواخت: `{"error":{"code","message","details?"}}` (ک�
 | انتشار API به بیرون (`nlo.ai.ismc.ir` + TLS)                                           | **planned** (Phase F؛ DNS A record وجود دارد، مسیر proxy نه)                                                               |
 | انتشار مستندات در Wiki.js                                                              | **in progress** (محتوای Markdown در `docs/wiki/`)                                                                          |
 | Google Drive / DOCX / خروجی‌های Studio / Download Manager                              | **planned** (Phase G)                                                                                                      |
-| P4: پلتفرم ماژولار (Provider Registry، Account/Egress Manager، intake جامع، T1–T4، retry از checkpoint، failover، MCP server+client) | **PROPOSED** (طراحی کامل ۲۰۲۶-۱۱-۱۵؛ پیاده‌سازی شروع نشده — P4-1…P4-8 در انتظار تأیید owner؛ جزئیات: [`NLO_P4_0_ARCHITECTURE_DISCOVERY.md`](docs/reports/NLO_P4_0_ARCHITECTURE_DISCOVERY.md)) |
+| P4: پلتفرم ماژولار (Provider Registry، Account/Egress Manager، intake جامع، T1–T4، retry از checkpoint، failover، MCP server+client) | **IN PROGRESS** (طراحی کامل ۲۰۲۶-۱۱-۱۵؛ **P4-1A Provider Registry + `GET /api/v1/capabilities` + scope `providers:read`: implemented + tested** ۲۰۲۶-۱۱-۱۶؛ بقیه‌ی P4-1B…P4-8 در نوبت؛ جزئیات: [`NLO_P4_0_ARCHITECTURE_DISCOVERY.md`](docs/reports/NLO_P4_0_ARCHITECTURE_DISCOVERY.md)) |
 
 محدودیت‌های شناخته‌شده و وضعیت دقیق پیاده‌سازی:
 [`docs/architecture/provider-evaluation.md`](docs/architecture/provider-evaluation.md) (بخش ۵).

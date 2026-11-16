@@ -11,3 +11,4 @@ export * from "./srt.js";
 export * from "./title.js";
 export * from "./input-capabilities.js";
 export * from "./e2e-contract.js";
+export * from "./provider-descriptor.js";

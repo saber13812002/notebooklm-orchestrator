@@ -19,7 +19,7 @@ import "../request-augment.js";
 
 const createTokenBody = z.object({
   name: z.string().min(1).max(80),
-  scopes: z.array(z.enum(ALL_TOKEN_SCOPES)).min(1).max(6).optional(),
+  scopes: z.array(z.enum(ALL_TOKEN_SCOPES)).min(1).max(ALL_TOKEN_SCOPES.length).optional(),
 });
 
 const updateTokenBody = z.object({

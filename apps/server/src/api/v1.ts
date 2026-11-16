@@ -9,6 +9,7 @@ import { registerJobRoutes } from "./routes/jobs.js";
 import { registerAccountRoutes } from "./routes/accounts.js";
 import { registerProxyRoutes } from "./routes/proxies.js";
 import { registerProviderRoutes } from "./routes/providers.js";
+import { registerCapabilitiesRoutes } from "./routes/capabilities.js";
 import { registerSessionRoutes } from "./routes/sessions.js";
 import { registerSettingsRoutes } from "./routes/settings.js";
 import { registerOrchestratorRoutes } from "./routes/orchestrator.js";
@@ -123,6 +124,7 @@ function requiredScope(method: string, path: string): string {
   if (method === "POST" && (path === "/health/account" || path === "/health/egress")) {
     return "meta:read";
   }
+  if (method === "GET" && path === "/capabilities") return "providers:read";
   if (method === "GET") {
     if (path.startsWith("/artifacts/")) return "jobs:download";
     if (/^\/jobs\/[^/]+\/artifacts\/[^/]+$/.test(path)) return "jobs:download";
@@ -268,6 +270,8 @@ export async function registerV1Routes(app: FastifyInstance, ctx: AppContext): P
     // New product surface (tokens + audit trail).
     registerTokenRoutes(instance, ctx, V1);
     registerAuditRoutes(instance, ctx, V1);
+    // NLO-P4-1A: provider capability registry (providers:read scope).
+    registerCapabilitiesRoutes(instance, ctx, V1);
     // NLO-P2 (webhooks): endpoint management + delivery log (admin).
     registerWebhookRoutes(instance, ctx, V1);
   });

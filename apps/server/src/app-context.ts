@@ -1,5 +1,5 @@
 import { mkdirSync } from "node:fs";
-import { parseAllowEntry, type AllowEntry } from "@nlo/shared";
+import { deriveNotebookLmDescriptor, parseAllowEntry, type AllowEntry } from "@nlo/shared";
 import { dataPaths, loadConfig, type AppConfig } from "./config.js";
 import { Db } from "./db/db.js";
 import { AccountsRepo } from "./domain/accounts.repo.js";
@@ -15,6 +15,7 @@ import { WebhookDispatcher } from "./webhooks/dispatcher.js";
 import { MockProvider } from "./providers/mock-provider.js";
 import { PythonWorkerProvider } from "./providers/python-worker/python-worker-provider.js";
 import type { NotebookLMProvider } from "./providers/types.js";
+import { ProviderRegistry } from "./providers/registry.js";
 import { MockProxyRuntime, createXrayProxyRuntime, type ProxyRuntime } from "./proxy/runtime.js";
 import { MockProviderEgress } from "./proxy/egress.js";
 import { ProxyManager } from "./proxy/proxy-manager.js";
@@ -38,6 +39,8 @@ export interface AppContext {
   artifacts: ArtifactRepo;
   stages: JobStagesRepo;
   provider: NotebookLMProvider;
+  /** NLO-P4-1A: the provider registry (single source for /api/v1/capabilities). */
+  registry: ProviderRegistry;
   runtime: ProxyRuntime;
   egress: MockProviderEgress;
   proxyManager: ProxyManager;
@@ -177,6 +180,20 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
         })
       : new MockProvider();
 
+  // NLO-P4-1A: register the running provider in the registry. The descriptor
+  // is derived from the live provider's honest capability matrix (levels are
+  // copied verbatim — never inflated). The registry is the sole source for
+  // GET /api/v1/capabilities.
+  const registry = new ProviderRegistry().add(
+    deriveNotebookLmDescriptor({
+      name: provider.name,
+      isMock: provider.name === "mock",
+      capabilities: provider.capabilities(),
+      inputCapabilities: provider.inputCapabilities(),
+    }),
+    true,
+  );
+
   // The sessions gate applies to the REAL provider only: a verified
   // auth-session row is the sole evidence of a usable credential there.
   // The mock provider simulates accounts and has no session records, so
@@ -225,6 +242,7 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     artifacts,
     stages,
     provider,
+    registry,
     runtime,
     egress,
     proxyManager,

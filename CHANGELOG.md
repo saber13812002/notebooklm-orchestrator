@@ -8,6 +8,71 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-16] — Mission NLO-P4-1A: PROVIDER REGISTRY + CAPABILITIES API — **IMPLEMENTED + TESTED** (Live NOT verified)
+
+### Added
+
+- **`packages/shared/src/provider-descriptor.ts`** — the provider
+  descriptor contract: the canonical **31-operation** union
+  (`PROVIDER_OPERATIONS`) verified verbatim against
+  `NLO_PROVIDER_CAPABILITY_CONTRACTS.md`; the 5-level honest
+  `CapabilityLevel` enum; `providerDescriptorSchema` (strict zod) with
+  `authRequirement` (credential kinds / host profiles), `egressPolicy`,
+  `maxConcurrent`, `version`, `verifiedAt`, `status`; the
+  `NOTEBOOKLM_LIVE_OP_MAP` mapping each contract operation to its backing
+  live worker op(s); and `deriveNotebookLmDescriptor()` which copies each
+  declared operation's level **verbatim** from the live provider matrix
+  (no inflation; no backing live op ⇒ `unsupported`) and stamps the four
+  **F-C1 fused operations** (`notebook.create`, `source.add.text`,
+  `source.add.file`, `chat.ask`) with an explicit single-job fusion note.
+- **`apps/server/src/providers/registry.ts`** — in-process
+  `ProviderRegistry` (`add`/`list`/`get`/`activeId`/`capabilitiesResponse`)
+  wired into `AppContext` as `ctx.registry`, seeded with the
+  `notebooklm.web` descriptor derived from the active provider
+  (mock or python-worker).
+- **`GET /api/v1/capabilities`** (`apps/server/src/api/routes/capabilities.ts`)
+  — returns `{version: "1", providers: [descriptor], activeId}`. New token
+  scope **`providers:read`** (7th scope; `admin` still implies it);
+  401 `unauthorized` when auth is enforced and no token, 403 `forbidden`
+  ("token lacks scope: providers:read") otherwise. OpenAPI spec updated
+  (new `providers` tag + `/capabilities` path) — spec↔live drift test
+  still green.
+- **Tests (TDD red→green):** `packages/shared/test/provider-descriptor.test.ts`
+  (18 tests — union, strict schema rejects, verbatim mock + python-worker
+  snapshots, F-C1 notes) and `apps/server/test/capabilities.test.ts`
+  (10 tests — envelope, **honesty invariant**: every API level equals the
+  first backing live op's level verbatim or is `unsupported`, F-C1 notes,
+  401/403/200 scope enforcement, 7-scope token flow).
+
+### Changed
+
+- `packages/shared/src/types.ts` — `ProviderCapability` gained optional
+  `formats` / `maxInputBytes` / `maxConcurrent` / `egressPolicy` fields.
+- `apps/server/src/domain/api-tokens.repo.ts` + `api/routes/tokens.ts` —
+  `providers:read` added to `TokenScope` / `ALL_TOKEN_SCOPES`; token
+  creation scope `max` raised 6 → 7.
+
+### Verified
+
+- `npm run typecheck` (all 3 workspaces), `npm run lint` — clean.
+- `packages/shared`: 12 files / 128 tests passed (incl. 18 new);
+  `apps/server`: capabilities 10/10 + full suite green (one pre-existing
+  child-process spawn flake, F-B1 class, re-passed in isolation —
+  recorded in `docs/reports/NLO_P4_1_PREFLIGHT.md`);
+  `apps/web`: 30/30. Prettier clean on all touched files.
+- **Level of verification: Unit/Integration/E2E (in-process, mock provider)
+  passed. Live NOT verified** — the python-worker descriptor snapshot is
+  recorded from the live matrix at baseline `f07ac1f` but no live run was
+  performed for this change.
+
+### Notes
+
+- No migrations, no push, no production deployment. The preflight report
+  `docs/reports/NLO_P4_1_PREFLIGHT.md` (baseline `f07ac1fc577da4c2803853f274f3deb756aec7b2`,
+  GO verdict) is folded into this commit. Workstreams P4-1B (egress
+  gateway), P4-1C (durable job locks), P4-1D (conformance + CI) follow as
+  separate commits.
+
 ## [2026-11-15] — Mission NLO-P4-0: UNIVERSAL MODULAR ARCHITECTURE RESEARCH & DESIGN — **PROPOSED** (docs only — zero code changes)
 
 ### Added

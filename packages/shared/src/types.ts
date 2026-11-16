@@ -269,4 +269,14 @@ export interface ProviderCapability {
   operation: string;
   level: CapabilityLevel;
   note?: string;
+  /**
+   * NLO-P4-1A (optional enrichment): the concrete input formats this
+   * capability accepts. Absence means "not declared" — never "unlimited".
+   * The canonical contract-operation form lives in
+   * `provider-descriptor.ts` (`ProviderCapabilityDeclaration`).
+   */
+  formats?: string[];
+  maxInputBytes?: number | null;
+  maxConcurrent?: number;
+  egressPolicy?: "tunnel" | "direct" | "either";
 }

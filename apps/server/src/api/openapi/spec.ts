@@ -154,6 +154,7 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
       { name: "accounts", description: "Google account management." },
       { name: "proxies", description: "VLESS proxy node management + health." },
       { name: "meta", description: "Health, provider capability, settings, secrets." },
+      { name: "providers", description: "Provider capability registry (providers:read)." },
       { name: "tokens", description: "API token management (admin)." },
       {
         name: "orchestrator",
@@ -1146,6 +1147,89 @@ export function buildOpenApiDocument(ctx: AppContext): Record<string, unknown> {
                 },
               }),
             },
+          },
+        },
+      },
+      "/capabilities": {
+        get: {
+          tags: ["providers"],
+          ...bearerParams(),
+          summary:
+            "Provider capability registry (NLO-P4-1A). Honest descriptors over the canonical 31-operation contract; levels copied verbatim from the live provider (no inflation).",
+          description:
+            'Envelope `{ version: "1", providers: [descriptor...], activeId }`. Each descriptor declares every contract operation with one of the five honest capability levels; operations the provider does not offer are `unsupported`. The four F-C1 fused operations (notebook.create + source.add + chat.ask in one worker run) carry the fusion note.',
+          responses: {
+            "200": {
+              description: "Registry response.",
+              content: jsonContent({
+                type: "object",
+                required: ["version", "providers", "activeId"],
+                properties: {
+                  version: { type: "string", example: "1" },
+                  providers: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      required: [
+                        "id",
+                        "name",
+                        "kind",
+                        "transport",
+                        "capabilities",
+                        "egressPolicy",
+                        "maxConcurrent",
+                        "version",
+                        "verifiedAt",
+                        "status",
+                      ],
+                      properties: {
+                        id: { type: "string", example: "notebooklm.web" },
+                        name: { type: "string", example: "NotebookLM (Web)" },
+                        kind: { type: "string", enum: ["native", "mcp_client"] },
+                        transport: { type: "string", example: "web-batchexecute" },
+                        capabilities: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            required: ["operation", "level"],
+                            properties: {
+                              operation: { type: "string", example: "chat.ask" },
+                              level: {
+                                type: "string",
+                                enum: [
+                                  "implemented_tested",
+                                  "implemented_untested_live",
+                                  "experimental",
+                                  "unsupported",
+                                  "unavailable",
+                                ],
+                              },
+                              note: { type: "string" },
+                              formats: { type: "array", items: { type: "string" } },
+                            },
+                          },
+                        },
+                        authRequirement: {
+                          type: "object",
+                          properties: {
+                            credentialKinds: { type: "array", items: { type: "string" } },
+                            hostProfiles: { type: "array", items: { type: "string" } },
+                          },
+                        },
+                        egressPolicy: { type: "string", enum: ["tunnel", "direct", "either"] },
+                        maxConcurrent: { type: "integer", minimum: 1 },
+                        version: { type: "string", example: "notebooklm-py/0.8.5" },
+                        verifiedAt: { type: "string", example: "2026-11-16" },
+                        status: { type: "string", enum: ["active", "candidate", "disabled"] },
+                      },
+                    },
+                  },
+                  activeId: { type: ["string", "null"], example: "notebooklm.web" },
+                },
+              }),
+            },
+            "401": errorResponse("unauthorized"),
+            "403": errorResponse("forbidden"),
           },
         },
       },

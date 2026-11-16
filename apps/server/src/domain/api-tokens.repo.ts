@@ -25,15 +25,22 @@ export interface ApiTokenRow {
 }
 
 export type TokenScope =
-  "jobs:read" | "jobs:write" | "jobs:cancel" | "jobs:download" | "meta:read" | "admin";
+  | "jobs:read"
+  | "jobs:write"
+  | "jobs:cancel"
+  | "jobs:download"
+  | "meta:read"
+  | "providers:read"
+  | "admin";
 
 /**
  * The full scope set. Kept as a literal tuple (no widened annotation) so it
  * can be used directly in `z.enum(...)` for token-creation validation.
- *  - jobs:*    — the job lifecycle (create/read/cancel/download)
- *  - meta:read — provider/health/settings read-only introspection
- *  - admin     — operational surface (accounts, proxies, sessions,
- *                settings writes, token management, audit); implies all
+ *  - jobs:*         — the job lifecycle (create/read/cancel/download)
+ *  - meta:read      — provider/health/settings read-only introspection
+ *  - providers:read — the provider capability registry (GET /capabilities)
+ *  - admin          — operational surface (accounts, proxies, sessions,
+ *                     settings writes, token management, audit); implies all
  */
 export const ALL_TOKEN_SCOPES = [
   "jobs:read",
@@ -41,6 +48,7 @@ export const ALL_TOKEN_SCOPES = [
   "jobs:cancel",
   "jobs:download",
   "meta:read",
+  "providers:read",
   "admin",
 ] as const;
 

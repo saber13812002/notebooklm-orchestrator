@@ -24,8 +24,9 @@ Base URLs: `http://127.0.0.1:4870/api` (legacy) and
 
 ## Resource overview
 
-54 operations on `/api/v1` (jobs 13, sessions 8, accounts 7, proxies 11,
-health 4, provider 1, settings 3, tokens 4, audit 1, contract 2).
+55 operations on `/api/v1` (jobs 13, sessions 8, accounts 7, proxies 11,
+health 4, provider 1, capabilities 1, settings 3, tokens 4, audit 1,
+contract 2).
 
 - **Jobs** — `POST /jobs` (multipart), `POST /notebooks/from-text` (H1, JSON
   text source), `GET /jobs` (filters
@@ -44,6 +45,15 @@ health 4, provider 1, settings 3, tokens 4, audit 1, contract 2).
 - **Meta** — `GET /health`, `GET /health/ready`, `POST /health/account`,
   `POST /health/egress`, `GET /provider`, `GET /settings`, `PUT /settings`,
   `GET /secrets` (redacted), `GET /openapi.json`, `GET /docs`.
+- **Providers** — `GET /capabilities`: the provider capability registry
+  (`{version, providers:[…descriptor…], activeId}`); scope
+  `providers:read`. Each provider declares the canonical 31-operation
+  contract with honest levels (`implemented_tested`,
+  `implemented_untested_live`, `experimental`, `unsupported`,
+  `unavailable`); levels are copied verbatim from the provider's own live
+  capability matrix and never inflated (F-C1 fused operations —
+  `notebook.create`, `source.add.text`, `source.add.file`, `chat.ask` —
+  carry an explicit fusion note).
 - **Tokens & audit (v1-only)** — `POST /tokens`, `GET /tokens`,
   `PATCH /tokens/:id`, `DELETE /tokens/:id`, `GET /audit`.
 
@@ -126,6 +136,7 @@ restart.
 | `jobs:cancel`   | `POST /jobs/:id/cancel`                                                        |
 | `jobs:download` | `GET /jobs/:id/artifacts/:artifactId`, `…/audio`, `…/audio/download`           |
 | `meta:read`     | provider/health/settings reads + health probes                                 |
+| `providers:read`| `GET /capabilities` (provider capability registry)                             |
 | `admin`         | everything above + accounts, sessions, proxies, `PUT /settings`, tokens, audit |
 
 `admin` implies every other scope. Unknown `POST` paths require `admin`.
@@ -382,6 +393,13 @@ for art in requests.get(f"{BASE}/jobs/{job['id']}/artifacts", headers=h).json():
 - Contract + auth + idempotency tests:
   [`apps/server/test/openapi-v1.test.ts`](../../apps/server/test/openapi-v1.test.ts)
   (30 tests; bidirectional spec↔live drift check).
+- Capabilities registry (P4-1A):
+  [`apps/server/test/capabilities.test.ts`](../../apps/server/test/capabilities.test.ts)
+  (10 tests: envelope, no-inflation honesty invariant, F-C1 notes,
+  401/403/200 scope enforcement, token flow) +
+  [`packages/shared/test/provider-descriptor.test.ts`](../../packages/shared/test/provider-descriptor.test.ts)
+  (18 tests: 31-op union, strict schema, verbatim level snapshots for mock
+  and python-worker).
 - Text-to-notebook (H1): [`apps/server/test/from-text.test.ts`](../../apps/server/test/from-text.test.ts)
   (11 tests: validation, title fallback, prompt versioning, idempotency,
   result contract, 2 in-process E2E runs with the mock provider).
