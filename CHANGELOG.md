@@ -8,6 +8,71 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-16] — Mission NLO-P4-1C: DURABLE JOB EXECUTION LOCKS (settle-once) — **IMPLEMENTED + TESTED** (Live NOT verified)
+
+### Added
+
+- **`apps/server/src/db/migrations/0007_job_locks.sql`** — `job_locks`
+  (`job_id` PK → `jobs(id) ON DELETE CASCADE`, `holder`, `acquired_at`,
+  `expires_at`, index on `expires_at`). A row means "this instance is driving
+  this job right now"; it is durable, so it survives the holder's crash.
+- **`apps/server/src/domain/jobs.lock.ts`** — `JobLocks` (settle-once):
+  `acquire(jobId, ttlMs): boolean` (atomic `INSERT … ON CONFLICT` that steals
+  only an EXPIRED lock — never a live foreign lock; idempotent for the current
+  holder), `release(jobId)` (owner-only), `refresh(jobId, ttlMs)` (owner-only
+  lease renewal), `resetAll(): number` (boot sweep), `holder(jobId)` /
+  `isHeld(jobId)`. `holderId` is per-process (`process:<pid>:<uuid>`).
+  `lockTtlFor(jobTimeoutMs) = max(jobTimeoutMs, 30min) + 10min`;
+  `DEFAULT_LOCK_TTL_MS = 40min`.
+- **`apps/server/test/settle-once.test.ts`** — 11 tests: F9 (a second holder
+  cannot acquire while a live lock is held), idempotent self-re-acquisition,
+  owner-only release, expired-lock steal (crash guard), boot `resetAll`,
+  `lockTtlFor` math, F-C4 (crash → boot resetAll → re-acquire), and runner
+  integration (holds the lock while executing + releases on terminal settle;
+  stands down while another instance holds a live lock; does not wedge on a
+  stale lock after a boot resetAll).
+
+### Changed
+
+- **`apps/server/src/queue/job-runner.ts`** — `JobRunnerDeps` gains
+  `locks?: JobLocks` + `lockTtlMs?`. `run()` acquires the lock at entry (after
+  the CREATED/QUEUED gate): on refusal it logs `lock: <id> is held by another
+  instance; standing down` and returns the job untouched. The lease is
+  refreshed on every attempt (retries + podcast), and the lock is released in
+  the **outer `finally`** — covering every exit path (SUCCEEDED,
+  handleFailure terminal, proxy-fail-closed FAILED, validation/selection
+  failure, the late-success cancel path, podcast yield, and the top-level
+  error path). `locks` is optional, so legacy single-instance harnesses keep
+  their historical behavior.
+- **`apps/server/src/app-context.ts`** — constructs one `JobLocks` per process
+  and (a) wires it to the runner, (b) calls `lock.resetAll()` **before**
+  `jobs.recoverInFlight()` so a crashed run's stale locks never wedge the
+  recovered jobs (F-C4), and (c) exposes it as `AppContext.lock`.
+- **`apps/server/test/helpers.ts`** — the test harness builds a `JobLocks` and
+  passes it to the runner (`TestParts.lock`).
+- **`docs/operations/JOB_RECOVERY_RUNBOOK.md`** — new §5 (durable job locks):
+  what the lock guarantees, the boot sweep, and how to inspect/clear a wedged
+  lock.
+
+### Verified
+
+- `apps/server`: full suite **27 files / 323 tests passed** (incl.
+  settle-once 11/11, worker-queue-recovery 4/4, podcast-fault-recovery 19/19,
+  e2e text-to-podcast 2/2); `packages/shared`: 12 files / 128 tests;
+  `apps/web`: 4 files / 30 tests. `tsc --noEmit` clean (all workspaces);
+  ESLint clean on all touched files; Prettier applied to touched files.
+- **Level of verification: Unit/Integration (in-process, mock provider)
+  passed. Live NOT verified** — no live run was performed for this change.
+
+### Notes
+
+- One new migration (`0007`), pure additive (`CREATE TABLE IF NOT EXISTS` +
+  index); existing deployments apply it on boot and keep working.
+- No push, no production deployment. The lock is a **defense in depth** for a
+  future multi-instance deployment and crash safety; the current single-worker
+  `Queue` already prevents double-execution in-process, so behavior is
+  unchanged today. Workstream P4-1D (conformance + CI) follows.
+
 ## [2026-11-16] — Mission NLO-P4-1B: PROVIDER EGRESS GATEWAY (tunnel → endpoint) — **IMPLEMENTED + TESTED** (Live NOT verified)
 
 ### Added

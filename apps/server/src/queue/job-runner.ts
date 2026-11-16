@@ -10,6 +10,7 @@ import { JobArchive, sha256OfFile } from "../domain/archive.js";
 import { audioMimeToExt, readWavInfo, sniffAudioMime } from "../domain/artifact-validate.js";
 import { ArtifactRepo } from "../domain/artifacts.repo.js";
 import { JobStagesRepo } from "../domain/stages.repo.js";
+import { JobLocks, DEFAULT_LOCK_TTL_MS } from "../domain/jobs.lock.js";
 import { transcodeToMp3 } from "../media/transcode.js";
 import { ProviderFailure, type NotebookLMProvider } from "../providers/types.js";
 import { EgressGateway, type EgressEndpoint } from "../proxy/gateway.js";
@@ -80,6 +81,11 @@ export interface JobRunnerDeps {
   /** NLO-P4-1B: egress gateway. Optional: when absent, the runner builds a
    *  default gateway from proxyManager + proxies + runtime (same behavior). */
   gateway?: EgressGateway;
+  /** NLO-P4-1C: durable job execution locks (settle-once). Optional: when
+   *  absent, the runner does not lock (legacy single-instance behavior). */
+  locks?: JobLocks;
+  /** NLO-P4-1C: lock lease TTL in ms (default DEFAULT_LOCK_TTL_MS). */
+  lockTtlMs?: number;
 }
 
 const sleepDefault = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -102,6 +108,11 @@ export class JobRunner {
         runtime: this.d.runtime,
       }))
     );
+  }
+
+  /** NLO-P4-1C: the job-lock lease length for this runner. */
+  private lockTtlMs(): number {
+    return this.d.lockTtlMs ?? DEFAULT_LOCK_TTL_MS;
   }
 
   queuedIds(): string[] {
@@ -130,6 +141,17 @@ export class JobRunner {
       return initial; // not our turn (e.g. already running in another worker)
     }
 
+    // NLO-P4-1C: settle-once claim. At most one live instance drives this job
+    // from here to a terminal state. The lock is durable (SQLite), so it
+    // survives a crash; the next boot clears it via resetAll() before
+    // recoverInFlight() re-queues (F-C4). If another live instance already
+    // holds the lock (multi-instance), we stand down and leave the job as-is.
+    const locks = this.d.locks;
+    if (locks && !locks.acquire(jobId, this.lockTtlMs())) {
+      this.d.log(`lock: ${jobId} is held by another instance; standing down`);
+      return initial;
+    }
+
     const controller = new AbortController();
     this.active.set(jobId, controller);
     const archive = new JobArchive(this.d.jobsDir, jobId);
@@ -148,6 +170,9 @@ export class JobRunner {
       }
 
       for (;;) {
+        // NLO-P4-1C: renew the lease each attempt so a long multi-attempt run
+        // (retries + podcast) never outlives its lock while it is alive.
+        locks?.refresh(jobId, this.lockTtlMs());
         // --- select account (re-selected on every retry) -----------------
         // Note: after a RETRY_WAIT the status is ALREADY WAITING_FOR_ACCOUNT
         // (set by the retry path below); the state machine forbids a
@@ -415,6 +440,7 @@ export class JobRunner {
       return this.d.jobs.getOrThrow(jobId);
     } finally {
       this.active.delete(jobId);
+      locks?.release(jobId);
       this.emitTerminal(jobId);
     }
   }

@@ -7,6 +7,7 @@ import { Db } from "../src/db/db.js";
 import { AccountsRepo } from "../src/domain/accounts.repo.js";
 import { ArtifactRepo } from "../src/domain/artifacts.repo.js";
 import { JobsRepo } from "../src/domain/jobs.repo.js";
+import { JobLocks } from "../src/domain/jobs.lock.js";
 import { JobStagesRepo } from "../src/domain/stages.repo.js";
 import { ProxiesRepo } from "../src/domain/proxies.repo.js";
 import { SecretVault } from "../src/secrets/vault.js";
@@ -32,6 +33,8 @@ export interface TestParts {
   proxyManager: ProxyManager;
   /** NLO-P4-1B: egress gateway over the proxy manager (fail-closed, no direct egress). */
   gateway: EgressGateway;
+  /** NLO-P4-1C: durable job execution locks (settle-once). */
+  lock: JobLocks;
   provider: MockProvider;
   runner: JobRunner;
   jobsDir: string;
@@ -80,6 +83,7 @@ export function makeParts(): TestParts {
     allowDirect: false,
   });
   const provider = new MockProvider();
+  const lock = new JobLocks(db);
   const runner = new JobRunner({
     jobs,
     accounts,
@@ -97,6 +101,7 @@ export function makeParts(): TestParts {
     rng: () => 0,
     artifacts,
     stages,
+    locks: lock,
   });
 
   return {
@@ -112,6 +117,7 @@ export function makeParts(): TestParts {
     egress,
     proxyManager,
     gateway,
+    lock,
     provider,
     runner,
     jobsDir,

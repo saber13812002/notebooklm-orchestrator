@@ -7,6 +7,7 @@ import { ApiTokensRepo } from "./domain/api-tokens.repo.js";
 import { ArtifactRepo } from "./domain/artifacts.repo.js";
 import { AuthSessionsRepo } from "./domain/auth-sessions.repo.js";
 import { JobsRepo } from "./domain/jobs.repo.js";
+import { JobLocks } from "./domain/jobs.lock.js";
 import { ProxiesRepo } from "./domain/proxies.repo.js";
 import { JobStagesRepo } from "./domain/stages.repo.js";
 import { WebhookDeliveriesRepo, WebhookEndpointsRepo } from "./domain/webhooks.repo.js";
@@ -47,6 +48,8 @@ export interface AppContext {
   proxyManager: ProxyManager;
   /** NLO-P4-1B: egress gateway — the single acquisition point for provider egress. */
   gateway: EgressGateway;
+  /** NLO-P4-1C: durable job execution locks (settle-once). */
+  lock: JobLocks;
   runner: JobRunner;
   queue: Queue;
   /** NLO-P2 (webhooks): outbox delivery (endpoints, deliveries, dispatcher). */
@@ -201,6 +204,11 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     true,
   );
 
+  // NLO-P4-1C: durable job execution locks. One instance per process; the
+  // boot sweep (below) clears the previous run's stale locks before this
+  // instance starts claiming recovered jobs.
+  const lock = new JobLocks(db);
+
   // The sessions gate applies to the REAL provider only: a verified
   // auth-session row is the sole evidence of a usable credential there.
   // The mock provider simulates accounts and has no session records, so
@@ -226,9 +234,20 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     ffmpegBin: config.ffmpegBin || undefined,
     mp3TargetKbps: config.mp3TargetKbps,
     webhooks: { publish: (jobId, ev) => webhooks.publish(jobId, ev) },
+    // NLO-P4-1C: settle-once locks. The boot sweep below clears the previous
+    // run's locks, so this instance can claim recovered jobs.
+    locks: lock,
   });
 
   const queue = new Queue(runner, 500, (msg) => console.log(`[nlo:queue] ${msg}`));
+
+  // NLO-P4-1C: clear durable job locks left by a previous (crashed) run
+  // BEFORE re-queuing in-flight jobs — otherwise a dead instance's lock
+  // would wedge every recovered job (F-C4).
+  const cleared = lock.resetAll();
+  if (cleared > 0) {
+    console.log(`[nlo] cleared ${cleared} stale job lock(s) from a previous run`);
+  }
 
   // On boot, recover in-flight jobs from a previous run.
   const recovered = jobs.recoverInFlight();
@@ -255,6 +274,7 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     egress,
     proxyManager,
     gateway,
+    lock,
     runner,
     queue,
     webhooks,
