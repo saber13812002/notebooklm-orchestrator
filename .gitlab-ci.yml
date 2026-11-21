@@ -67,7 +67,7 @@ secret-scan:
       # (git ls-files) — no new dependency. Any match on a tracked file
       # fails CI unless the file is on a documented allowlist.
       #
-      # Documented vless allowlist (reviewed in P4-1D):
+      # Documented vless allowlist (reviewed in P4-1D, extended in P5-1A):
       #   apps/server/scripts/_add-nodes.py — ops script holding the
       #     production node UUID (kept so the script stays runnable).
       #   apps/server/test/api.test.ts      — test fixture on TEST-NET
@@ -77,11 +77,16 @@ secret-scan:
       #                                      (a vless URI with a fake
       #                                      UUID, needed to prove the
       #                                      gate detects secrets).
+      #   docs/reports/NLO-P4-1.1/AGENT_C_SECURITY_AUDIT.md — audit doc
+      #   docs/reports/NLO-P4-1.1/AGENT_D_TEST_CI_AUDIT.md  — quoting
+      #     this scan's own self-test fixture verbatim (fake UUID on a
+      #     TEST host, not a credential); added in P5-1A Gate A after
+      #     those citations tripped the gate (run #32, commit 632a752).
 
       # Host class covers domain hosts (production nodes use *.kelmora.ir
       # etc.), not just IP literals.
       VLESS_PATTERN='vless://[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}@[A-Za-z0-9.-]+'
-      VLESS_ALLOWLIST='^(apps/server/scripts/_add-nodes\.py|apps/server/test/api\.test\.ts|\.github/workflows/ci\.yml|\.gitlab-ci\.yml)$'
+      VLESS_ALLOWLIST='^(apps/server/scripts/_add-nodes\.py|apps/server/test/api\.test\.ts|\.github/workflows/ci\.yml|\.gitlab-ci\.yml|docs/reports/NLO-P4-1.1/AGENT_C_SECURITY_AUDIT\.md|docs/reports/NLO-P4-1.1/AGENT_D_TEST_CI_AUDIT\.md)$'
 
       tmp_hits="$(mktemp)"
       trap 'rm -f "$tmp_hits"' EXIT
