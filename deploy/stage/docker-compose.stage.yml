@@ -1,0 +1,67 @@
+# NLO P5-1A — Stage environment (independent Docker Stage for nlo2.ai.ismc.ir).
+#
+# Sibling of the root docker-compose.yml (local single-user); it does not
+# replace it. All differences are intentional (Gates B–C of
+# docs/reports/NLO-P5-1A-STAGE-DEPLOYMENT.md):
+#
+#   * Isolated data: /home/saber/nlo-stage/data — own SQLite, own vault, own
+#     job archives. Production's data/ is never mounted here.
+#   * Isolated port: 127.0.0.1:4871 (loopback only; production owns 4870).
+#   * Mock provider: NLO_PROVIDER=mock / NLO_PROXY_RUNTIME=mock — Stage never
+#     makes live NotebookLM requests.
+#   * API auth: NLO_API_AUTH=1 — /api/v1 requires a Stage-minted token
+#     (minted in the Stage's own DB via bootstrap:admin, never shared with
+#     production). The legacy /api surface is gated by the nginx vhost.
+#   * Resource guardrails for a shared host: mem_limit + cpus + log rotation.
+#
+# Run from the repo root (the stage .env lives OUTSIDE the git tree):
+#   docker compose --env-file /home/saber/nlo-stage/.env \
+#     -f deploy/stage/docker-compose.stage.yml up -d --build
+#
+# Rollback:
+#   docker compose --env-file /home/saber/nlo-stage/.env \
+#     -f deploy/stage/docker-compose.stage.yml down
+#   (container removed; volume /home/saber/nlo-stage/data is preserved for
+#   forensics; production is untouched by any of these commands)
+
+name: nlo-stage
+
+services:
+  nlo:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    image: "nlo-stage:${NLO_STAGE_TAG:-latest}"
+    container_name: nlo-stage
+    restart: unless-stopped
+    # Stage host uid/gid (saber = 1001 on 172.30.0.133) so the bind-mounted
+    # /data stays writable by the in-container "node" user.
+    user: "${NLO_UID:-1001}:${NLO_GID:-1001}"
+    ports:
+      # Loopback only: Stage is reached via the nginx vhost (443), never
+      # directly. 4871 was verified free on 2026-11-21 (production owns 4870).
+      - "127.0.0.1:${NLO_STAGE_PORT:-4871}:4870"
+    volumes:
+      - /home/saber/nlo-stage/data:/data
+    environment:
+      NLO_DATA_DIR: /data
+      # 0.0.0.0 inside the container is required for Docker's port-forward;
+      # it stays safe because only the host loopback is published above.
+      NLO_HOST: 0.0.0.0
+      NLO_PORT: "4870"
+      # Mock by default — Stage must not make live NotebookLM requests.
+      NLO_PROVIDER: ${NLO_PROVIDER:-mock}
+      NLO_PROXY_RUNTIME: ${NLO_PROXY_RUNTIME:-mock}
+      NLO_PYTHON_BIN: /opt/nbl-venv/bin/python
+      NLO_JOB_TIMEOUT_MS: ${NLO_JOB_TIMEOUT_MS:-1800000}
+      # Require a Stage-minted token for non-exempt /api/v1 requests
+      # (health/openapi/docs GETs stay open).
+      NLO_API_AUTH: ${NLO_API_AUTH:-1}
+    # Guardrails on a shared host.
+    mem_limit: 2g
+    cpus: 2
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
