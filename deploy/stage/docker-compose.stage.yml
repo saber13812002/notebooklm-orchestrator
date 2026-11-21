@@ -58,6 +58,11 @@ services:
       # Require a Stage-minted token for non-exempt /api/v1 requests
       # (health/openapi/docs GETs stay open).
       NLO_API_AUTH: ${NLO_API_AUTH:-1}
+      # Gate F9: webhook SSRF gate is fail-closed by default. Stage allows
+      # loopback delivery targets ONLY so the Gate-F mock receiver can run
+      # inside this container (127.0.0.1:9999). Production runs without this
+      # variable and stays fail-closed (empty allowlist, no loopback).
+      NLO_WEBHOOK_ALLOW_LOOPBACK: "1"
     # Guardrails on a shared host.
     mem_limit: 2g
     cpus: 2
