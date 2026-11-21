@@ -96,8 +96,9 @@ verify() { # stageA: expect 301; stageB: expect HTTPS 200; stageBAuth: expect 40
     [ "$code" = "301" ] || { echo "FATAL: expected 301, got $code"; exit 1; }
     return 0
   fi
-  # Without credentials: stageB -> 200 (no auth); stageBAuth -> 401 (auth gate).
-  code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 https://127.0.0.1/api/health -H "Host: $NLO_DOMAIN")"
+  # Pin SNI to the domain (IP-based SNI would hit the catch-all vhost on
+  # multi-vhost hosts and mask a mis-configured new vhost).
+  code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 --resolve "$NLO_DOMAIN:443:127.0.0.1" "https://$NLO_DOMAIN/api/health")"
   redir="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1/ -H "Host: $NLO_DOMAIN")"
   echo "local-https-health=$code local-http-redirect=$redir"
   if [ "$kind" = "stageBAuth" ]; then
