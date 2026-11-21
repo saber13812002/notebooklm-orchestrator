@@ -29,7 +29,8 @@ name: nlo-stage
 services:
   nlo:
     build:
-      context: ..
+      # Relative to THIS file's directory (deploy/stage/), not the CWD.
+      context: ../..
       dockerfile: Dockerfile
     image: "nlo-stage:${NLO_STAGE_TAG:-latest}"
     container_name: nlo-stage
