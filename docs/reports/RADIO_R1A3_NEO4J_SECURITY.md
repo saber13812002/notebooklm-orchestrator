@@ -17,19 +17,19 @@
 
 ## 2. Preflight (قبل از تغییر)
 
-| مورد | مقدار |
-|---|---|
-| Neo4j | `2025.10.1` / **enterprise** / Cypher 5-25 |
-| دیتابیس‌ها | ۱۴ (همه `online` در زمان اجرا) |
-| کاربران | ۱ (`neo4j` → roles: `admin`, `PUBLIC`) |
-| رول‌ها | ۶ پیش‌فرض |
-| `radio_app` / `radio_read` | **وجود نداشتند** (صفر) |
-| baseline | `radio`=79,350 · `radio-4b`=79,350 |
-| stack | `radio-rag-service/docker-compose.radio.yml` (project `radio`)، env از `.env.radio` |
-| تعریف کاربر | compose به‌صورت **هاردکد** `- NEO4J_USERNAME=neo4j` |
-| ports | `8043→8003` (api)، `8044→80` (frontend) روی `0.0.0.0` |
-| restart policy | api/frontend `unless-stopped`؛ **neo4j_db `no`** |
-| backup | `R1-A2-20261112-123345` — ۲۴/۲۴ checksum OK |
+| مورد                       | مقدار                                                                               |
+| -------------------------- | ----------------------------------------------------------------------------------- |
+| Neo4j                      | `2025.10.1` / **enterprise** / Cypher 5-25                                          |
+| دیتابیس‌ها                 | ۱۴ (همه `online` در زمان اجرا)                                                      |
+| کاربران                    | ۱ (`neo4j` → roles: `admin`, `PUBLIC`)                                              |
+| رول‌ها                     | ۶ پیش‌فرض                                                                           |
+| `radio_app` / `radio_read` | **وجود نداشتند** (صفر)                                                              |
+| baseline                   | `radio`=79,350 · `radio-4b`=79,350                                                  |
+| stack                      | `radio-rag-service/docker-compose.radio.yml` (project `radio`)، env از `.env.radio` |
+| تعریف کاربر                | compose به‌صورت **هاردکد** `- NEO4J_USERNAME=neo4j`                                 |
+| ports                      | `8043→8003` (api)، `8044→80` (frontend) روی `0.0.0.0`                               |
+| restart policy             | api/frontend `unless-stopped`؛ **neo4j_db `no`**                                    |
+| backup                     | `R1-A2-20261112-123345` — ۲۴/۲۴ checksum OK                                         |
 
 ---
 
@@ -63,6 +63,7 @@ DENY ACCESS ON DATABASE neo4j TO radio_read;
 ```
 
 نکات اثبات‌شده:
+
 - `GRANT MATCH { * }` در `SHOW PRIVILEGES` به‌صورت `match / all_properties` روی `NODE(*)` و `RELATIONSHIP(*)` ثبت می‌شود (نه `{ NODES, RELATIONSHIPS }` که در R1-A.1 به‌عنوان «تلهٔ خاموش» شناسایی شد).
 - رمز با `openssl rand -hex 24` روی سرور تولید و فقط در فایل `0600` ذخیره شد؛ در هیچ لاگ/خروجی/گزارش چاپ نشد.
 
@@ -70,11 +71,11 @@ DENY ACCESS ON DATABASE neo4j TO radio_read;
 
 ## 5. تزریق credential (بدون secret در Git)
 
-| فایل | تغییر | وضعیت |
-|---|---|---|
-| `.env.radio` (mode 600، gitignored) | `NEO4J_PASSWORD=<new>`, افزودن `NEO4J_USERNAME=radio_app` | اعمال شد |
-| `docker-compose.radio.yml` (tracked) | یک خط: `- NEO4J_USERNAME=neo4j` → `- NEO4J_USERNAME=${NEO4J_USERNAME:-neo4j}` | اعمال شد (diff = ۱ خط) |
-| بازسازی | `docker compose -p radio -f docker-compose.radio.yml --env-file .env.radio up -d --no-deps api` | فقط `radio_api` |
+| فایل                                 | تغییر                                                                                           | وضعیت                  |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------- | ---------------------- |
+| `.env.radio` (mode 600، gitignored)  | `NEO4J_PASSWORD=<new>`, افزودن `NEO4J_USERNAME=radio_app`                                       | اعمال شد               |
+| `docker-compose.radio.yml` (tracked) | یک خط: `- NEO4J_USERNAME=neo4j` → `- NEO4J_USERNAME=${NEO4J_USERNAME:-neo4j}`                   | اعمال شد (diff = ۱ خط) |
+| بازسازی                              | `docker compose -p radio -f docker-compose.radio.yml --env-file .env.radio up -d --no-deps api` | فقط `radio_api`        |
 
 - **Downtime اندازه‌گیری‌شده:** **۶ ثانیه** (تا `200`؛ بهتر از برآورد ۶۰–۹۰s چون cache pip).
 - تأیید env داخل container: `NEO4J_USERNAME=radio_app` ✓ و `NEO4J_PASSWORD` جدید ✓.
@@ -84,23 +85,23 @@ DENY ACCESS ON DATABASE neo4j TO radio_read;
 
 ## 6. ماتریس پذیرش ۱۵ موردی (شواهد زنده)
 
-| # | آزمون | نتیجه | شاهد |
-|---|---|---|---|
-| 1 | ورود با `radio_app` | PASS | `RETURN 1` → `1` |
-| 2 | دسترسی `radio` | PASS | `count(Chunk)` = **79,350** |
-| 3 | دسترسی `radio-4b` | PASS | `count(Chunk)` = **79,350** |
-| 4 | مقایسه با baseline | PASS | 79,350 = 79,350 (هر دو) |
-| 5 | خواص node | PASS | `size(keys(n))` = **38** |
-| 6 | وجود indexها | PASS | ۳ index در هر دو DB |
-| 7 | جست‌وجوی برداری | PASS | ۳ hit |
-| 8 | تطابق top-3 با ادمین | PASS | `0.5511904954910278 / 0.5501537322998047 / 0.5468377470970154` — یکسان |
-| 9 | رد نوشتن | PASS | `CREATE` → `42NFF`؛ `SET` → `42NFF` |
-| 10 | رد ۱۲ دیتابیس دیگر | PASS | همه `42NFF` |
-| 11 | رد `system` | PASS | `42NA9` / `42N17` |
-| 12 | خطاهای موردانتظار | PASS | `42NFF` (permission/access denied) |
-| 13 | رفتار `SHOW DATABASES` جدا از دسترسی | PASS | از `-d radio`: فقط `neo4j`, `radio`, `radio-4b`, `system` |
-| 14 | health رادیو | PASS | `200` + `"neo4j_online":true`, `ms:6` |
-| 15 | health شش محصول دیگر | PASS | mesbah/eiis/taghrir/tasnim/sources healthy؛ ragportal Up |
+| #   | آزمون                                | نتیجه | شاهد                                                                   |
+| --- | ------------------------------------ | ----- | ---------------------------------------------------------------------- |
+| 1   | ورود با `radio_app`                  | PASS  | `RETURN 1` → `1`                                                       |
+| 2   | دسترسی `radio`                       | PASS  | `count(Chunk)` = **79,350**                                            |
+| 3   | دسترسی `radio-4b`                    | PASS  | `count(Chunk)` = **79,350**                                            |
+| 4   | مقایسه با baseline                   | PASS  | 79,350 = 79,350 (هر دو)                                                |
+| 5   | خواص node                            | PASS  | `size(keys(n))` = **38**                                               |
+| 6   | وجود indexها                         | PASS  | ۳ index در هر دو DB                                                    |
+| 7   | جست‌وجوی برداری                      | PASS  | ۳ hit                                                                  |
+| 8   | تطابق top-3 با ادمین                 | PASS  | `0.5511904954910278 / 0.5501537322998047 / 0.5468377470970154` — یکسان |
+| 9   | رد نوشتن                             | PASS  | `CREATE` → `42NFF`؛ `SET` → `42NFF`                                    |
+| 10  | رد ۱۲ دیتابیس دیگر                   | PASS  | همه `42NFF`                                                            |
+| 11  | رد `system`                          | PASS  | `42NA9` / `42N17`                                                      |
+| 12  | خطاهای موردانتظار                    | PASS  | `42NFF` (permission/access denied)                                     |
+| 13  | رفتار `SHOW DATABASES` جدا از دسترسی | PASS  | از `-d radio`: فقط `neo4j`, `radio`, `radio-4b`, `system`              |
+| 14  | health رادیو                         | PASS  | `200` + `"neo4j_online":true`, `ms:6`                                  |
+| 15  | health شش محصول دیگر                 | PASS  | mesbah/eiis/taghrir/tasnim/sources healthy؛ ragportal Up               |
 
 ### یافتهٔ امنیتی مهم
 
@@ -133,14 +134,14 @@ DENY ACCESS ON DATABASE neo4j TO radio_read;
 
 ## 9. اثر بر Production و ریسک‌های باقی‌مانده
 
-| مورد | وضعیت |
-|---|---|
-| Downtime رادیو | ۶ ثانیه (فقط `/api`) |
-| سایر محصولات | بدون اثر (health-verified) |
-| رمز در Git | خیر (فقط `.env.radio` mode 600 + فایل 0600 پشتیبان) |
-| `RestartPolicy=no` روی neo4j_db | **باز** — نیازمند recreate با مجوز جداگانه |
-| commit تغییرات سرور | **انجام نشده** — repo `rag/radio-rag-service` (branch `stage5-citations`, HEAD `e717b8f`) در فاز R1-D |
-| رمز قبلی ادمین | هنوز فعال (طبق درخواست: عدم revoke در پذیرش اولیه) |
+| مورد                            | وضعیت                                                                                                 |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Downtime رادیو                  | ۶ ثانیه (فقط `/api`)                                                                                  |
+| سایر محصولات                    | بدون اثر (health-verified)                                                                            |
+| رمز در Git                      | خیر (فقط `.env.radio` mode 600 + فایل 0600 پشتیبان)                                                   |
+| `RestartPolicy=no` روی neo4j_db | **باز** — نیازمند recreate با مجوز جداگانه                                                            |
+| commit تغییرات سرور             | **انجام نشده** — repo `rag/radio-rag-service` (branch `stage5-citations`, HEAD `e717b8f`) در فاز R1-D |
+| رمز قبلی ادمین                  | هنوز فعال (طبق درخواست: عدم revoke در پذیرش اولیه)                                                    |
 
 ---
 

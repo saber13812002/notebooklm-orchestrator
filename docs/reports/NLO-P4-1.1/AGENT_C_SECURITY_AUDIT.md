@@ -6,7 +6,7 @@
 - **Executed:** 2026-11-17 ~15:55–16:30 UTC, repo HEAD `b833d89`.
 - **Non-negotiables honored:** no secret value is printed or stored in this report except the
   already-public proxy client UUID, which is referenced by prefix only (`b625fad2…`) because the finding
-  is *its presence in the public repo*, not its value. No secret rotation performed; no config changed.
+  is _its presence in the public repo_, not its value. No secret rotation performed; no config changed.
 
 ---
 
@@ -15,10 +15,10 @@
 Both CI secret-scan implementations were extracted **verbatim** from the tracked CI files and executed on
 this checkout (Agent D §6 has the extraction evidence; results cross-verified here):
 
-| Script | Source | Result |
-|---|---|---|
-| GitLab `.gitlab-ci.yml` heredoc job | `secret-scan` job | self-test fixture **detected → removed**; working tree clean; **exit 0** |
-| GitHub Actions `.github/workflows/ci.yml` `run:` block (L89–174) | `secret-scan` job | identical behavior; **exit 0** |
+| Script                                                           | Source            | Result                                                                   |
+| ---------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------ |
+| GitLab `.gitlab-ci.yml` heredoc job                              | `secret-scan` job | self-test fixture **detected → removed**; working tree clean; **exit 0** |
+| GitHub Actions `.github/workflows/ci.yml` `run:` block (L89–174) | `secret-scan` job | identical behavior; **exit 0**                                           |
 
 Patterns covered (both files, 8 patterns): vless:// URI, generic bearer tokens, private-key headers,
 generic `key/token/secret/password` assignments above a length threshold, plus the planted
@@ -56,7 +56,8 @@ historical node-import script). **CODE-VERIFIED.**
   at authoring time.
 
 **Assessment (honest, no overclaim):**
-- Is the VLESS client UUID a *credential*? In Xray/VLESS terms it is the client identifier that the
+
+- Is the VLESS client UUID a _credential_? In Xray/VLESS terms it is the client identifier that the
   server expects; rotation of the UUID typically invalidates existing clients. It is **lower-sensitivity
   than a password** (the transport is TLS-wrapped by the endpoint's own TLS/Reality layer), but for a
   shared residential-proxy pool it is the item an operator would rotate to revoke access.
@@ -65,7 +66,7 @@ historical node-import script). **CODE-VERIFIED.**
 - **Action required:** none technically urgent (proxy pool is for Google-egress, endpoints are
   residential and not a service endpoint); **decision required** from the owner: (a) accept the exposure
   and document it, or (b) rotate the pool UUID at the provider side and add the script to git-filter-repo
-  history cleanup — a *history-rewriting* action that the mission's non-negotiables forbid without
+  history cleanup — a _history-rewriting_ action that the mission's non-negotiables forbid without
   explicit approval. Recorded as backlog **C-BL-01 (P1, decision)**.
 - No rotation was performed by this audit (non-negotiable).
 
@@ -73,7 +74,7 @@ historical node-import script). **CODE-VERIFIED.**
 
 - **`.env.example`** (126 lines, read fully): contains **no real secrets** — all values are safe defaults
   or commented-out empty keys (`NLO_VAULT_KEY=`, `NLO_RADIO_TOKEN=`, `NLO_INTERNAL_API_BASE_URL=`,
-  `NLO_PYTHON_BIN=`, `NLO_FFMPEG_BIN=` …). One internal IP appears as a *commented default*
+  `NLO_PYTHON_BIN=`, `NLO_FFMPEG_BIN=` …). One internal IP appears as a _commented default_
   (`172.30.0.133:4000` for the LLM proxy; `172.20.1.53:8043` for radio RAG) — internal-network topology,
   not credentials; acceptable in an example file, noted for completeness. **CODE-VERIFIED.**
 - **`.env`** (live, on workstation): git-ignored (`.gitignore:18`), exists, **not tracked**. Permissions
@@ -94,6 +95,7 @@ historical node-import script). **CODE-VERIFIED.**
 ## 4. Redaction (logs & payloads)
 
 [`packages/shared/src/redaction.ts`](packages/shared/src/redaction.ts) (read fully, 47 lines):
+
 - `vless://…` → `vless://[REDACTED]`
 - bare UUIDs → first 4 chars + `…`
 - cookie header values → `[REDACTED]`
@@ -113,17 +115,19 @@ patterns would pass through. Acceptable given the explicit "we redact what we ha
 ## 5. SSRF guard
 
 [`packages/shared/src/ssrf.ts`](packages/shared/src/ssrf.ts) (read fully, 164 lines):
+
 - Explicit `host[:port]` allowlist only; strict parser rejects URLs/queries/credentials (L144–163).
 - Resolved IPs **re-checked** against `classifyIp` — defeats DNS-rebinding to private ranges (L121–137).
 - Private/loopback/link-local/reserved **never** allowed unless the entry is explicitly
   `allowPrivate: true` (and link-local stays blocked even then — L129 allows only `private`/`loopback`).
 - Applied to: proxy health-check targets and **every webhook delivery destination**
   (dispatcher L231–243; SSRF failure dead-letters immediately, no retry of a disallowed URL).
-**CODE-VERIFIED** + **UNIT-VERIFIED** (`ssrf.test.ts`).
+  **CODE-VERIFIED** + **UNIT-VERIFIED** (`ssrf.test.ts`).
 
 ## 6. Webhook security
 
 [`apps/server/src/webhooks/dispatcher.ts`](apps/server/src/webhooks/dispatcher.ts) (read fully, 321 lines):
+
 - Outbox: `publish()` snapshots a payload from real DB rows, writes one pending delivery per matching
   enabled endpoint; **never throws**.
 - Settlement exactly-once: state flips guarded by `WHERE status='pending'` (repo-level; tested in
@@ -137,7 +141,7 @@ patterns would pass through. Acceptable given the explicit "we redact what we ha
 - Fail-closed SSRF gate per §5; scheme restricted to `http:`/`https:`; 10 s request timeout with
   AbortController; body drained/cancelled on non-2xx.
 - Loopback targets only with `NLO_WEBHOOK_ALLOW_LOOPBACK=true` (test receivers).
-**CODE-VERIFIED** + **UNIT-VERIFIED** (full dispatcher coverage in the server suite).
+  **CODE-VERIFIED** + **UNIT-VERIFIED** (full dispatcher coverage in the server suite).
 
 ## 7. API authentication & authorization
 
@@ -145,7 +149,7 @@ patterns would pass through. Acceptable given the explicit "we redact what we ha
   `api/routes/tokens.ts`): plaintext `nlo_<slug>_<64hex>` from 32-byte CSPRNG (`randomBytes(32)`), stored
   as **SHA-256** (plaintext shown exactly once at creation), disable/re-enable, revoke, audit trail
   (limit capped at min(requested, 500)). Scopes: `jobs:read, jobs:write, jobs:cancel, jobs:download,
-  meta:read, providers:read, admin` (7 entries; `admin` implies all via `hasScope` in `v1.ts`).
+meta:read, providers:read, admin` (7 entries; `admin` implies all via `hasScope` in `v1.ts`).
 - **The `max(6)` finding — re-verified and RESOLVED** (mission requirement):
   `api/routes/tokens.ts` L22 today reads
   `scopes: z.array(z.enum(ALL_TOKEN_SCOPES)).min(1).max(ALL_TOKEN_SCOPES.length).optional()`.
@@ -165,14 +169,14 @@ patterns would pass through. Acceptable given the explicit "we redact what we ha
 ## 8. Rate limiting (two layers)
 
 - **Global:** `@fastify/rate-limit` `global: true, max: 300, timeWindow: "1 minute"`, `allowList: () =>
-  false` — i.e. *no* route is exempt, 429 in the standard error envelope
+false` — i.e. _no_ route is exempt, 429 in the standard error envelope
   (`api/server.ts` L51–59). **CODE-VERIFIED.**
 - **Per-token:** sliding window, in-memory per process — `TokenRateLimiter` in `api/v1.ts` (L45+),
   defaults `NLO_API_RATE_LIMIT_MAX=120` per `NLO_API_RATE_LIMIT_WINDOW_MS=60000` (config.ts L236–237);
   429 + `retryAfterSeconds` + audit record `rate_limited` (v1.ts L229–240).
 - Honest limitation: the per-token limiter is **in-memory per process** (stated in its doc comment) —
   fine for the single-instance model; multi-instance would need a shared store (noted in C-BL-07, P3).
-**CODE-VERIFIED.**
+  **CODE-VERIFIED.**
 
 ## 9. Google session / cookie handling
 
@@ -218,18 +222,18 @@ patterns would pass through. Acceptable given the explicit "we redact what we ha
 
 ## 12. Findings summary (Agent C)
 
-| # | Sev | Finding | Disposition |
-|---|---|---|---|
-| C-BL-01 | P1 | Shared VLESS client UUID `b625fad2…` + 52 endpoints in **public** GitHub history (`_add-nodes.py`, since `14954c4`) | Owner decision: accept+document or rotate+history-repair (needs approval; no action taken) |
-| C-BL-02 | INFO | `max(6)` scope finding **resolved** — dynamic cap in place since P4-1A; verified via code + git history | closed |
-| C-BL-03 | INFO | Secret-scan (both CI variants) passes live, exit 0, self-test works | closed |
-| C-BL-04 | P2 | `.env.example` exposes internal IPs as commented defaults (topology only, no credentials) | optional comment tweak |
-| C-BL-05 | P3 | `.env` ACL grants sandbox user `CodexSandboxUsers` read (RX) | optional local hardening |
-| C-BL-06 | P3 | Redaction is pattern-based; novel formats pass through (scope statement exists) | accept or extend patterns |
-| C-BL-07 | P3 | Per-token rate limiter is in-memory per process | multi-instance follow-up |
-| C-BL-08 | P2 | Workstation git config `http.sslverify=false` | local hardening |
-| C-BL-09 | INFO | Webhook HMAC, outbox, backoff, SSRF, dead-letter all correct by code read + unit tests | closed |
-| C-BL-10 | INFO | Vault AES-256-GCM correct; key-file 0600; `list()` never exposes values | closed |
+| #       | Sev  | Finding                                                                                                             | Disposition                                                                                |
+| ------- | ---- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| C-BL-01 | P1   | Shared VLESS client UUID `b625fad2…` + 52 endpoints in **public** GitHub history (`_add-nodes.py`, since `14954c4`) | Owner decision: accept+document or rotate+history-repair (needs approval; no action taken) |
+| C-BL-02 | INFO | `max(6)` scope finding **resolved** — dynamic cap in place since P4-1A; verified via code + git history             | closed                                                                                     |
+| C-BL-03 | INFO | Secret-scan (both CI variants) passes live, exit 0, self-test works                                                 | closed                                                                                     |
+| C-BL-04 | P2   | `.env.example` exposes internal IPs as commented defaults (topology only, no credentials)                           | optional comment tweak                                                                     |
+| C-BL-05 | P3   | `.env` ACL grants sandbox user `CodexSandboxUsers` read (RX)                                                        | optional local hardening                                                                   |
+| C-BL-06 | P3   | Redaction is pattern-based; novel formats pass through (scope statement exists)                                     | accept or extend patterns                                                                  |
+| C-BL-07 | P3   | Per-token rate limiter is in-memory per process                                                                     | multi-instance follow-up                                                                   |
+| C-BL-08 | P2   | Workstation git config `http.sslverify=false`                                                                       | local hardening                                                                            |
+| C-BL-09 | INFO | Webhook HMAC, outbox, backoff, SSRF, dead-letter all correct by code read + unit tests                              | closed                                                                                     |
+| C-BL-10 | INFO | Vault AES-256-GCM correct; key-file 0600; `list()` never exposes values                                             | closed                                                                                     |
 
 ## 13. What this agent did NOT do
 

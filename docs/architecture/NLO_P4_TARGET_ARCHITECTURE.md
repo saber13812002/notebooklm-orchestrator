@@ -10,21 +10,21 @@ Status labels: `IMPLEMENTED` (code + tests at baseline) · `CODE_VERIFIED` (read
 
 **Shape:** npm-workspaces monorepo — `packages/shared` (domain types + pure logic, 13 exports), `apps/server` (Fastify + `node:sqlite` + tsx, in-process single-worker queue + per-job Python worker spawns), `apps/web` (Vite/React SPA, 7 routes). **Modular monolith** — one deployable, clear internal module boundaries, single DB, single process for the API+queue.
 
-| Capability | Status (evidence) |
-|---|---|
-| Job state machine (12 statuses, `canTransition` enforced at repo layer) | `IMPLEMENTED` / `UNIT_TESTED` ([`packages/shared/src/job-state.ts`](../../packages/shared/src/job-state.ts), [`apps/server/src/domain/jobs.repo.ts`](../../apps/server/src/domain/jobs.repo.ts)) |
-| Job persistence + provenance (notebook_id, operation_ids_json, result_provenance, node_id, attempt log) | `IMPLEMENTED` / `INTEGRATION_TESTED` (migrations 0001–0002; job-lifecycle.test.ts) |
-| Resume-never-resubmit podcast pipeline (external task id persisted pre-poll; `job_stages` checkpoints survive restart) | `IMPLEMENTED` / `LIVE_VERIFIED` 2026-11-06 (CHANGELOG NLO-P2; podcast-fault-recovery.test.ts) |
-| Provider abstraction with honest capability levels + `ProviderFailure` (8 failure classes, ambiguous = never auto-retried) | `IMPLEMENTED` / `UNIT_TESTED` ([`packages/shared/src/types.ts`](../../packages/shared/src/types.ts), python-worker-provider.ts) |
-| Fail-closed proxy layer (xray/VLESS, staged A–E health, SSRF guard, curl-primary transport, 10-min TTL, per-job node attribution) | `IMPLEMENTED` / `INTEGRATION_TESTED` (MockProxyRuntime 6 scenarios) + `LIVE_VERIFIED` (production 172.30.0.133) |
-| Google account sessions (per-account Playwright storage-state 0600, 9-state machine, 10-min verified TTL, reauth) | `IMPLEMENTED` / `LIVE_VERIFIED` |
-| API tokens (SHA-256 hash, 6 scopes, idempotency, audit log), webhooks (outbox, exactly-once settlement, HMAC, dead-letter) | `IMPLEMENTED` / `INTEGRATION_TESTED` |
-| Artifact archive (per-job layout, sha256, ETag download, MP3 transcode), redaction, vault (AES-256-GCM) | `IMPLEMENTED` / `INTEGRATION_TESTED` |
-| CI (lint/format/typecheck/test/build, Node 22; docker smoke) + manual live gate | `IMPLEMENTED` (`.github/workflows/ci.yml`) |
-| MCP client or server | `NOT_IMPLEMENTED` (P4 target) |
-| Multi-content-engine (video/infographic/image), multi-transport provider (Android gRPC, Enterprise host, external MCP), multi-account rotation, universal intake (PDF/MD/video), templates T1–T4 | `NOT_IMPLEMENTED` (P4 targets) |
+| Capability                                                                                                                                                                                       | Status (evidence)                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Job state machine (12 statuses, `canTransition` enforced at repo layer)                                                                                                                          | `IMPLEMENTED` / `UNIT_TESTED` ([`packages/shared/src/job-state.ts`](../../packages/shared/src/job-state.ts), [`apps/server/src/domain/jobs.repo.ts`](../../apps/server/src/domain/jobs.repo.ts)) |
+| Job persistence + provenance (notebook_id, operation_ids_json, result_provenance, node_id, attempt log)                                                                                          | `IMPLEMENTED` / `INTEGRATION_TESTED` (migrations 0001–0002; job-lifecycle.test.ts)                                                                                                               |
+| Resume-never-resubmit podcast pipeline (external task id persisted pre-poll; `job_stages` checkpoints survive restart)                                                                           | `IMPLEMENTED` / `LIVE_VERIFIED` 2026-11-06 (CHANGELOG NLO-P2; podcast-fault-recovery.test.ts)                                                                                                    |
+| Provider abstraction with honest capability levels + `ProviderFailure` (8 failure classes, ambiguous = never auto-retried)                                                                       | `IMPLEMENTED` / `UNIT_TESTED` ([`packages/shared/src/types.ts`](../../packages/shared/src/types.ts), python-worker-provider.ts)                                                                  |
+| Fail-closed proxy layer (xray/VLESS, staged A–E health, SSRF guard, curl-primary transport, 10-min TTL, per-job node attribution)                                                                | `IMPLEMENTED` / `INTEGRATION_TESTED` (MockProxyRuntime 6 scenarios) + `LIVE_VERIFIED` (production 172.30.0.133)                                                                                  |
+| Google account sessions (per-account Playwright storage-state 0600, 9-state machine, 10-min verified TTL, reauth)                                                                                | `IMPLEMENTED` / `LIVE_VERIFIED`                                                                                                                                                                  |
+| API tokens (SHA-256 hash, 6 scopes, idempotency, audit log), webhooks (outbox, exactly-once settlement, HMAC, dead-letter)                                                                       | `IMPLEMENTED` / `INTEGRATION_TESTED`                                                                                                                                                             |
+| Artifact archive (per-job layout, sha256, ETag download, MP3 transcode), redaction, vault (AES-256-GCM)                                                                                          | `IMPLEMENTED` / `INTEGRATION_TESTED`                                                                                                                                                             |
+| CI (lint/format/typecheck/test/build, Node 22; docker smoke) + manual live gate                                                                                                                  | `IMPLEMENTED` (`.github/workflows/ci.yml`)                                                                                                                                                       |
+| MCP client or server                                                                                                                                                                             | `NOT_IMPLEMENTED` (P4 target)                                                                                                                                                                    |
+| Multi-content-engine (video/infographic/image), multi-transport provider (Android gRPC, Enterprise host, external MCP), multi-account rotation, universal intake (PDF/MD/video), templates T1–T4 | `NOT_IMPLEMENTED` (P4 targets)                                                                                                                                                                   |
 
-**The single biggest structural fact:** NLO already *is* most of the modular platform — the module boundaries (domain / providers / proxy / webhooks / shared) exist and are tested. P4 is **boundary-hardening + new adapters + new contexts**, not a rewrite. Per AGENTS.md §1.3, nothing working is rewritten without a test and a stated technical reason.
+**The single biggest structural fact:** NLO already _is_ most of the modular platform — the module boundaries (domain / providers / proxy / webhooks / shared) exist and are tested. P4 is **boundary-hardening + new adapters + new contexts**, not a rewrite. Per AGENTS.md §1.3, nothing working is rewritten without a test and a stated technical reason.
 
 ## 2. Current dependency map (Mermaid, from the source audit)
 
@@ -78,6 +78,7 @@ flowchart LR
 ```
 
 **Coupling findings (audit):**
+
 1. **Healthy:** `shared` is a leaf (no I/O); every module depends down; web → server only via REST; worker → server only via stdio protocol.
 2. **Known coupling (P4 targets):**
    - **Egress injected as env into the worker** (`tunnelEnv`) — egress decision buried inside provider invocation; node switch requires restart (→ Egress Gateway, §4).
@@ -90,26 +91,27 @@ flowchart LR
 
 The mission proposed 12 bounded contexts; verified against source, the honest map is **8 contexts now** (3 of the proposed 12 are sub-concerns of existing contexts, 1 is a P4-later concern):
 
-| # | Context | Baseline evidence | P4 delta |
-|---|---|---|---|
-| 1 | **Job Orchestration** (state machine, queue, stages, attempts, events, idempotency) | `IMPLEMENTED` (jobs.repo, stages.repo, job-state) | retry-from-checkpoint API; cross-provider job records |
-| 2 | **Provider Management** (capability contracts, adapters, conformance) | `PARTIAL` (one adapter, capability levels) | Provider Registry + conformance suite (ADR-001) |
-| 3 | **Account & Session** (Google accounts, credential kinds, verification TTL, reauth, keepalive) | `IMPLEMENTED` (sessions, accounts, auth_sessions 9-state) | credential kinds (master token, enterprise), scheduled keepalive, routing policy (ADR-003) |
-| 4 | **Egress & Proxy** (node registry, runtime, staged health, fail-closed transport) | `IMPLEMENTED` (proxy/*) | Egress Gateway interface, per-provider egress policy, account↔node affinity (ADR-004) |
-| 5 | **Content Intake** (upload, validation, format matrix, text extraction, untrusted-content rule, metadata) | `IMPLEMENTED` (audio/text + capabilities) | universal formats (PDF/MD/video), LLM metadata enrichment (ADR-002 spec) |
-| 6 | **Artifact Delivery** (archive, storage meta, download, transcode, provenance) | `IMPLEMENTED` (artifacts.repo, archive.ts) | multi-artifact types (video/infographic/image), per-template artifact contracts |
-| 7 | **Notification** (webhook outbox, HMAC, delivery states) | `IMPLEMENTED` (dispatcher) | no change (consumes job/provider events) |
-| 8 | **Platform AuthN/Z** (API tokens, scopes, audit, session admin) | `IMPLEMENTED` (api-tokens.repo) | MCP server reuses tokens; no new mechanism |
-| — | *Proposed but folded:* "Template Management" → sub-context of Content Intake (templates are intake+prompt presets, not a separate context) | — | T1–T4 as data (ADR-002) |
-| — | *Proposed but folded:* "Retry & Failover" → cross-cutting policy of Job Orchestration + Provider Mgmt | — | failure-class-driven policy (ADR-007) |
-| — | *Proposed, deferred:* "Billing/Usage" | usage introspection exists in ecosystem, not in NLO | P4+ (metering per account) — out of P4 scope |
-| — | *Proposed, deferred:* "Observability" (traces/metrics) | correlation ids exist; no metrics | P4+ — out of scope, keep correlation ids |
+| #   | Context                                                                                                                                    | Baseline evidence                                         | P4 delta                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 1   | **Job Orchestration** (state machine, queue, stages, attempts, events, idempotency)                                                        | `IMPLEMENTED` (jobs.repo, stages.repo, job-state)         | retry-from-checkpoint API; cross-provider job records                                      |
+| 2   | **Provider Management** (capability contracts, adapters, conformance)                                                                      | `PARTIAL` (one adapter, capability levels)                | Provider Registry + conformance suite (ADR-001)                                            |
+| 3   | **Account & Session** (Google accounts, credential kinds, verification TTL, reauth, keepalive)                                             | `IMPLEMENTED` (sessions, accounts, auth_sessions 9-state) | credential kinds (master token, enterprise), scheduled keepalive, routing policy (ADR-003) |
+| 4   | **Egress & Proxy** (node registry, runtime, staged health, fail-closed transport)                                                          | `IMPLEMENTED` (proxy/*)                                   | Egress Gateway interface, per-provider egress policy, account↔node affinity (ADR-004)      |
+| 5   | **Content Intake** (upload, validation, format matrix, text extraction, untrusted-content rule, metadata)                                  | `IMPLEMENTED` (audio/text + capabilities)                 | universal formats (PDF/MD/video), LLM metadata enrichment (ADR-002 spec)                   |
+| 6   | **Artifact Delivery** (archive, storage meta, download, transcode, provenance)                                                             | `IMPLEMENTED` (artifacts.repo, archive.ts)                | multi-artifact types (video/infographic/image), per-template artifact contracts            |
+| 7   | **Notification** (webhook outbox, HMAC, delivery states)                                                                                   | `IMPLEMENTED` (dispatcher)                                | no change (consumes job/provider events)                                                   |
+| 8   | **Platform AuthN/Z** (API tokens, scopes, audit, session admin)                                                                            | `IMPLEMENTED` (api-tokens.repo)                           | MCP server reuses tokens; no new mechanism                                                 |
+| —   | _Proposed but folded:_ "Template Management" → sub-context of Content Intake (templates are intake+prompt presets, not a separate context) | —                                                         | T1–T4 as data (ADR-002)                                                                    |
+| —   | _Proposed but folded:_ "Retry & Failover" → cross-cutting policy of Job Orchestration + Provider Mgmt                                      | —                                                         | failure-class-driven policy (ADR-007)                                                      |
+| —   | _Proposed, deferred:_ "Billing/Usage"                                                                                                      | usage introspection exists in ecosystem, not in NLO       | P4+ (metering per account) — out of P4 scope                                               |
+| —   | _Proposed, deferred:_ "Observability" (traces/metrics)                                                                                     | correlation ids exist; no metrics                         | P4+ — out of scope, keep correlation ids                                                   |
 
 Context communication rules (enforced by the boundaries above):
+
 - Only **Job Orchestration** calls Provider Management (via the registry).
 - Only **Job Orchestration** asks Account/Egress contexts for resources (admission: `WAITING_FOR_ACCOUNT` → `WAITING_FOR_PROXY` → `RUNNING`).
 - **Artifact Delivery** and **Notification** react to job events; they never mutate job state.
-- The **REST API and MCP server** are both *thin anti-corruption layers* over the same domain services — one domain, two front doors (ADR-005).
+- The **REST API and MCP server** are both _thin anti-corruption layers_ over the same domain services — one domain, two front doors (ADR-005).
 
 ## 4. Target architecture (component view)
 
@@ -178,19 +180,19 @@ flowchart TB
 
 ### 4.1 Architectural decisions (summary; full rationale in ADRs 001–007)
 
-| ADR | Decision |
-|---|---|
+| ADR | Decision                                                                                                                                                                                                                                                                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | 001 | **Modular architecture** — the modular monolith stays (no microservices; in-process contexts + shared kernel; microservices exit criteria defined) with the **Provider Registry** as its core mechanism: every content engine is an adapter behind a capability contract + conformance tests; capability levels stay honest (no inflation) |
-| 002 | **Content Intake as context** — format matrix per provider, untrusted-content rule, templates as *data* (T1–T4), LLM metadata enrichment |
-| 003 | **Account Manager owns credentials** — credential kinds (storage-state / master-token / enterprise-SSO), scheduled keepalive, routing policy (priority → quota → affinity → rotation) |
-| 004 | **Egress Gateway** — egress becomes a platform service (acquire/release/health); per-provider egress policy; fail-closed semantics preserved; account↔node affinity |
-| 005 | **NLO as MCP server** — 9 tools as a thin anti-corruption layer over the domain services (7 route wrappers + `list_templates`); API-token auth; loopback Streamable-HTTP; errors via the existing envelope |
-| 006 | **NLO as MCP client** — external MCP servers admitted to the Provider Registry as `mcp_client` providers; static op→tool mapping; conformance (C1–C7) before admission; provenance envelope on artifacts |
-| 007 | **Retry & failover policy** — failure-class driven (existing RETRYABLE map), UNKNOWN_EXTERNAL_STATE = never blind-resubmit; provider failover only for *Unavailable* (never for *Operation Failed / Outcome Unknown*); retry-from-last-safe-checkpoint |
+| 002 | **Content Intake as context** — format matrix per provider, untrusted-content rule, templates as _data_ (T1–T4), LLM metadata enrichment                                                                                                                                                                                                   |
+| 003 | **Account Manager owns credentials** — credential kinds (storage-state / master-token / enterprise-SSO), scheduled keepalive, routing policy (priority → quota → affinity → rotation)                                                                                                                                                      |
+| 004 | **Egress Gateway** — egress becomes a platform service (acquire/release/health); per-provider egress policy; fail-closed semantics preserved; account↔node affinity                                                                                                                                                                        |
+| 005 | **NLO as MCP server** — 9 tools as a thin anti-corruption layer over the domain services (7 route wrappers + `list_templates`); API-token auth; loopback Streamable-HTTP; errors via the existing envelope                                                                                                                                 |
+| 006 | **NLO as MCP client** — external MCP servers admitted to the Provider Registry as `mcp_client` providers; static op→tool mapping; conformance (C1–C7) before admission; provenance envelope on artifacts                                                                                                                                   |
+| 007 | **Retry & failover policy** — failure-class driven (existing RETRYABLE map), UNKNOWN_EXTERNAL_STATE = never blind-resubmit; provider failover only for _Unavailable_ (never for _Operation Failed / Outcome Unknown_); retry-from-last-safe-checkpoint                                                                                     |
 
 ### 4.2 What explicitly does NOT change (non-goals, protected)
 
-- Job state machine semantics and transition rules (only *new statuses* may be added, backward-compatible).
+- Job state machine semantics and transition rules (only _new statuses_ may be added, backward-compatible).
 - Fail-closed egress: no `direct` mode without explicit operator opt-out; curl-primary transport.
 - Hash-only API tokens; vault-based secrets; redaction everywhere; loopback-only bind default.
 - The Python worker protocol (arg-array spawn, JSON lines, settle-once) — adapters reuse it.
@@ -199,21 +201,21 @@ flowchart TB
 
 ## 5. Build-vs-adopt per capability
 
-| Capability | Build | Adopt | Evidence / note |
-|---|---|---|---|
-| Job engine, checkpoints, attempts | Build (existing) | — | strongest asset in the ecosystem; keep |
-| NotebookLM web transport | Build (existing) | — | notebooklm-py in worker |
-| Cookie-free transport (Android gRPC, master token) | Build thin adapter | notebooklm-py backend | `EXPERIMENTAL` upstream; dedicated account required |
-| Enterprise host | Build thin adapter | jacob-bd's host/config model | `EXPERIMENTAL`; live-verify with a real GCP project before claiming |
-| Multi-account rotation | Build policy | roomi-fields pattern | routing-layer policy, not inside adapters |
-| External MCP as provider | Build generic client adapter | stdio JSON-RPC | per-server capability declaration |
-| Image/video engines | Build adapters later | ecosystem MCP servers | no first-party API exists; MCP servers are the only current access |
-| Webhooks, tokens, archive, redaction | Build (existing) | — | already ahead of the ecosystem |
-| Browser login | — | Playwright (existing) | browser only for *login*, never at request time |
+| Capability                                         | Build                        | Adopt                        | Evidence / note                                                     |
+| -------------------------------------------------- | ---------------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| Job engine, checkpoints, attempts                  | Build (existing)             | —                            | strongest asset in the ecosystem; keep                              |
+| NotebookLM web transport                           | Build (existing)             | —                            | notebooklm-py in worker                                             |
+| Cookie-free transport (Android gRPC, master token) | Build thin adapter           | notebooklm-py backend        | `EXPERIMENTAL` upstream; dedicated account required                 |
+| Enterprise host                                    | Build thin adapter           | jacob-bd's host/config model | `EXPERIMENTAL`; live-verify with a real GCP project before claiming |
+| Multi-account rotation                             | Build policy                 | roomi-fields pattern         | routing-layer policy, not inside adapters                           |
+| External MCP as provider                           | Build generic client adapter | stdio JSON-RPC               | per-server capability declaration                                   |
+| Image/video engines                                | Build adapters later         | ecosystem MCP servers        | no first-party API exists; MCP servers are the only current access  |
+| Webhooks, tokens, archive, redaction               | Build (existing)             | —                            | already ahead of the ecosystem                                      |
+| Browser login                                      | —                            | Playwright (existing)        | browser only for _login_, never at request time                     |
 
 ## 6. Scale & deployment posture (P4)
 
-- **Deployment unchanged:** systemd service `nlo`, git-based `deploy/deploy.sh`, DB in `data/`, Docker for local single-user. Microservices are *not* on the P4 path (ADR-001) — the in-process queue with a single worker concurrency is a deliberate choice for a single-operator service; the design keeps the queue interface so a process-boundary split is a later, low-risk move.
+- **Deployment unchanged:** systemd service `nlo`, git-based `deploy/deploy.sh`, DB in `data/`, Docker for local single-user. Microservices are _not_ on the P4 path (ADR-001) — the in-process queue with a single worker concurrency is a deliberate choice for a single-operator service; the design keeps the queue interface so a process-boundary split is a later, low-risk move.
 - **Concurrency growth path:** (1) keep single worker (P4-1), (2) N in-process workers sharing the DB queue with per-provider `maxConcurrent` (P4-later), (3) separate queue process (only if (2) is insufficient). Each step is gated by the four-path acceptance matrix.
 - **Data growth:** job archives under `data/jobs/` are append-only per job; retention/cleanup is an operations concern (runbook), not an architecture change.
 

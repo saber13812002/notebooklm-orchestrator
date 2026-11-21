@@ -9,61 +9,61 @@
 
 ## 1. Repository / git baseline
 
-| Item | Value | Verified |
-|---|---|---|
-| Workspace | `c:/Users/s.tabatabaei/Documents/saberprojects/notebooklm-orchestrator` | yes |
-| Branch | `main` | yes |
-| HEAD | `f07ac1fc577da4c2803853f274f3deb756aec7b2` ("ریبورت") | yes |
-| Prompt baseline | `5720d16` — HEAD is **exactly one commit ahead** of it | yes |
+| Item                    | Value                                                                                                                                                                                                                                | Verified             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------- |
+| Workspace               | `c:/Users/s.tabatabaei/Documents/saberprojects/notebooklm-orchestrator`                                                                                                                                                              | yes                  |
+| Branch                  | `main`                                                                                                                                                                                                                               | yes                  |
+| HEAD                    | `f07ac1fc577da4c2803853f274f3deb756aec7b2` ("ریبورت")                                                                                                                                                                                | yes                  |
+| Prompt baseline         | `5720d16` — HEAD is **exactly one commit ahead** of it                                                                                                                                                                               | yes                  |
 | Discrepancy disposition | `f07ac1f` adds the two P3 Batch 3 reports as **tracked** files (150 insertions, nothing else). The prompt described them as "untracked P3 reports"; they are now committed on `main`. They must be preserved byte-for-byte (see §4). | yes (diff inspected) |
-| Remote | `origin = https://github.com/saber13812002/notebooklm-orchestrator.git` (fetch+push) | yes |
-| Sync state | `HEAD == origin/main == f07ac1f` (nothing unpushed) | yes |
-| Working tree | clean (no modified, no untracked except `node_modules`-exempt) | yes |
-| Migration sequence | `0001`…`0006` applied → **next migration is `0007`** | yes |
-| OpenAPI contract | programmatic (`spec.ts`), bidirectional contract test in `openapi-v1.test.ts` | yes |
+| Remote                  | `origin = https://github.com/saber13812002/notebooklm-orchestrator.git` (fetch+push)                                                                                                                                                 | yes                  |
+| Sync state              | `HEAD == origin/main == f07ac1f` (nothing unpushed)                                                                                                                                                                                  | yes                  |
+| Working tree            | clean (no modified, no untracked except `node_modules`-exempt)                                                                                                                                                                       | yes                  |
+| Migration sequence      | `0001`…`0006` applied → **next migration is `0007`**                                                                                                                                                                                 | yes                  |
+| OpenAPI contract        | programmatic (`spec.ts`), bidirectional contract test in `openapi-v1.test.ts`                                                                                                                                                        | yes                  |
 
 ## 2. Test / quality baselines (measured on `main @ f07ac1f`, before any change)
 
-| Gate | Result | Detail |
-|---|---|---|
-| `npm test` | **426/426 PASS** | shared 110, server 286, web 30. F-B1 flake (425/426 in audit) did not reproduce — full baseline green. |
-| `npm run typecheck` | **PASS** (exit 0) | all workspaces |
-| `npm run lint` | **PASS** (exit 0) | |
+| Gate                   | Result                                               | Detail                                                                                                                              |
+| ---------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `npm test`             | **426/426 PASS**                                     | shared 110, server 286, web 30. F-B1 flake (425/426 in audit) did not reproduce — full baseline green.                              |
+| `npm run typecheck`    | **PASS** (exit 0)                                    | all workspaces                                                                                                                      |
+| `npm run lint`         | **PASS** (exit 0)                                    |                                                                                                                                     |
 | `npm run format:check` | **35 pre-existing files** with style issues (exit 1) | list in §6. This is the pre-P4-1 baseline; P4-1 commits must not add to it and will report it separately (not fixed in P4-1 scope). |
-| `npm run build` | not re-run in preflight (covered by final gate) | |
+| `npm run build`        | not re-run in preflight (covered by final gate)      |                                                                                                                                     |
 
 ## 3. Backup (created before any modification)
 
 Location: `C:/Users/s.tabatabaei/Documents/saberprojects/nlo-p4-1-backups/2026-11-16-p4-1/`
 
-| Artifact | Path | SHA256 |
-|---|---|---|
-| Git bundle (all 5 refs) | `nlo-p4-1-2026-11-16.bundle` | `154ede11957e18de8edaeb20e019f29def91689aebaabdfb29f3ac2867e15bdf` |
-| SQLite online backup (28 jobs, `PRAGMA integrity_check = ok`) | `nlo.sqlite.backup` | `4ff1e38867c844a8c5fe7a7912459d5cddb65a2ebaa1fdc6329b6caaf9617a8c` |
-| P3 report — BACKUP_ROLLBACK (preserved file) | `NLO_P3_BATCH3_BACKUP_ROLLBACK.md` | `bb37d23eea1fb69610319455040b9821d30a8684e7f52729326d30e6e6b89cb0` |
-| P3 report — REBASELINE (preserved file) | `NLO_P3_BATCH3_REBASELINE.md` | `a9db089b1d91a8b4bf14ed76edfd9bb8b08b66665630334ba6f337b65d259a2a` |
+| Artifact                                                      | Path                               | SHA256                                                             |
+| ------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------ |
+| Git bundle (all 5 refs)                                       | `nlo-p4-1-2026-11-16.bundle`       | `154ede11957e18de8edaeb20e019f29def91689aebaabdfb29f3ac2867e15bdf` |
+| SQLite online backup (28 jobs, `PRAGMA integrity_check = ok`) | `nlo.sqlite.backup`                | `4ff1e38867c844a8c5fe7a7912459d5cddb65a2ebaa1fdc6329b6caaf9617a8c` |
+| P3 report — BACKUP_ROLLBACK (preserved file)                  | `NLO_P3_BATCH3_BACKUP_ROLLBACK.md` | `bb37d23eea1fb69610319455040b9821d30a8684e7f52729326d30e6e6b89cb0` |
+| P3 report — REBASELINE (preserved file)                       | `NLO_P3_BATCH3_REBASELINE.md`      | `a9db089b1d91a8b4bf14ed76edfd9bb8b08b66665630334ba6f337b65d259a2a` |
 
 Bundle verified with `git bundle verify` (5 refs, HEAD `f07ac1f`). DB backup taken with Python `sqlite3` online `.backup()` (node:sqlite in v24.14.0 has no `DatabaseSync.backup`); `integrity_check` = ok; job count 28 matches production DB.
 
 ## 4. Preserved files (must stay byte-identical)
 
-| File | SHA256 | Note |
-|---|---|---|
-| `docs/reports/NLO_P3_BATCH3_BACKUP_ROLLBACK.md` | `bb37d23e…6e6b89cb0` | tracked since `f07ac1f`; one of the 35 pre-existing prettier issues — **not reformatted** in P4-1 |
-| `docs/reports/NLO_P3_BATCH3_REBASELINE.md` | `a9db089b…37b65d259a2a` | tracked since `f07ac1f`; same disposition |
+| File                                            | SHA256                  | Note                                                                                              |
+| ----------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------- |
+| `docs/reports/NLO_P3_BATCH3_BACKUP_ROLLBACK.md` | `bb37d23e…6e6b89cb0`    | tracked since `f07ac1f`; one of the 35 pre-existing prettier issues — **not reformatted** in P4-1 |
+| `docs/reports/NLO_P3_BATCH3_REBASELINE.md`      | `a9db089b…37b65d259a2a` | tracked since `f07ac1f`; same disposition                                                         |
 
 Rule for all four P4-1 commits: stage files **explicitly by path** (no `git add -A`), never touch the two files above.
 
 ## 5. Security preflight
 
-| Item | State |
-|---|---|
-| `.env` | present, gitignored (`.gitignore` line 18), untracked — **never staged** |
-| `.env.example` | tracked; all values empty/safe (`NLO_HOST=127.0.0.1`, `NLO_PORT=4870`, `NLO_PROVIDER=mock`, …) — no real secrets |
-| `data/vault.key` | present (64 bytes) — outside git |
-| `data/sessions/` | 3 account session JSON files (0600-equivalent) — outside git |
-| Live service | local dev instance running on port 4871 (Terminal 2, `NLO_PORT=4871`); production host is read-only for this mission (no deploy, no push) |
-| Staging | no staging host configured for P4-1; acceptance is local (mock) + CI (GitHub Actions). Production deploy explicitly out of scope per mission. |
+| Item             | State                                                                                                                                         |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.env`           | present, gitignored (`.gitignore` line 18), untracked — **never staged**                                                                      |
+| `.env.example`   | tracked; all values empty/safe (`NLO_HOST=127.0.0.1`, `NLO_PORT=4870`, `NLO_PROVIDER=mock`, …) — no real secrets                              |
+| `data/vault.key` | present (64 bytes) — outside git                                                                                                              |
+| `data/sessions/` | 3 account session JSON files (0600-equivalent) — outside git                                                                                  |
+| Live service     | local dev instance running on port 4871 (Terminal 2, `NLO_PORT=4871`); production host is read-only for this mission (no deploy, no push)     |
+| Staging          | no staging host configured for P4-1; acceptance is local (mock) + CI (GitHub Actions). Production deploy explicitly out of scope per mission. |
 
 ## 6. Pre-existing `format:check` baseline (35 files — NOT introduced by P4-1)
 
@@ -125,13 +125,13 @@ P4-1 policy: newly created/modified source files are prettier-clean; pre-existin
 
 ## 8. Open items carried from P4-0.1 (disposition for P4-1)
 
-| Item | Disposition |
-|---|---|
-| F-B1 (425/426 flake) | **Not reproduced** — full 426/426 baseline green on `f07ac1f`. No formal waiver needed; recorded in final report. |
-| F-C1 (fusion declaration) | Mandatory in the `notebooklm.web` descriptor notes + C3 test comments. |
-| F-C4 (boot `resetAll()`) | Mandatory in P4-1C with dedicated test. |
-| F-C7 (secret scan mechanism) | git-grep gate in CI (no new repo dependency). |
-| D1/D2/D3/D7 decisions | Recorded in this report + P4-1A commit message: D1 `GET /api/v1/capabilities`; D2 `providers:read` scope; D3 settle-once arbiter + boot `resetAll()`; D7 gateway = thin `selectAuto` adapter (no cap/affinity in P4-1). |
+| Item                         | Disposition                                                                                                                                                                                                             |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-B1 (425/426 flake)         | **Not reproduced** — full 426/426 baseline green on `f07ac1f`. No formal waiver needed; recorded in final report.                                                                                                       |
+| F-C1 (fusion declaration)    | Mandatory in the `notebooklm.web` descriptor notes + C3 test comments.                                                                                                                                                  |
+| F-C4 (boot `resetAll()`)     | Mandatory in P4-1C with dedicated test.                                                                                                                                                                                 |
+| F-C7 (secret scan mechanism) | git-grep gate in CI (no new repo dependency).                                                                                                                                                                           |
+| D1/D2/D3/D7 decisions        | Recorded in this report + P4-1A commit message: D1 `GET /api/v1/capabilities`; D2 `providers:read` scope; D3 settle-once arbiter + boot `resetAll()`; D7 gateway = thin `selectAuto` adapter (no cap/affinity in P4-1). |
 
 ## 9. Preflight verdict
 

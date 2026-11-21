@@ -7,28 +7,28 @@
 
 ## 1. Host identity (A1)
 
-| Item | Value | Evidence |
-| --- | --- | --- |
-| Hostname | `AI-TOOLS` | `hostname` |
-| OS | Ubuntu 24.04.4 LTS | `/etc/os-release` |
-| Operator user | `saber` (uid 1001, docker group) | `whoami`/`id` |
-| Docker | client/server 29.1.3 | `docker version` |
-| Disk `/` | 686 G total, 250 G used, **409 G free (38%)** | `df -h /` |
-| Public listeners | `0.0.0.0:80`, `0.0.0.0:443`, `[::]:80`, `[::]:443` (nginx), `127.0.0.1:4870` (node) | `ss -tln` |
-| Certbot image | `certbot/certbot:latest` = `sha256:186bfc6591d8863694654a3671b4d185145bdf4c01eca700778e7fa0293d22bf`, created 2026-11-10T22:32Z, linux/amd64 | `docker inspect` |
+| Item             | Value                                                                                                                                        | Evidence          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Hostname         | `AI-TOOLS`                                                                                                                                   | `hostname`        |
+| OS               | Ubuntu 24.04.4 LTS                                                                                                                           | `/etc/os-release` |
+| Operator user    | `saber` (uid 1001, docker group)                                                                                                             | `whoami`/`id`     |
+| Docker           | client/server 29.1.3                                                                                                                         | `docker version`  |
+| Disk `/`         | 686 G total, 250 G used, **409 G free (38%)**                                                                                                | `df -h /`         |
+| Public listeners | `0.0.0.0:80`, `0.0.0.0:443`, `[::]:80`, `[::]:443` (nginx), `127.0.0.1:4870` (node)                                                          | `ss -tln`         |
+| Certbot image    | `certbot/certbot:latest` = `sha256:186bfc6591d8863694654a3671b4d185145bdf4c01eca700778e7fa0293d22bf`, created 2026-11-10T22:32Z, linux/amd64 | `docker inspect`  |
 
 ## 2. NLO runtime (A2)
 
-| Item | Value |
-| --- | --- |
-| `nlo.service` | **active** + **enabled** |
-| Process | PID 2809780 `tsx src/main.ts` → node child 2809792 (uptime 15 h 51 min — unchanged since Gate 2) |
-| Working dir / commit | `/home/saber/saberprojects/notebooklm-orchestrator`, HEAD **`278273a2e9f8fabb137d6ecdb3a51c1745dd8352`** |
-| Bind | **`127.0.0.1:4870` only** (loopback confirmed in `ss -tlnp`, owner `node` pid 2809792) |
-| `/api/health` | `{"ok":true,"service":"notebooklm-orchestrator",…}` |
-| `/api/health/ready` | `{"ok":true,"ready":true,"provider":{"name":"python-worker","configured":true,"issues":[]},…}` |
-| `/api/openapi.json` / `/api/docs` | 200 / 200 |
-| `/api/v1/health` | 200 |
+| Item                              | Value                                                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `nlo.service`                     | **active** + **enabled**                                                                                 |
+| Process                           | PID 2809780 `tsx src/main.ts` → node child 2809792 (uptime 15 h 51 min — unchanged since Gate 2)         |
+| Working dir / commit              | `/home/saber/saberprojects/notebooklm-orchestrator`, HEAD **`278273a2e9f8fabb137d6ecdb3a51c1745dd8352`** |
+| Bind                              | **`127.0.0.1:4870` only** (loopback confirmed in `ss -tlnp`, owner `node` pid 2809792)                   |
+| `/api/health`                     | `{"ok":true,"service":"notebooklm-orchestrator",…}`                                                      |
+| `/api/health/ready`               | `{"ok":true,"ready":true,"provider":{"name":"python-worker","configured":true,"issues":[]},…}`           |
+| `/api/openapi.json` / `/api/docs` | 200 / 200                                                                                                |
+| `/api/v1/health`                  | 200                                                                                                      |
 
 No modification and no restart of NLO during this phase.
 
@@ -36,12 +36,12 @@ No modification and no restart of NLO during this phase.
 
 The host runs **four** nginx-related processes; only one owns public 80/443:
 
-| Master PID | Executable / config | Workers | Owned ports | Role |
-| --- | --- | --- | --- | --- |
-| **199642** | `/www/server/nginx/sbin/nginx -c /www/server/nginx/conf/nginx.conf` (nginx **1.31.4**) | 20 × `www` (uid 1003) | **`0.0.0.0:80`, `0.0.0.0:443`, `[::]:80`, `[::]:443`** | **PUBLIC edge — the instance Batch 3 targets** |
-| 2291 | `/www/server/panel/webserver/sbin/webserver -c /www/server/panel/webserver/conf/webserver.conf` | 1 × `www` | `0.0.0.0:8443` (+`[::]:8443`) | BT/aaPanel panel UI (proxies `/tmp/panel.sock`) |
-| 3565 | `/usr/local/openresty/nginx/sbin/nginx -p /usr/local/kong -c nginx.conf` | (kong) | none of 80/443 | Kong gateway |
-| 4051 / 4082 | `nginx -g daemon off;` (containerized, user `message+`) | per container | none of 80/443 | Docker-internal (e.g. GitLab) |
+| Master PID  | Executable / config                                                                             | Workers               | Owned ports                                            | Role                                            |
+| ----------- | ----------------------------------------------------------------------------------------------- | --------------------- | ------------------------------------------------------ | ----------------------------------------------- |
+| **199642**  | `/www/server/nginx/sbin/nginx -c /www/server/nginx/conf/nginx.conf` (nginx **1.31.4**)          | 20 × `www` (uid 1003) | **`0.0.0.0:80`, `0.0.0.0:443`, `[::]:80`, `[::]:443`** | **PUBLIC edge — the instance Batch 3 targets**  |
+| 2291        | `/www/server/panel/webserver/sbin/webserver -c /www/server/panel/webserver/conf/webserver.conf` | 1 × `www`             | `0.0.0.0:8443` (+`[::]:8443`)                          | BT/aaPanel panel UI (proxies `/tmp/panel.sock`) |
+| 3565        | `/usr/local/openresty/nginx/sbin/nginx -p /usr/local/kong -c nginx.conf`                        | (kong)                | none of 80/443                                         | Kong gateway                                    |
+| 4051 / 4082 | `nginx -g daemon off;` (containerized, user `message+`)                                         | per container         | none of 80/443                                         | Docker-internal (e.g. GitLab)                   |
 
 **Proof that `nginx -t` / `nginx -s reload` target 199642** (the public instance):
 
@@ -66,15 +66,15 @@ Vhost dir `/www/server/panel/vhost/nginx/` (root 0700): 16 domain vhosts + inclu
 
 ## 4. Concurrent-operator protection (A4)
 
-| Check | Result |
-| --- | --- |
-| Vhost dir mtime | `Nov 14 12:40` (= 2026-11-14 12:40 UTC, M2-7-SSL-02 cert-store setup; before this mission) |
-| `nlo.ai.ismc.ir.conf` mtime | **2026-11-03 16:59:31 UTC** — untouched since Stage-A was created |
-| Any vhost file modified 2026-11-14 17:00 UTC → now | **none** (full listing scan; latest non-nlo vhost mtimes are 2026-10-31 or earlier) |
-| Running certbot processes | **none** (`pgrep -af 'cf-certbot\|certbot renew'` empty; no certbot docker containers) |
-| `certbot-cf.timer` | **enabled**; last run 2026-11-15 04:21:52 UTC finished cleanly — journal: `No renewals were attempted.` (isolated store is empty until Batch 3 issues) |
-| Staged host scripts vs local | hashes match exactly: `issue-nlo-cert.sh` `54484b1eb9057870c9fcbd7bb6dcb6103b87fc0aef567f5c0894bd8d796ad06b`, `install-vhost.sh` `5b4c3d3fb891127b7b5f0b04f7384ed50039a5c74596eba0cb422b7e5e6e993c`, `p3-stageB.conf` `12ea344a744c9ff844829c6226246e51b012a9320355b27e88f2a84e2a5a6250` |
-| `/www/acme` webroot | `p3test` (planted by us 2026-11-14 17:45, to be removed after go-live) + pre-existing `m27-probe` (Nov 13), `nlo-selftest-66e907f` (Nov 2) |
+| Check                                              | Result                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vhost dir mtime                                    | `Nov 14 12:40` (= 2026-11-14 12:40 UTC, M2-7-SSL-02 cert-store setup; before this mission)                                                                                                                                                                                               |
+| `nlo.ai.ismc.ir.conf` mtime                        | **2026-11-03 16:59:31 UTC** — untouched since Stage-A was created                                                                                                                                                                                                                        |
+| Any vhost file modified 2026-11-14 17:00 UTC → now | **none** (full listing scan; latest non-nlo vhost mtimes are 2026-10-31 or earlier)                                                                                                                                                                                                      |
+| Running certbot processes                          | **none** (`pgrep -af 'cf-certbot\|certbot renew'` empty; no certbot docker containers)                                                                                                                                                                                                   |
+| `certbot-cf.timer`                                 | **enabled**; last run 2026-11-15 04:21:52 UTC finished cleanly — journal: `No renewals were attempted.` (isolated store is empty until Batch 3 issues)                                                                                                                                   |
+| Staged host scripts vs local                       | hashes match exactly: `issue-nlo-cert.sh` `54484b1eb9057870c9fcbd7bb6dcb6103b87fc0aef567f5c0894bd8d796ad06b`, `install-vhost.sh` `5b4c3d3fb891127b7b5f0b04f7384ed50039a5c74596eba0cb422b7e5e6e993c`, `p3-stageB.conf` `12ea344a744c9ff844829c6226246e51b012a9320355b27e88f2a84e2a5a6250` |
+| `/www/acme` webroot                                | `p3test` (planted by us 2026-11-14 17:45, to be removed after go-live) + pre-existing `m27-probe` (Nov 13), `nlo-selftest-66e907f` (Nov 2)                                                                                                                                               |
 
 No other operator touched any Batch-3 resource since the 2026-11-14 preflight. **No STOP condition.**
 
@@ -82,12 +82,12 @@ No other operator touched any Batch-3 resource since the 2026-11-14 preflight. *
 
 Via Cloudflare DoH (`1.1.1.1/dns-query`), 2026-11-15T09:33Z:
 
-| Record | Value |
-| --- | --- |
-| `nlo.ai.ismc.ir` A | `185.213.10.25`, TTL 300 |
-| `nlo.ai.ismc.ir` AAAA | **none** |
-| `nlo.ai.ismc.ir` TXT | **none** (clean for DNS-01) |
-| SOA | `indie.ns.cloudflare.com. dns.cloudflare.com.` (Cloudflare-authoritative) |
+| Record                | Value                                                                     |
+| --------------------- | ------------------------------------------------------------------------- |
+| `nlo.ai.ismc.ir` A    | `185.213.10.25`, TTL 300                                                  |
+| `nlo.ai.ismc.ir` AAAA | **none**                                                                  |
+| `nlo.ai.ismc.ir` TXT  | **none** (clean for DNS-01)                                               |
+| SOA                   | `indie.ns.cloudflare.com. dns.cloudflare.com.` (Cloudflare-authoritative) |
 
 ## 6. Local git baseline
 

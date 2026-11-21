@@ -12,20 +12,20 @@
 
 ## 1. Readiness matrix (per mission checklist)
 
-| Component | Local workstation (4871) | Production (172.30.0.133) | Verdict |
-|---|---|---|---|
-| **Google Session** | ✅ 3 storage-state files + rotate-locks present in `data/sessions/` (real accounts from prior live phases) — **file presence VERIFIED**; session *validity* NOT re-checked (no verify call executed this audit) | BLOCKED (no SSH; no NLO instance there yet) | **READY-ON-PAPER / validity NOT-VERIFIED** |
-| **Account** | account CRUD/health routes integration-tested (green, Agent D); local DB has account rows (sessions dir implies ≥3 accounts) | BLOCKED | **MOCK-VERIFIED locally** |
-| **Proxy (nodes)** | 52 VLESS nodes historically imported (`_add-nodes.py`); node rows live in DB (not re-listed this audit — read-only scope kept minimal); `NLO_PROXY_RUNTIME=xray` set | BLOCKED | **PARTIALLY-VERIFIED** (config present, DB state not re-queried) |
-| **Egress (xray runtime)** | `data/vendor/xray.exe` + `data/vendor/cfg` present; `/api/health/ready` → `proxyRuntime: {"state":"available","name":"xray"}` | BLOCKED | **READY locally (VERIFIED via ready probe)** |
-| **NotebookLM provider** | `NLO_PROVIDER=python-worker` set; **ready probe shows `provider.configured:false`** with issue: `worker start failed: python worker exited unexpectedly (code=3221225794, signal=none)` (0xC0000006 — Windows native-handle error, typical of a broken venv / missing native dep) | BLOCKED | **NOT READY locally — worker cannot start** (G-BL-01) |
-| **Worker (python venv)** | `data/venv/Scripts/python.exe` present (`NLO_PYTHON_BIN` points at it); but the spawn check above fails → venv install is incomplete/corrupt on this machine | BLOCKED | **BLOCKED locally** (G-BL-01) |
-| **FFmpeg (transcode)** | **NOT configured** — no `NLO_FFMPEG_BIN` in `.env`, `where ffmpeg` finds nothing. By design this is non-fatal: transcode status `not_configured`, original artifact stays canonical | n/a (prod: set per `s52-deploy.md` when needed) | **ACCEPTED-ABSENT** (documented behavior) |
-| **Artifact storage** | `data/jobs/` present; artifact storage/download tests green (Agent D); safe-name generation unit-tested | BLOCKED | **READY locally (CODE-VERIFIED + UNIT-VERIFIED)** |
-| **Download API** | `GET /api/jobs/:id/artifacts/:artId` + audio download routes — integration-tested green; UI download links exist | BLOCKED | **READY locally (INTEGRATION-VERIFIED)** |
-| **Webhook** | dispatcher integration-tested (exactly-once, HMAC, dead-letter); allowlist empty by default → **fail-closed** (no deliveries until `NLO_WEBHOOK_ALLOWLIST` configured) | BLOCKED | **READY for opt-in (INTEGRATION-VERIFIED); currently fail-closed** |
-| **Job recovery** | boot `resetAll → recoverInFlight → queue.start` (Agent B §Q8); `settle-once.test.ts` + `worker-queue-recovery.test.ts` green; runbook `docs/operations/JOB_RECOVERY_RUNBOOK.md` exists | BLOCKED | **READY locally (UNIT/INTEGRATION-VERIFIED)** |
-| **Monitoring** | `/api/health` (200, `ok:true`) + `/api/health/ready` (200, `ready:true` overall); production would add `journalctl -u nlo` + deploy-script journal check | BLOCKED (no service) | **BASIC-READY locally; no external alerting (no PM2/Prometheus/alertmanager in scope)** |
+| Component                 | Local workstation (4871)                                                                                                                                                                                                                                                          | Production (172.30.0.133)                       | Verdict                                                                                 |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------- |
+| **Google Session**        | ✅ 3 storage-state files + rotate-locks present in `data/sessions/` (real accounts from prior live phases) — **file presence VERIFIED**; session _validity_ NOT re-checked (no verify call executed this audit)                                                                   | BLOCKED (no SSH; no NLO instance there yet)     | **READY-ON-PAPER / validity NOT-VERIFIED**                                              |
+| **Account**               | account CRUD/health routes integration-tested (green, Agent D); local DB has account rows (sessions dir implies ≥3 accounts)                                                                                                                                                      | BLOCKED                                         | **MOCK-VERIFIED locally**                                                               |
+| **Proxy (nodes)**         | 52 VLESS nodes historically imported (`_add-nodes.py`); node rows live in DB (not re-listed this audit — read-only scope kept minimal); `NLO_PROXY_RUNTIME=xray` set                                                                                                              | BLOCKED                                         | **PARTIALLY-VERIFIED** (config present, DB state not re-queried)                        |
+| **Egress (xray runtime)** | `data/vendor/xray.exe` + `data/vendor/cfg` present; `/api/health/ready` → `proxyRuntime: {"state":"available","name":"xray"}`                                                                                                                                                     | BLOCKED                                         | **READY locally (VERIFIED via ready probe)**                                            |
+| **NotebookLM provider**   | `NLO_PROVIDER=python-worker` set; **ready probe shows `provider.configured:false`** with issue: `worker start failed: python worker exited unexpectedly (code=3221225794, signal=none)` (0xC0000006 — Windows native-handle error, typical of a broken venv / missing native dep) | BLOCKED                                         | **NOT READY locally — worker cannot start** (G-BL-01)                                   |
+| **Worker (python venv)**  | `data/venv/Scripts/python.exe` present (`NLO_PYTHON_BIN` points at it); but the spawn check above fails → venv install is incomplete/corrupt on this machine                                                                                                                      | BLOCKED                                         | **BLOCKED locally** (G-BL-01)                                                           |
+| **FFmpeg (transcode)**    | **NOT configured** — no `NLO_FFMPEG_BIN` in `.env`, `where ffmpeg` finds nothing. By design this is non-fatal: transcode status `not_configured`, original artifact stays canonical                                                                                               | n/a (prod: set per `s52-deploy.md` when needed) | **ACCEPTED-ABSENT** (documented behavior)                                               |
+| **Artifact storage**      | `data/jobs/` present; artifact storage/download tests green (Agent D); safe-name generation unit-tested                                                                                                                                                                           | BLOCKED                                         | **READY locally (CODE-VERIFIED + UNIT-VERIFIED)**                                       |
+| **Download API**          | `GET /api/jobs/:id/artifacts/:artId` + audio download routes — integration-tested green; UI download links exist                                                                                                                                                                  | BLOCKED                                         | **READY locally (INTEGRATION-VERIFIED)**                                                |
+| **Webhook**               | dispatcher integration-tested (exactly-once, HMAC, dead-letter); allowlist empty by default → **fail-closed** (no deliveries until `NLO_WEBHOOK_ALLOWLIST` configured)                                                                                                            | BLOCKED                                         | **READY for opt-in (INTEGRATION-VERIFIED); currently fail-closed**                      |
+| **Job recovery**          | boot `resetAll → recoverInFlight → queue.start` (Agent B §Q8); `settle-once.test.ts` + `worker-queue-recovery.test.ts` green; runbook `docs/operations/JOB_RECOVERY_RUNBOOK.md` exists                                                                                            | BLOCKED                                         | **READY locally (UNIT/INTEGRATION-VERIFIED)**                                           |
+| **Monitoring**            | `/api/health` (200, `ok:true`) + `/api/health/ready` (200, `ready:true` overall); production would add `journalctl -u nlo` + deploy-script journal check                                                                                                                          | BLOCKED (no service)                            | **BASIC-READY locally; no external alerting (no PM2/Prometheus/alertmanager in scope)** |
 
 **Overall local live readiness: NOT READY** — the single blocking item is the python worker
 spawn failure (G-BL-01). Everything else is in place. **Overall production readiness: BLOCKED** —
@@ -38,10 +38,14 @@ re-deployment.
 
 ```json
 {
-  "ok": true, "ready": true,
+  "ok": true,
+  "ready": true,
   "provider": {
-    "name": "python-worker", "configured": false,
-    "issues": ["worker start failed: python worker exited unexpectedly (code=3221225794, signal=none); stderr: "]
+    "name": "python-worker",
+    "configured": false,
+    "issues": [
+      "worker start failed: python worker exited unexpectedly (code=3221225794, signal=none); stderr: "
+    ]
   },
   "proxyRuntime": { "state": "available", "name": "xray" },
   "liveDisabled": true
@@ -50,7 +54,7 @@ re-deployment.
 
 - `3221225794` = `0xC0000006` (STATUS_INVALID_HANDLE) — a Windows-native failure during worker
   process startup, most commonly a corrupt/incomplete venv or a missing native dependency.
-- The server itself is healthy (`ok:true`, `ready:true` overall — the *provider* sub-check fails,
+- The server itself is healthy (`ok:true`, `ready:true` overall — the _provider_ sub-check fails,
   which is exactly the honest fail-closed reporting the architecture promises).
 - Note: `ready:true` overall while `provider.configured:false` is the correct semantics (service
   ready, live provider not available) — but it means **any live job right now on this workstation
@@ -94,7 +98,7 @@ Prereqs: worker spawn fixed (§2), a **valid** Google session (`POST /api/sessio
    `/events` (stage trail incl. `externalOperationId`s) and `/attempts` (node used per attempt).
    **Never retry an `ambiguous`/`UNKNOWN_EXTERNAL_STATE` job automatically** — park it
    (`NEEDS_ATTENTION`) and follow `docs/operations/JOB_RECOVERY_RUNBOOK.md` (settle-once: first
-   engine action after recovery is a *poll* of the external op, not a re-submit).
+   engine action after recovery is a _poll_ of the external op, not a re-submit).
 6. **Artifacts:** podcast MP3 + SRT transcript rows; download each; if
    `NLO_FFMPEG_BIN` set, transcode status `succeeded`; otherwise `not_configured` (original
    artifact canonical — expected, not a failure).
@@ -114,14 +118,14 @@ Prereqs: worker spawn fixed (§2), a **valid** Google session (`POST /api/sessio
 
 ## 6. Findings summary (Agent G)
 
-| # | Sev | Finding | Evidence |
-|---|---|---|---|
-| G-BL-01 | **P1 (local blocker)** | python worker spawn fails on the workstation (`0xC0000006`) → live jobs impossible here until `data/venv` is repaired; mock path unaffected | §1, §2 |
+| #       | Sev                         | Finding                                                                                                                                                                      | Evidence     |
+| ------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| G-BL-01 | **P1 (local blocker)**      | python worker spawn fails on the workstation (`0xC0000006`) → live jobs impossible here until `data/venv` is repaired; mock path unaffected                                  | §1, §2       |
 | G-BL-02 | **P0 (ops, shared with E)** | no production instance on the new host → "live acceptance" is currently only possible on the workstation (once G-BL-01 fixed); production live acceptance waits on re-deploy | Agent E §1–3 |
-| G-BL-03 | P2 | Session validity for the 3 stored Google sessions NOT re-verified this audit (no verify call); assume stale until checked before any live job | §1 |
-| G-BL-04 | P3 | No external alerting/monitoring beyond in-service health endpoints + journal | §5 |
-| G-BL-05 | INFO | FFmpeg absent locally → transcode `not_configured` (documented non-fatal); set `NLO_FFMPEG_BIN` for MP3 output | §1 |
-| G-BL-06 | INFO | Both runbooks (§3 mock-text, §4 live-audio) are executable today/fixed-venv; no real job was run in this audit | §3–4 |
+| G-BL-03 | P2                          | Session validity for the 3 stored Google sessions NOT re-verified this audit (no verify call); assume stale until checked before any live job                                | §1           |
+| G-BL-04 | P3                          | No external alerting/monitoring beyond in-service health endpoints + journal                                                                                                 | §5           |
+| G-BL-05 | INFO                        | FFmpeg absent locally → transcode `not_configured` (documented non-fatal); set `NLO_FFMPEG_BIN` for MP3 output                                                               | §1           |
+| G-BL-06 | INFO                        | Both runbooks (§3 mock-text, §4 live-audio) are executable today/fixed-venv; no real job was run in this audit                                                               | §3–4         |
 
 ## 7. What this agent did NOT do
 

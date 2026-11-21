@@ -44,43 +44,44 @@ verified. Details and the full readiness table are in §14.
 
 ### 2.1 Live production repository (the engine that matters)
 
-| Attribute | Value (VERIFIED via SSH `saber@172.20.1.53`) |
-| --- | --- |
-| Working dir | `/home/saber/saberprojects/radio-rag-service` |
-| Remote `origin` | `https://git.ai.ismc.ir/rag/radio-rag-service.git` (internal GitLab) |
-| Branch | `stage5-citations` |
-| HEAD | `71d94d1 feat(citations): Stage 5 structured citations + clickable frontend links (spec §9)` |
-| Push state | in sync with origin (pushed) |
-| Working tree | clean, **1 untracked file**: `tests_test_citation_quality.py` |
-| Docker compose file | `docker-compose.radio.yml` |
-| Env file | `.env.radio` |
+| Attribute           | Value (VERIFIED via SSH `saber@172.20.1.53`)                                                 |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| Working dir         | `/home/saber/saberprojects/radio-rag-service`                                                |
+| Remote `origin`     | `https://git.ai.ismc.ir/rag/radio-rag-service.git` (internal GitLab)                         |
+| Branch              | `stage5-citations`                                                                           |
+| HEAD                | `71d94d1 feat(citations): Stage 5 structured citations + clickable frontend links (spec §9)` |
+| Push state          | in sync with origin (pushed)                                                                 |
+| Working tree        | clean, **1 untracked file**: `tests_test_citation_quality.py`                                |
+| Docker compose file | `docker-compose.radio.yml`                                                                   |
+| Env file            | `.env.radio`                                                                                 |
 
 ### 2.2 Local snapshots on this workstation (`..\server52and53`)
 
-| Path | What it is | Key facts |
-| --- | --- | --- |
-| `_work\stage5_repo\radio-rag-service\api.py` | **LIVE Stage-5 API code** (36,257 bytes) | SHA256 `4258985270DE662A7BF78F607E1B60810809C5716F2A37F88A4E95D08D0A960C` — **matches the live-verified `/app/app/api.py` hash** (live since 2026-11-06) |
-| `_work\stage5_repo\live-radio-api\api.py` | Older API snapshot (29,426 bytes) | Diff vs the Stage-5 file = the Stage 5 additions (citations, `dedup_sources()`, URL fields, `citations[]` in `ChatResponse`) |
-| `_work\stage5_repo\live-radio-frontend\` | Frontend snapshot | `index.html` (Persian RTL SPA, `__META_*__` template vars, canonical `https://radio.ai.ismc.ir`, variant selector 4b/06b), `app.js`, `style.css` |
-| `repo\docs\RADIO_PHASE_A_FINAL_REPORT.md` | Corpus rebuild report | 4,148 docs / 79,350 chunks; two validated dumps; import to Neo4j **awaiting approval** |
-| `repo\docs\radio_migration_2026-11-05.md` | Corpus migration history | Adapter design, build steps, decisions |
-| `repo\RADIO_PHASE_A_CHECKPOINT.md` | Build checkpoint | dump paths, regenerate + validation commands |
-| `edge_vhost_radio.ai.ismc.ir.conf` | **Planned (NOT deployed)** BT-Panel vhost for `133` | HTTP→HTTPS redirect, ACME challenge, proxies to `http://172.20.1.53:8044` with SSE settings (`proxy_buffering off`, `read_timeout 300s`, `X-Accel-Buffering no`), cert path `/etc/letsencrypt/live/radio.ai.ismc.ir/` |
-| `_work\m2_2_*.py` | M2-2 benchmark scripts/results | variant scores, RRF ordering math, citation-quality findings |
-| `_aidump\` | GitLab local mirror | `ai-dump-builder` clone, branch `pcm-20.7d-embed-identity`, no remote, clean |
+| Path                                         | What it is                                          | Key facts                                                                                                                                                                                                             |
+| -------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `_work\stage5_repo\radio-rag-service\api.py` | **LIVE Stage-5 API code** (36,257 bytes)            | SHA256 `4258985270DE662A7BF78F607E1B60810809C5716F2A37F88A4E95D08D0A960C` — **matches the live-verified `/app/app/api.py` hash** (live since 2026-11-06)                                                              |
+| `_work\stage5_repo\live-radio-api\api.py`    | Older API snapshot (29,426 bytes)                   | Diff vs the Stage-5 file = the Stage 5 additions (citations, `dedup_sources()`, URL fields, `citations[]` in `ChatResponse`)                                                                                          |
+| `_work\stage5_repo\live-radio-frontend\`     | Frontend snapshot                                   | `index.html` (Persian RTL SPA, `__META_*__` template vars, canonical `https://radio.ai.ismc.ir`, variant selector 4b/06b), `app.js`, `style.css`                                                                      |
+| `repo\docs\RADIO_PHASE_A_FINAL_REPORT.md`    | Corpus rebuild report                               | 4,148 docs / 79,350 chunks; two validated dumps; import to Neo4j **awaiting approval**                                                                                                                                |
+| `repo\docs\radio_migration_2026-11-05.md`    | Corpus migration history                            | Adapter design, build steps, decisions                                                                                                                                                                                |
+| `repo\RADIO_PHASE_A_CHECKPOINT.md`           | Build checkpoint                                    | dump paths, regenerate + validation commands                                                                                                                                                                          |
+| `edge_vhost_radio.ai.ismc.ir.conf`           | **Planned (NOT deployed)** BT-Panel vhost for `133` | HTTP→HTTPS redirect, ACME challenge, proxies to `http://172.20.1.53:8044` with SSE settings (`proxy_buffering off`, `read_timeout 300s`, `X-Accel-Buffering no`), cert path `/etc/letsencrypt/live/radio.ai.ismc.ir/` |
+| `_work\m2_2_*.py`                            | M2-2 benchmark scripts/results                      | variant scores, RRF ordering math, citation-quality findings                                                                                                                                                          |
+| `_aidump\`                                   | GitLab local mirror                                 | `ai-dump-builder` clone, branch `pcm-20.7d-embed-identity`, no remote, clean                                                                                                                                          |
 
 ### 2.3 Corpus / data repositories (GitLab, internal)
 
-| Repo | Branch | Last commit | Status |
-| --- | --- | --- | --- |
+| Repo                       | Branch                                | Last commit                                               | Status                                                                      |
+| -------------------------- | ------------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `ai-tools/ai-dump-builder` | `feature/shared-builder-radio-tasnim` | `88c34f7` (radio work 2026-11-05) / mirror ref `f9002c55` | corpus builder; Phase A dumps validated, **Neo4j import awaiting approval** |
 
 **Corpus dumps (Phase A, validated, not yet imported to the live Neo4j):**
+
 - `qwen3-embed-06b_20261105-023852` — 1024-d, 1.97 GB
 - `qwen3-embed-4b_20261105-055002` — 2560-d, 4.71 GB
 
 > Reconciliation note: the **live** `radio_api` reports `neo4j_online:true, neo4j_database:radio,
-> vector_index:vector_index_chunk` and already returns 27 programs — i.e. the live Neo4j `radio`
+vector_index:vector_index_chunk` and already returns 27 programs — i.e. the live Neo4j `radio`
 > DB is populated from an **earlier** import. The 2026-11-05 Phase A rebuild is built+validated
 > but its **import into Neo4j is still gated on approval**. Do not conflate "service is online"
 > with "latest corpus imported".
@@ -109,11 +110,11 @@ verified. Details and the full readiness table are in §14.
 
 ## 4. Server Inventory
 
-| Server | Role | Spec | Radio-relevant services | Status |
-| --- | --- | --- | --- | --- |
-| **`172.20.1.53` ("llm")** | **Radio engine host** | 40 cores, 117 GiB RAM, 1.5 TB disk, **2× H100** | `radio_api` (8043→8003, **Up 4 days, healthy**); `radio_frontend` (8044→80, nginx:alpine, **Up 5 days, healthy**); Neo4j | **LIVE** |
-| **`172.30.0.133` ("AI-TOOLS")** | **Edge / platform host** | 20 cores, 78 GiB RAM (23 used), 686 GB disk (38% used), BT-Panel | edge **nginx** (BT-Panel webserver on 80/443), **LiteLLM :4000**, **GitLab :81**, **Wiki.js :8888**, Kong+OpenResty, many LLM-hub containers | **LIVE** (edge vhost for radio NOT installed) |
-| `172.20.1.52` (legacy "AI-TOOLS") | decommissioned 2026-11-01 | — | old GitLab remotes still point here | **DOWN / dead** |
+| Server                            | Role                      | Spec                                                             | Radio-relevant services                                                                                                                      | Status                                        |
+| --------------------------------- | ------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| **`172.20.1.53` ("llm")**         | **Radio engine host**     | 40 cores, 117 GiB RAM, 1.5 TB disk, **2× H100**                  | `radio_api` (8043→8003, **Up 4 days, healthy**); `radio_frontend` (8044→80, nginx:alpine, **Up 5 days, healthy**); Neo4j                     | **LIVE**                                      |
+| **`172.30.0.133` ("AI-TOOLS")**   | **Edge / platform host**  | 20 cores, 78 GiB RAM (23 used), 686 GB disk (38% used), BT-Panel | edge **nginx** (BT-Panel webserver on 80/443), **LiteLLM :4000**, **GitLab :81**, **Wiki.js :8888**, Kong+OpenResty, many LLM-hub containers | **LIVE** (edge vhost for radio NOT installed) |
+| `172.20.1.52` (legacy "AI-TOOLS") | decommissioned 2026-11-01 | —                                                                | old GitLab remotes still point here                                                                                                          | **DOWN / dead**                               |
 
 ### 4.1 `172.30.0.133` observed ports (read-only, `ss -tlnp` as `saber`)
 
@@ -135,10 +136,10 @@ nginx vhost once installed.)
 
 ## 5. DNS Findings (split-horizon) — VERIFIED
 
-| Resolver | `radio.ai.ismc.ir` | Notes |
-| --- | --- | --- |
-| **Internal** (`172.22.6.1`) | **`172.30.0.133`** (TTL 485) | split-horizon internal answer → the **edge host** |
-| **Public** (`8.8.8.8`, `1.1.1.1`) | **`185.213.10.25`** (TTL 300) | public answer |
+| Resolver                          | `radio.ai.ismc.ir`            | Notes                                             |
+| --------------------------------- | ----------------------------- | ------------------------------------------------- |
+| **Internal** (`172.22.6.1`)       | **`172.30.0.133`** (TTL 485)  | split-horizon internal answer → the **edge host** |
+| **Public** (`8.8.8.8`, `1.1.1.1`) | **`185.213.10.25`** (TTL 300) | public answer                                     |
 
 - **No `AAAA`**, **no `CNAME`** for `radio.ai.ismc.ir`. SOA is **Cloudflare**-managed.
 - The **internal** destination is the **edge host `172.30.0.133`** (correct target for the
@@ -187,10 +188,10 @@ Internet → 185.213.10.25 (edge egress)
 
 ## 7. TLS / Let's Encrypt — NOT IMPLEMENTED for radio
 
-| Name | Cert observed | Valid until | Notes |
-| --- | --- | --- | --- |
-| `radio.ai.ismc.ir` (today) | **`admin.ai.ismc.ir`** default cert (SAN: admin + git) | 2027-01-01 | **default vhost cert is served** — no radio-specific cert exists |
-| `rag.ai.ismc.ir` | its own **Let's Encrypt** cert | 2027-01-11 | working reference — certbot automation is functional on `133` |
+| Name                       | Cert observed                                          | Valid until | Notes                                                            |
+| -------------------------- | ------------------------------------------------------ | ----------- | ---------------------------------------------------------------- |
+| `radio.ai.ismc.ir` (today) | **`admin.ai.ismc.ir`** default cert (SAN: admin + git) | 2027-01-01  | **default vhost cert is served** — no radio-specific cert exists |
+| `rag.ai.ismc.ir`           | its own **Let's Encrypt** cert                         | 2027-01-11  | working reference — certbot automation is functional on `133`    |
 
 - **No `radio.ai.ismc.ir` certificate exists yet.** It will be issued automatically once the
   radio vhost + ACME challenge location is installed (the `rag.*` vhost proves the flow works).
@@ -206,22 +207,23 @@ Live base: **`http://172.20.1.53:8043`** (container `radio_api`, FastAPI v3.0.0 
 RAG"). Read-only `GET`/probe tests were run; **no resource-consuming `POST /api/chat` was
 issued** (requires approval). `8044/api/*` is confirmed to proxy to `8043`.
 
-| # | Method | Path | Auth | Request | Response | Status codes observed | Tested |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | GET | `/api/health` | none | — | JSON `{status, service:"radio", neo4j_database, neo4j_online, vector_index, embedding_model, gen_model, litellm, top_k, ms}` | 200 | ✅ VERIFIED live |
-| 2 | POST | `/api/chat` | none (product contract) | `{message, variant?, ...}` | `ChatResponse` incl. `citations[]` | (not issued — approval gate) | ⛔ not called (read-only) |
-| 3 | POST | `/api/chat/stream` | none | `{message, variant?, ...}` | **SSE**: `sources → delta* → done` | (not issued) | ⛔ not called (read-only) |
-| 4 | GET | `/api/site` | none | — | site identity JSON | 200 | ✅ VERIFIED live |
-| 5 | GET | `/api/programs` | none | — | distinct program names + counts | 200 (**27 programs**) | ✅ VERIFIED live |
-| 6 | POST | `/api/v1/qa/stream` | **`RAG_SERVICE_TOKEN`** (Bearer) | `{question, ...}` | **SSE**: `step → token* → done` (with citations) | **401** without token (body rejected pre-processing) | ✅ auth-guard VERIFIED |
-| 7 | GET | `/api/v1/models` | **`RAG_SERVICE_TOKEN`** | — | model list | **401** without token | ✅ auth-guard VERIFIED |
-| 8 | POST | `/api/v1/chat/completions` | **`RAG_SERVICE_TOKEN`** | OpenAI-style `{model, messages}` | OpenAI-style completion + citations | **401** without token | ✅ auth-guard VERIFIED |
+| #   | Method | Path                       | Auth                             | Request                          | Response                                                                                                                     | Status codes observed                                | Tested                    |
+| --- | ------ | -------------------------- | -------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------- |
+| 1   | GET    | `/api/health`              | none                             | —                                | JSON `{status, service:"radio", neo4j_database, neo4j_online, vector_index, embedding_model, gen_model, litellm, top_k, ms}` | 200                                                  | ✅ VERIFIED live          |
+| 2   | POST   | `/api/chat`                | none (product contract)          | `{message, variant?, ...}`       | `ChatResponse` incl. `citations[]`                                                                                           | (not issued — approval gate)                         | ⛔ not called (read-only) |
+| 3   | POST   | `/api/chat/stream`         | none                             | `{message, variant?, ...}`       | **SSE**: `sources → delta* → done`                                                                                           | (not issued)                                         | ⛔ not called (read-only) |
+| 4   | GET    | `/api/site`                | none                             | —                                | site identity JSON                                                                                                           | 200                                                  | ✅ VERIFIED live          |
+| 5   | GET    | `/api/programs`            | none                             | —                                | distinct program names + counts                                                                                              | 200 (**27 programs**)                                | ✅ VERIFIED live          |
+| 6   | POST   | `/api/v1/qa/stream`        | **`RAG_SERVICE_TOKEN`** (Bearer) | `{question, ...}`                | **SSE**: `step → token* → done` (with citations)                                                                             | **401** without token (body rejected pre-processing) | ✅ auth-guard VERIFIED    |
+| 7   | GET    | `/api/v1/models`           | **`RAG_SERVICE_TOKEN`**          | —                                | model list                                                                                                                   | **401** without token                                | ✅ auth-guard VERIFIED    |
+| 8   | POST   | `/api/v1/chat/completions` | **`RAG_SERVICE_TOKEN`**          | OpenAI-style `{model, messages}` | OpenAI-style completion + citations                                                                                          | **401** without token                                | ✅ auth-guard VERIFIED    |
 
 **Auth model:** `/api/*` (product) endpoints are **unauthenticated by design** (the product
 contract); `/api/v1/*` are guarded by `RAG_SERVICE_TOKEN` — wrong token → **401 "Invalid
 service token"**, token unset in server env → **403**.
 
 **Live health payload (VERIFIED):**
+
 ```
 {"status":"ok","service":"radio","neo4j_database":"radio","neo4j_online":true,
  "vector_index":"vector_index_chunk","embedding_model":"Qwen3-Embedding-0.6B",
@@ -242,17 +244,17 @@ service token"**, token unset in server env → **403**.
 
 ## 10. radio-rrf Verification — PARTIALLY VERIFIED
 
-| Question | Finding | Level |
-| --- | --- | --- |
-| Is `radio-rrf` in the code? | **Yes.** `retrieve_rrf()` fuses the `06b` + `4b` top-K lists; `score = Σ 1/(60 + rank + 1)`; **`RRF_K=60` hardcoded** (`api.py:192`); top-5 after fusion | VERIFIED (live code SHA256 match) |
-| Selectable via API? | **Yes** — `POST /api/chat` with `variant="rrf"` | VERIFIED (live code) |
-| Default in prod? | **No.** `DEFAULT_VARIANT = "06b"` (i.e. `radio-06b`). RRF must be requested explicitly | VERIFIED (live code) |
-| RRF_K=60 active? | **Yes**, hardcoded at `api.py:192` | VERIFIED (live code) |
-| URLs / UIDs in citations? | Stage 5 adds `session_uid`, `air_date_status`, `quarantined`, and **8 URL fields** (`episode_url`, `program_page_url`, `day_archive_url`, `timeslot_archive_url`, `full_text_url`, `corrected_text_url`, `raw_srt_url`, `corrected_srt_url`); `citations[]` carry `links[]` + Persian labels | VERIFIED (live code + frontend) |
-| **44% no-URL problem?** | **Confirmed.** ~44% of RRF citations lack a URL — the **`4b` leg** (db `radio-4b`) did not run linkage stages **K1–K22**, so 4b-derived citations have no portal URLs | PARTIALLY VERIFIED (benchmark evidence) |
-| `rrf_score` exposed? | **No** — `rrf_score` is internal only; the response `score` field = **raw KNN cosine** | VERIFIED (live code) |
-| Callable from an independent service? | **Yes** — it is a plain HTTP `POST /api/chat` on `53:8043` (product, unauthenticated); any Orchestrator can call it | VERIFIED (live code + contract) |
-| Live `POST` with `variant=rrf`? | **NOT issued** (resource-consuming; requires your approval). Evidence instead = matching live code hash + M2-2 live benchmark | **Awaiting approval** |
+| Question                              | Finding                                                                                                                                                                                                                                                                                      | Level                                   |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| Is `radio-rrf` in the code?           | **Yes.** `retrieve_rrf()` fuses the `06b` + `4b` top-K lists; `score = Σ 1/(60 + rank + 1)`; **`RRF_K=60` hardcoded** (`api.py:192`); top-5 after fusion                                                                                                                                     | VERIFIED (live code SHA256 match)       |
+| Selectable via API?                   | **Yes** — `POST /api/chat` with `variant="rrf"`                                                                                                                                                                                                                                              | VERIFIED (live code)                    |
+| Default in prod?                      | **No.** `DEFAULT_VARIANT = "06b"` (i.e. `radio-06b`). RRF must be requested explicitly                                                                                                                                                                                                       | VERIFIED (live code)                    |
+| RRF_K=60 active?                      | **Yes**, hardcoded at `api.py:192`                                                                                                                                                                                                                                                           | VERIFIED (live code)                    |
+| URLs / UIDs in citations?             | Stage 5 adds `session_uid`, `air_date_status`, `quarantined`, and **8 URL fields** (`episode_url`, `program_page_url`, `day_archive_url`, `timeslot_archive_url`, `full_text_url`, `corrected_text_url`, `raw_srt_url`, `corrected_srt_url`); `citations[]` carry `links[]` + Persian labels | VERIFIED (live code + frontend)         |
+| **44% no-URL problem?**               | **Confirmed.** ~44% of RRF citations lack a URL — the **`4b` leg** (db `radio-4b`) did not run linkage stages **K1–K22**, so 4b-derived citations have no portal URLs                                                                                                                        | PARTIALLY VERIFIED (benchmark evidence) |
+| `rrf_score` exposed?                  | **No** — `rrf_score` is internal only; the response `score` field = **raw KNN cosine**                                                                                                                                                                                                       | VERIFIED (live code)                    |
+| Callable from an independent service? | **Yes** — it is a plain HTTP `POST /api/chat` on `53:8043` (product, unauthenticated); any Orchestrator can call it                                                                                                                                                                          | VERIFIED (live code + contract)         |
+| Live `POST` with `variant=rrf`?       | **NOT issued** (resource-consuming; requires your approval). Evidence instead = matching live code hash + M2-2 live benchmark                                                                                                                                                                | **Awaiting approval**                   |
 
 **M2-2 benchmark (live, 2026-11-06):** `radio=82`, `radio-06b=81`, `radio-4b=52`,
 **`radio-rrf=92/100`**. RRF ordering math was live-verified. This is the strongest quantitative
@@ -316,6 +318,7 @@ flowchart LR
 ```
 
 **Division of labor:**
+
 - **Edge (133):** TLS termination + routing to the product host. (vhost already drafted.)
 - **Product Web App:** public-facing Persian UI (the internal `radio_frontend` is a reference,
   not a product-grade site).
@@ -328,13 +331,13 @@ flowchart LR
 
 ## 13. Security Findings
 
-| # | Finding | Severity | Detail / Action |
-| --- | --- | --- | --- |
-| S1 | **Placeholder Neo4j password in the live `radio_api` env on `53`** | **High** | `.env.radio` contains `NEO4J_PASSWORD` set to a **literal unfilled placeholder** (default template value, not a real secret — the actual value is not printed here). This means either the live Neo4j relies on another auth path or the credential is misconfigured. **Action (R1):** verify the real Neo4j auth mechanism and rotate/set a proper secret via env/vault; never commit. |
-| S2 | Product `/api/*` endpoints are unauthenticated | Medium | By design for internal use, but once exposed via the public vhost the **Orchestrator must add auth / rate-limiting** in front before any public launch. |
-| S3 | No `radio.ai.ismc.ir` cert / vhost yet; default cert served | Medium | Fix by installing the radio vhost + ACME (R1). Until then the domain is not publicly reachable as a product. |
-| S4 | RRF citation gap: ~44% of `radio-rrf` citations lack URLs | Medium (quality) | Run linkage stages K1–K22 on the `radio-4b` Neo4j DB so 4b-leg citations carry portal URLs (quality work, not a security control). |
-| S5 | 133 edge not auditable without root | Low (process) | BT-Panel vhost + `/etc/letsencrypt` are root-only for `saber`. Obtain root/BT-Panel for R1. |
+| #   | Finding                                                            | Severity         | Detail / Action                                                                                                                                                                                                                                                                                                                                                                         |
+| --- | ------------------------------------------------------------------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | **Placeholder Neo4j password in the live `radio_api` env on `53`** | **High**         | `.env.radio` contains `NEO4J_PASSWORD` set to a **literal unfilled placeholder** (default template value, not a real secret — the actual value is not printed here). This means either the live Neo4j relies on another auth path or the credential is misconfigured. **Action (R1):** verify the real Neo4j auth mechanism and rotate/set a proper secret via env/vault; never commit. |
+| S2  | Product `/api/*` endpoints are unauthenticated                     | Medium           | By design for internal use, but once exposed via the public vhost the **Orchestrator must add auth / rate-limiting** in front before any public launch.                                                                                                                                                                                                                                 |
+| S3  | No `radio.ai.ismc.ir` cert / vhost yet; default cert served        | Medium           | Fix by installing the radio vhost + ACME (R1). Until then the domain is not publicly reachable as a product.                                                                                                                                                                                                                                                                            |
+| S4  | RRF citation gap: ~44% of `radio-rrf` citations lack URLs          | Medium (quality) | Run linkage stages K1–K22 on the `radio-4b` Neo4j DB so 4b-leg citations carry portal URLs (quality work, not a security control).                                                                                                                                                                                                                                                      |
+| S5  | 133 edge not auditable without root                                | Low (process)    | BT-Panel vhost + `/etc/letsencrypt` are root-only for `saber`. Obtain root/BT-Panel for R1.                                                                                                                                                                                                                                                                                             |
 
 **No secrets were printed, logged, or committed. No secret was created or changed.**
 
@@ -344,33 +347,33 @@ flowchart LR
 
 Statuses: `VERIFIED` · `PARTIALLY VERIFIED` · `NOT IMPLEMENTED` · `BLOCKED` · `UNKNOWN`.
 
-| Component | Status | Evidence | Action needed |
-| --- | --- | --- | --- |
-| GitHub (radio service repo) | **NOT IMPLEMENTED** | No radio repo on GitHub; only `iranseda-crawler-golang-` (crawler, public) | Decide if a public GitHub mirror is wanted (optional; engine is internal-GitLab) |
-| GitLab (radio service repo) | **VERIFIED** | `rag/radio-rag-service`, `stage5-citations`, HEAD `71d94d1`, pushed/clean | Confirm CI via a read token (see §15) |
-| Backend (radio_api service) | **VERIFIED** | `radio_api` Up 4 days, healthy, `neo4j_online:true` | None (engine live) |
-| API (8 endpoints) | **VERIFIED** | Live read-only GETs + auth-guard probes; OpenAPI 8 paths | None (contract exists) |
-| radio-rrf | **PARTIALLY VERIFIED** | In live code; benchmark 92/100; live `POST` not issued | Approve 1 live `POST variant=rrf`; fix 4b URL gap |
-| DNS | **PARTIALLY VERIFIED** | Split-horizon: internal→`133`, public→`185.213.10.25`; no AAAA/CNAME; Cloudflare | Confirm public NAT target with DNS owner |
-| Nginx (edge vhost) | **NOT IMPLEMENTED** | Draft conf exists; live name → default CMS vhost 307→/login | Install vhost on `133` (needs root) |
-| HTTPS (radio cert) | **NOT IMPLEMENTED** | No radio cert; default `admin.*` cert served; `rag.*` proves certbot works | Install vhost + ACME (needs root) |
-| Web Frontend (product) | **PARTIALLY VERIFIED** | `radio_frontend` live on `53:8044` (internal SPA); not a standalone product site | Build product Web App |
-| Orchestrator (BFF) | **NOT IMPLEMENTED** | Does not exist | Build Orchestrator (auth, SSE relay, citation shaping, future NLM hook) |
-| Auth | **PARTIALLY VERIFIED** | `RAG_SERVICE_TOKEN` guard live (401/403); product `/api/*` unauthenticated | Add product auth/rate-limit in Orchestrator before public launch |
-| Swagger / OpenAPI | **VERIFIED** | `/openapi.json` 3.1.0 (8 paths), `/docs` 200 | None |
-| Docker | **VERIFIED** | `docker-compose.radio.yml` on `53`; both containers healthy | None |
-| CI/CD | **UNKNOWN** | Anonymous API cannot see project/pipelines | Needs GitLab read token |
-| Wiki.js (customer docs) | **PARTIALLY VERIFIED** | Wiki.js live on `133:8888`; **no Radio Maaref content published yet** | Author + publish radio customer docs (needs Wiki.js API account) |
+| Component                   | Status                 | Evidence                                                                         | Action needed                                                                    |
+| --------------------------- | ---------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| GitHub (radio service repo) | **NOT IMPLEMENTED**    | No radio repo on GitHub; only `iranseda-crawler-golang-` (crawler, public)       | Decide if a public GitHub mirror is wanted (optional; engine is internal-GitLab) |
+| GitLab (radio service repo) | **VERIFIED**           | `rag/radio-rag-service`, `stage5-citations`, HEAD `71d94d1`, pushed/clean        | Confirm CI via a read token (see §15)                                            |
+| Backend (radio_api service) | **VERIFIED**           | `radio_api` Up 4 days, healthy, `neo4j_online:true`                              | None (engine live)                                                               |
+| API (8 endpoints)           | **VERIFIED**           | Live read-only GETs + auth-guard probes; OpenAPI 8 paths                         | None (contract exists)                                                           |
+| radio-rrf                   | **PARTIALLY VERIFIED** | In live code; benchmark 92/100; live `POST` not issued                           | Approve 1 live `POST variant=rrf`; fix 4b URL gap                                |
+| DNS                         | **PARTIALLY VERIFIED** | Split-horizon: internal→`133`, public→`185.213.10.25`; no AAAA/CNAME; Cloudflare | Confirm public NAT target with DNS owner                                         |
+| Nginx (edge vhost)          | **NOT IMPLEMENTED**    | Draft conf exists; live name → default CMS vhost 307→/login                      | Install vhost on `133` (needs root)                                              |
+| HTTPS (radio cert)          | **NOT IMPLEMENTED**    | No radio cert; default `admin.*` cert served; `rag.*` proves certbot works       | Install vhost + ACME (needs root)                                                |
+| Web Frontend (product)      | **PARTIALLY VERIFIED** | `radio_frontend` live on `53:8044` (internal SPA); not a standalone product site | Build product Web App                                                            |
+| Orchestrator (BFF)          | **NOT IMPLEMENTED**    | Does not exist                                                                   | Build Orchestrator (auth, SSE relay, citation shaping, future NLM hook)          |
+| Auth                        | **PARTIALLY VERIFIED** | `RAG_SERVICE_TOKEN` guard live (401/403); product `/api/*` unauthenticated       | Add product auth/rate-limit in Orchestrator before public launch                 |
+| Swagger / OpenAPI           | **VERIFIED**           | `/openapi.json` 3.1.0 (8 paths), `/docs` 200                                     | None                                                                             |
+| Docker                      | **VERIFIED**           | `docker-compose.radio.yml` on `53`; both containers healthy                      | None                                                                             |
+| CI/CD                       | **UNKNOWN**            | Anonymous API cannot see project/pipelines                                       | Needs GitLab read token                                                          |
+| Wiki.js (customer docs)     | **PARTIALLY VERIFIED** | Wiki.js live on `133:8888`; **no Radio Maaref content published yet**            | Author + publish radio customer docs (needs Wiki.js API account)                 |
 
 ---
 
 ## 15. Missing Credentials / Permissions (named, minimum access)
 
 1. **Root or BT-Panel access to `172.30.0.133`** — minimum: ability to add one nginx vhost
-   + trigger Let's Encrypt. (Currently the blocker for DNS→product go-live.)
+   - trigger Let's Encrypt. (Currently the blocker for DNS→product go-live.)
 2. **GitLab read token for `git.ai.ismc.ir`** — minimum: `read_api`/`read_repository` on
    `rag/radio-rag-service` to confirm project id, branches, and CI pipeline status.
-3. **`RAG_SERVICE_TOKEN`** — *optional*, only if you want live probes of the guarded
+3. **`RAG_SERVICE_TOKEN`** — _optional_, only if you want live probes of the guarded
    `/api/v1/*` endpoints (not required for the MVP path, which uses the product `/api/*`).
 4. **Your explicit approval to issue ONE `POST /api/chat {variant:"rrf"}`** on `53:8043` —
    resource-consuming (runs real retrieval + generation); needed to live-confirm RRF end-to-end.
@@ -383,29 +386,29 @@ Statuses: `VERIFIED` · `PARTIALLY VERIFIED` · `NOT IMPLEMENTED` · `BLOCKED` �
 
 ## 16. Risk Register
 
-| # | Risk | Likelihood | Impact | Mitigation |
-| --- | --- | --- | --- | --- |
-| R1 | Public launch exposes unauthenticated `/api/*` | Med | High | Orchestrator adds auth + rate-limit **before** public vhost is flipped on |
-| R2 | `radio-rrf` answers cite sources without URLs (44%) | High | Med | Run K1–K22 linkage on `radio-4b` DB; surface "link unavailable" honestly in UI |
-| R3 | Live Neo4j auth relies on placeholder env (S1) | Med | High | Verify + rotate real credential in R1 (env/vault, never git) |
-| R4 | Public DNS target mismatch (`185.213.10.25`) | Low | Med | Confirm NAT with DNS owner before relying on public reachability |
-| R5 | Engine host `53` is a single point of failure (no replica) | Med | Med | Out of R1 scope; document; plan HA in a later phase |
-| R6 | Corpus not up-to-date (Phase A import pending) | Med | Med | Gate corpus import on approval; track separately from "service online" |
-| R7 | 133 edge changes require root; mis-config could affect other vhosts | Low | Med | Deploy the drafted vhost additively (new server block), keep backup + rollback |
+| #   | Risk                                                                | Likelihood | Impact | Mitigation                                                                     |
+| --- | ------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------ |
+| R1  | Public launch exposes unauthenticated `/api/*`                      | Med        | High   | Orchestrator adds auth + rate-limit **before** public vhost is flipped on      |
+| R2  | `radio-rrf` answers cite sources without URLs (44%)                 | High       | Med    | Run K1–K22 linkage on `radio-4b` DB; surface "link unavailable" honestly in UI |
+| R3  | Live Neo4j auth relies on placeholder env (S1)                      | Med        | High   | Verify + rotate real credential in R1 (env/vault, never git)                   |
+| R4  | Public DNS target mismatch (`185.213.10.25`)                        | Low        | Med    | Confirm NAT with DNS owner before relying on public reachability               |
+| R5  | Engine host `53` is a single point of failure (no replica)          | Med        | Med    | Out of R1 scope; document; plan HA in a later phase                            |
+| R6  | Corpus not up-to-date (Phase A import pending)                      | Med        | Med    | Gate corpus import on approval; track separately from "service online"         |
+| R7  | 133 edge changes require root; mis-config could affect other vhosts | Low        | Med    | Deploy the drafted vhost additively (new server block), keep backup + rollback |
 
 ---
 
 ## 17. Phase Plan (R1–R7) — proposed
 
-| Phase | Title | Scope (all gated on approval) |
-| --- | --- | --- |
+| Phase  | Title                                         | Scope (all gated on approval)                                                                                                          |
+| ------ | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | **R1** | **Edge + TLS go-live for `radio.ai.ismc.ir`** | Install the drafted vhost on `133`, issue Let's Encrypt, verify HTTPS → `53:8044`; verify 1 live `POST variant=rrf`; fix S1 credential |
-| **R2** | **Orchestrator (BFF) MVP** | Thin service: product auth + rate-limit, SSE relay, citation shaping, calls `radio_api` `variant=rrf`; health + tests |
-| **R3** | **Product Web App MVP** | Standalone Persian UI wired to the Orchestrator (SSE streaming + citations + source links) |
-| **R4** | **Citation quality fix** | Run K1–K22 linkage on `radio-4b`; re-benchmark; target <5% citations without URLs |
-| **R5** | **CI/CD + dual-repo governance** | Wire GitLab CI, secret-scan gate; decide GitHub mirror policy |
-| **R6** | **Customer docs (Wiki.js)** | Author + publish radio customer pages |
-| **R7** | **NotebookLM integration branch** | Add the future NLM branch to the Orchestrator (deep-note / audio) |
+| **R2** | **Orchestrator (BFF) MVP**                    | Thin service: product auth + rate-limit, SSE relay, citation shaping, calls `radio_api` `variant=rrf`; health + tests                  |
+| **R3** | **Product Web App MVP**                       | Standalone Persian UI wired to the Orchestrator (SSE streaming + citations + source links)                                             |
+| **R4** | **Citation quality fix**                      | Run K1–K22 linkage on `radio-4b`; re-benchmark; target <5% citations without URLs                                                      |
+| **R5** | **CI/CD + dual-repo governance**              | Wire GitLab CI, secret-scan gate; decide GitHub mirror policy                                                                          |
+| **R6** | **Customer docs (Wiki.js)**                   | Author + publish radio customer pages                                                                                                  |
+| **R7** | **NotebookLM integration branch**             | Add the future NLM branch to the Orchestrator (deep-note / audio)                                                                      |
 
 Each phase follows: Audit → Plan → Implement → Test → Review → Document → Commit → (Deploy if
 authorized) → Verify → Report → **Stop for approval**.
@@ -455,6 +458,7 @@ works) and the **product Orchestrator + Web App**. Nothing about the engine is b
 edge + 2-new-components job, not an engine rebuild.
 
 **Q3. What can I (the agent) do myself (read-only / local, no approval needed)?**
+
 - Finalize the edge vhost conf + deploy script (already drafted) and a **rollback plan**.
 - Scaffold the **Orchestrator** (BFF) code + unit tests (local, mock `radio_api`).
 - Scaffold the **product Web App** (Persian RTL UI) + tests (local).
@@ -464,10 +468,11 @@ edge + 2-new-components job, not an engine rebuild.
 - Re-run all read-only probes and re-baseline the report at any time.
 
 **Q4. What credentials / permissions do I need from you?**
+
 - **Root or BT-Panel on `172.30.0.133`** (add vhost + issue cert) — the go-live blocker.
 - **GitLab read token** for `rag/radio-rag-service` (CI/pipeline visibility).
 - **Your approval for one `POST /api/chat {variant:"rrf"}`** on `53:8043` (live RRF confirm).
-- *(optional)* `RAG_SERVICE_TOKEN` for `/api/v1/*` probes; **DNS-owner confirmation** of the
+- _(optional)_ `RAG_SERVICE_TOKEN` for `/api/v1/*` probes; **DNS-owner confirmation** of the
   public target; **approval for the Phase A corpus import**; **Wiki.js API account** (R6).
 
 **Q5. What is the next actionable mission (R1)?**
@@ -479,5 +484,5 @@ verified `R1_EDGE_TLS_GOLIVE.md` report + evidence. **Stop and await your approv
 
 ---
 
-*End of R0 report. No production, DNS, Nginx, certificate, service, repository, or commit change
-was made during this mission. Awaiting user approval for R1.*
+_End of R0 report. No production, DNS, Nginx, certificate, service, repository, or commit change
+was made during this mission. Awaiting user approval for R1._

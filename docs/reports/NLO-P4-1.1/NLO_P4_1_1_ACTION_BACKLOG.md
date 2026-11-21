@@ -19,7 +19,7 @@
   stageA) first, then `nlo.ai.ismc.ir` (stageB) per the permanent standard.
 - **Evidence:** `AGENT_E_DEPLOYMENT_AUDIT.md` §1–§3 (port probes: :80 aaPanel default, :443
   closed, :4870 closed, :22 open); `AGENT_G_LIVE_READINESS.md` §1; `docs/deployment/s52-deploy.md`
-  status block; CHANGELOG entry "deployed 2026-11-14" refers to the *s52* era.
+  status block; CHANGELOG entry "deployed 2026-11-14" refers to the _s52_ era.
 - **Root cause:** s52 decommissioning happened without executing the Phase G endpoint-migration
   addendum; re-deploy is pending.
 - **File/module:** `deploy/deploy.sh`, `deploy/systemd/nlo.service`, `deploy/nginx/*.tpl`,
@@ -41,7 +41,7 @@
 - **Owner approval?:** YES (production change, restart, nginx, DNS-facing).
 - **Parallelizable:** YES — with all P4-2 code work (disjoint surface).
 
-### BL-P0-2 — *(reserved — none)*
+### BL-P0-2 — _(reserved — none)_
 
 No other P0 found. Local-vendor breakage (G-BL-01) is P1 because the mock path (the de-facto
 development path) is fully healthy.
@@ -77,7 +77,7 @@ development path) is fully healthy.
 
 - **Description:** `data/venv` is corrupt/incomplete on the workstation; `/api/health/ready`
   reports `provider.configured:false` — `worker start failed: python worker exited
-  unexpectedly (code=3221225794)`. Recreate the venv per `docs/deployment/s52-deploy.md`
+unexpectedly (code=3221225794)`. Recreate the venv per `docs/deployment/s52-deploy.md`
   first-time-setup step 3 / `npm run worker:setup`.
 - **Evidence:** `AGENT_G_LIVE_READINESS.md` §2 (verbatim ready-probe JSON).
 - **Root cause:** venv install incomplete or native-dep mismatch on this Windows machine
@@ -87,7 +87,7 @@ development path) is fully healthy.
   any live runbook until fixed.
 - **Dependencies:** none.
 - **Fix:** delete `data/venv`, recreate with the pinned Python, `pip install
-  notebooklm-py[browser]` (per s52-deploy §first-time-setup), then re-probe
+notebooklm-py[browser]` (per s52-deploy §first-time-setup), then re-probe
   `/api/health/ready` → expect `provider.configured:true`.
 - **Acceptance test:** ready-probe shows `provider.configured:true` with no worker-spawn issue;
   one **mock** job still passes (regression); live job only after BL-P2-9 session verification.
@@ -103,8 +103,8 @@ development path) is fully healthy.
   `b625fad2…`) has been in the **public** GitHub repository since `14954c4` (ancestor of
   `origin/main`). Owner must choose: (a) **accept + document** (note the exposure in
   `SECURITY.md`/threat model; UUID is the rotation handle), or (b) **rotate at the provider side
-  + history-repair** (git-filter-repo — a history rewrite, requires explicit approval) and update
-  the script.
+  - history-repair** (git-filter-repo — a history rewrite, requires explicit approval) and update
+    the script.
 - **Evidence:** `AGENT_C_SECURITY_AUDIT.md` §2 (file read + `git log` ancestry check).
 - **Root cause:** historical node-import script committed with live URIs (pre-governance).
 - **File/module:** `apps/server/scripts/_add-nodes.py`, git history, `SECURITY.md`.
@@ -247,6 +247,7 @@ development path) is fully healthy.
 ## P2 — Medium
 
 ### BL-P2-1 — Type the gateway direct-fallback sentinel (R-3)
+
 - **Description:** Replace the string match `/no enabled proxy node configured/` in
   `gateway.ts` with a typed sentinel error (`NoEnabledNodeError`) or a `listEnabled() === 0`
   precheck, so a wording change in `proxy-manager.ts` can't silently disable the dev direct path.
@@ -265,11 +266,12 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P2-2 — Standing lint fixture for the boundary exception set (R-5)
+
 - **Description:** Turn the planted `__boundary_probe.ts` mechanism into a permanent fixture
   (e.g. a test that runs eslint over probe files asserting the intended exception set), so the
   eslint boundary rules' exceptions are asserted, not just enforced.
 - **Evidence:** `AGENT_B_ARCHITECTURE_REDTEAM.md` R-5; `AGENT_D` §3 (lint green).
-- **Root cause:** enforcement exists, but the *intended* exception set has no assertion.
+- **Root cause:** enforcement exists, but the _intended_ exception set has no assertion.
 - **File/module:** `eslint.config.js`, `apps/server/src/providers/__boundary_probe.ts`,
   a new lint-fixture test.
 - **Production impact:** architectural guardrail durability.
@@ -285,9 +287,10 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P2-3 — State worker egress as a boundary guarantee in the threat model (R-4)
+
 - **Description:** Doc change: in `docs/security/threat-model.md` (and proxy-design.md §8),
   state explicitly that worker egress is an **NLO-level boundary guarantee** (approved endpoint
-  + standard proxy env), not a machine-enforced firewall inside the child process.
+  - standard proxy env), not a machine-enforced firewall inside the child process.
 - **Evidence:** `AGENT_B_ARCHITECTURE_REDTEAM.md` R-4.
 - **Root cause:** doc precision gap (code is correct for the stated model).
 - **File/module:** `docs/security/threat-model.md`, `docs/architecture/proxy-design.md`.
@@ -302,6 +305,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P2-4 — `.env.example` internal-IP comments (topology only)
+
 - **Description:** Optional: replace the commented internal IPs (`172.30.0.133:4000`,
   `172.20.1.53:8043`) with placeholders, or keep and note "topology only, not credentials".
 - **Evidence:** `AGENT_C_SECURITY_AUDIT.md` §3.
@@ -318,6 +322,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P2-5 — Workstation git `http.sslverify=false` hardening
+
 - **Description:** On the workstation, set `git config --global http.sslverify true` (or at
   least verify TLS for the two known remotes) so git operations verify certificates.
 - **Evidence:** `AGENT_A_GIT_BASELINE.md` §1; `AGENT_C_SECURITY_AUDIT.md` §11.
@@ -335,6 +340,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P2-6 — Verify Docker image build on a daemon host
+
 - **Description:** Run the CI `docker` job (or `docker build -f Dockerfile .`) on a host with a
   Docker daemon; confirm the image builds and `HEALTHCHECK` passes.
 - **Evidence:** `AGENT_D_TEST_CI_AUDIT.md` §8; `AGENT_E_DEPLOYMENT_AUDIT.md` §5.3 (no daemon
@@ -352,6 +358,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P2-7 — Align in-repo phase numbering to the owner's P4-2…P4-8 (doc-only)
+
 - **Description:** Update `docs/testing/NLO_FOUR_PATH_ACCEPTANCE_MATRIX.md` and
   `docs/roadmap/NLO_P4_IMPLEMENTATION_PROMPT_ROADMAP.md` so capability→phase numbering matches
   the owner's mission (P4-2 intake/templates, P4-3 sessions, P4-4 failover, P4-5 MCP,
@@ -372,6 +379,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P2-8 — Four-path matrix doc: fix UI auth wording + note capabilities view gap
+
 - **Description:** In `NLO_FOUR_PATH_ACCEPTANCE_MATRIX.md` §2, correct "session + token" to the
   accurate description (UI is token-less loopback single-user, legacy `/api` surface); record
   that P4-1A's `GET /api/capabilities` has no UI view (planned view = backlog, optional).
@@ -389,6 +397,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P2-9 — Verify the 3 stored Google sessions before the first live job
+
 - **Description:** For each storage-state in `data/sessions/` (3 accounts): run
   `POST /api/sessions/<acc>/verify` (or the accounts health endpoint) and record the outcome;
   re-auth any that fail. Do this **before** the first live job (Runbook B step 2).
@@ -410,9 +419,10 @@ development path) is fully healthy.
 - **Parallelizable:** NO (sequential, live-adjacent).
 
 ### BL-P2-10 — Update stale docs: ROADMAP_MASTER + NLO_MASTER_EXECUTION_STATUS (P4-1 done)
+
 - **Description:** `docs/ROADMAP_MASTER.md` L105/L114 and `docs/reports/NLO_MASTER_EXECUTION_STATUS.md`
   L15–16 still call P4-1 "PROPOSED / awaiting approval". Update to completed (with commit list
-  + report link).
+  - report link).
 - **Evidence:** `AGENT_A_GIT_BASELINE.md` §5.
 - **Root cause:** docs not updated at P4-1 close.
 - **File/module:** the two docs.
@@ -431,6 +441,7 @@ development path) is fully healthy.
 ## P3 — Low
 
 ### BL-P3-1 — Extract `EgressGateway.endpointEnv()/browserProxy()` to a narrow port (R-6)
+
 - **Description:** DIP nit: the provider calls statics on the concrete `EgressGateway` class.
   Move the two pure helpers to `@nlo/shared` (or a small `EgressEnvSource` port) so the provider
   seam is fully type-level.
@@ -448,6 +459,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P3-2 — Remove sandbox-user read (RX) on the local `.env` (Windows ACL)
+
 - **Description:** `icacls .env /remove:g CodexSandboxUsers` (workstation hardening).
 - **Evidence:** `AGENT_C_SECURITY_AUDIT.md` §3.
 - **Root cause:** inherited ACL on the sandbox profile.
@@ -464,6 +476,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P3-3 — Extend redaction patterns or document the scope statement
+
 - **Description:** Either add patterns for any observed new credential shapes, or keep the
   "we redact what we handle" scope statement explicit in `docs/security/threat-model.md`.
 - **Evidence:** `AGENT_C_SECURITY_AUDIT.md` §4.
@@ -480,6 +493,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P3-4 — Shared rate-limit store (only if multi-instance ever)
+
 - **Description:** Per-token limiter is in-memory per process; move to a shared store (SQLite
   row or similar) **only if** a multi-instance deployment is approved. Track as follow-up.
 - **Evidence:** `AGENT_C_SECURITY_AUDIT.md` §8.
@@ -496,6 +510,7 @@ development path) is fully healthy.
 - **Parallelizable:** n/a.
 
 ### BL-P3-5 — Record a CI run when GitHub becomes reachable
+
 - **Description:** When the workstation (or any runner) reaches GitHub, capture one green
   Actions run (quality/conformance/secret-scan) as evidence; optionally create the GitLab
   mirror project + runner so `.gitlab-ci.yml` executes.
@@ -515,6 +530,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P3-6 — External monitoring/alerting (optional)
+
 - **Description:** Add an uptime ping (e.g. Healthchecks.io or a cron ping to
   `/api/health`) for the production instance once re-deployed.
 - **Evidence:** `AGENT_G_LIVE_READINESS.md` §5.
@@ -531,6 +547,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES (after P0).
 
 ### BL-P3-7 — Set `NLO_FFMPEG_BIN` when MP3 output is wanted
+
 - **Description:** Local `.env` has no `NLO_FFMPEG_BIN` → transcode status `not_configured`
   (original artifact stays canonical — documented non-fatal). Set it if MP3 delivery is wanted.
 - **Evidence:** `AGENT_G_LIVE_READINESS.md` §1.
@@ -547,6 +564,7 @@ development path) is fully healthy.
 - **Parallelizable:** YES.
 
 ### BL-P3-8 — Release tagging convention (governance, optional)
+
 - **Description:** No tags exist. Optionally adopt `vNLO-<phase>` tags (e.g. `vNLO-P4-1`) at
   phase close to give deployment/rollback anchors.
 - **Evidence:** `AGENT_A_GIT_BASELINE.md` §1 (A-7).

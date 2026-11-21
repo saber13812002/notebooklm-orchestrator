@@ -102,7 +102,11 @@ export interface OrchestratorSource {
   collection: string | null;
 }
 
-export function registerOrchestratorRoutes(app: FastifyInstance, ctx: AppContext, base = "/api/v1"): void {
+export function registerOrchestratorRoutes(
+  app: FastifyInstance,
+  ctx: AppContext,
+  base = "/api/v1",
+): void {
   app.post(`${base}/orchestrator/ask`, async (req) => {
     const parsed = askBody.parse(req.body ?? {});
     const question = parsed.question.trim();
@@ -185,14 +189,19 @@ export function registerOrchestratorRoutes(app: FastifyInstance, ctx: AppContext
     const radioMs = Date.now() - t0;
 
     // ---- 2) the 12-field contract: map citations (real value or null) ------
-    const citations: Citation[] = Array.isArray(data.rag?.citations) ? (data.rag?.citations as Citation[]) : [];
-    const topCollection = strOrNull(requestedCollection) ?? strOrNull(citations.length > 0 ? citations[0]?.collection : undefined) ?? null;
+    const citations: Citation[] = Array.isArray(data.rag?.citations)
+      ? (data.rag?.citations as Citation[])
+      : [];
+    const topCollection =
+      strOrNull(requestedCollection) ??
+      strOrNull(citations.length > 0 ? citations[0]?.collection : undefined) ??
+      null;
     const sources: OrchestratorSource[] = citations.map((c, i) => {
       const sessionId = strOrNull(c.session_id);
       const chunkId = strOrNull(c.chunk_id);
       return {
         rank: i + 1,
-        source_id: sessionId && chunkId ? `${sessionId}#${chunkId}` : sessionId ?? null,
+        source_id: sessionId && chunkId ? `${sessionId}#${chunkId}` : (sessionId ?? null),
         title: strOrNull(c.source),
         url: strOrNull(c.link),
         date: strOrNull(c.date),
@@ -268,11 +277,19 @@ export function registerOrchestratorRoutes(app: FastifyInstance, ctx: AppContext
         timedOut: !JOB_TERMINAL_STATUSES.includes(finalJob.status),
         notebook:
           succeeded && finalJob.notebookId
-            ? { id: finalJob.notebookId, title: finalJob.notebookTitle ?? null, url: null, shareUrl: null }
+            ? {
+                id: finalJob.notebookId,
+                title: finalJob.notebookTitle ?? null,
+                url: null,
+                shareUrl: null,
+              }
             : null,
         source: succeeded && finalJob.sourceId ? { id: finalJob.sourceId } : null,
         summary: succeeded
-          ? { text: finalJob.answerMarkdown ?? null, promptVersion: finalJob.input.promptVersion ?? null }
+          ? {
+              text: finalJob.answerMarkdown ?? null,
+              promptVersion: finalJob.input.promptVersion ?? null,
+            }
           : null,
         provenance: finalJob.resultProvenance ?? "unknown",
         statusUrl: `${base}/jobs/${finalJob.id}`,

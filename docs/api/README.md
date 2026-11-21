@@ -129,15 +129,15 @@ restart.
 
 ### Scopes
 
-| Scope           | Grants                                                                         |
-| --------------- | ------------------------------------------------------------------------------ |
-| `jobs:read`     | `GET /jobs*` (list, details, **result**, events, attempts, artifacts listing)  |
-| `jobs:write`    | `POST /jobs`, `POST /notebooks/from-text`, `POST /jobs/:id/requeue`            |
-| `jobs:cancel`   | `POST /jobs/:id/cancel`                                                        |
-| `jobs:download` | `GET /jobs/:id/artifacts/:artifactId`, `…/audio`, `…/audio/download`           |
-| `meta:read`     | provider/health/settings reads + health probes                                 |
-| `providers:read`| `GET /capabilities` (provider capability registry)                             |
-| `admin`         | everything above + accounts, sessions, proxies, `PUT /settings`, tokens, audit |
+| Scope            | Grants                                                                         |
+| ---------------- | ------------------------------------------------------------------------------ |
+| `jobs:read`      | `GET /jobs*` (list, details, **result**, events, attempts, artifacts listing)  |
+| `jobs:write`     | `POST /jobs`, `POST /notebooks/from-text`, `POST /jobs/:id/requeue`            |
+| `jobs:cancel`    | `POST /jobs/:id/cancel`                                                        |
+| `jobs:download`  | `GET /jobs/:id/artifacts/:artifactId`, `…/audio`, `…/audio/download`           |
+| `meta:read`      | provider/health/settings reads + health probes                                 |
+| `providers:read` | `GET /capabilities` (provider capability registry)                             |
+| `admin`          | everything above + accounts, sessions, proxies, `PUT /settings`, tokens, audit |
 
 `admin` implies every other scope. Unknown `POST` paths require `admin`.
 

@@ -59,7 +59,7 @@ down and leaves the job untouched.
   every attempt. A lock only becomes stealable after `expires_at` — a live
   holder is never dislodged mid-job.
 - **Inspecting a lock:** `SELECT job_id, holder, acquired_at, expires_at
-  FROM job_locks;` (read-only; the table is small — at most one row per
+FROM job_locks;` (read-only; the table is small — at most one row per
   in-flight job).
 - **Unwedge (only after §1 says the holder is dead):** if a job sits in a
   non-terminal status and its lock `holder` is a PID that no longer exists

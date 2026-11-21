@@ -20,13 +20,13 @@ proposal therefore:
 
 ## 2. Recommended status to record (if the master roadmap is updated)
 
-| Workstream | Phase | Status (honest label) | Evidence |
-| --- | --- | --- | --- |
-| Radio Maaref | **R0 — Infrastructure Discovery** | **COMPLETED (read-only)** | `RADIO_R0_INFRASTRUCTURE_DISCOVERY.md` |
-| Radio Maaref | **R1 — Edge + TLS go-live** | **PROPOSED — PENDING APPROVAL** (needs root on `133` + 1 approved live RRF POST) | discovery report §20 |
-| Radio Maaref | R2–R7 (Orchestrator / Web App / citations / CI / docs / NLM) | **NOT STARTED** | discovery report §17 |
-| NLO (master) | Phase 2 (proxy/session/audio) | VERIFIED-COMPLETED (unchanged by this mission) | `PHASE_2_AUDIO_RELIABILITY.md` |
-| NLO (master) | Phase 3 (`nlo.ai.ismc.ir` domain/HTTPS) | **open** — shares the `133` edge host with Radio R1 | coordination note below |
+| Workstream   | Phase                                                        | Status (honest label)                                                            | Evidence                               |
+| ------------ | ------------------------------------------------------------ | -------------------------------------------------------------------------------- | -------------------------------------- |
+| Radio Maaref | **R0 — Infrastructure Discovery**                            | **COMPLETED (read-only)**                                                        | `RADIO_R0_INFRASTRUCTURE_DISCOVERY.md` |
+| Radio Maaref | **R1 — Edge + TLS go-live**                                  | **PROPOSED — PENDING APPROVAL** (needs root on `133` + 1 approved live RRF POST) | discovery report §20                   |
+| Radio Maaref | R2–R7 (Orchestrator / Web App / citations / CI / docs / NLM) | **NOT STARTED**                                                                  | discovery report §17                   |
+| NLO (master) | Phase 2 (proxy/session/audio)                                | VERIFIED-COMPLETED (unchanged by this mission)                                   | `PHASE_2_AUDIO_RELIABILITY.md`         |
+| NLO (master) | Phase 3 (`nlo.ai.ismc.ir` domain/HTTPS)                      | **open** — shares the `133` edge host with Radio R1                              | coordination note below                |
 
 ## 3. Coordination notes (shared infrastructure)
 
@@ -40,7 +40,7 @@ proposal therefore:
 
 ## 4. Suggested master-roadmap addendum (text, for your approval)
 
-> *Addendum — Radio Maaref parallel workstream (2026-11-10, R0 discovery complete).*
+> _Addendum — Radio Maaref parallel workstream (2026-11-10, R0 discovery complete)._
 > Radio Maaref (target `https://radio.ai.ismc.ir`) is an independent product sharing hosts
 > `172.20.1.53` (engine) and `172.30.0.133` (edge). R0 read-only discovery is complete
 > (`RADIO_R0_INFRASTRUCTURE_DISCOVERY.md`). R1 (edge vhost + Let's Encrypt + 1 live RRF
@@ -52,7 +52,7 @@ proposal therefore:
 ## 5. Approval request
 
 1. Accept this status mapping (R0 complete / R1 proposed / R2–R7 not started).
-2. Approve recording the §4 addendum in `ROADMAP_MASTER.md` (this file only *proposes* it; the
+2. Approve recording the §4 addendum in `ROADMAP_MASTER.md` (this file only _proposes_ it; the
    master file is untouched until you say so).
 3. Approve **R1** (see the discovery report §20 for the exact scope and required access).
 

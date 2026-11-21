@@ -411,17 +411,17 @@ restart, cost) · **Dependency:** PW-1/2/3 + P4-2…P4-7.
 
 ## Order & parallelism summary
 
-| Sequence | Track | Prompts | Notes |
-|---|---|---|---|
-| Immediate (parallel) | Ops | PW-1 (needs owner SSH), PW-2, decision BL-P1-3 (UUID) | gates P4-8, not P4-2 |
-| Immediate (fast, repo hygiene) | Hygiene | BL-P1-1 format fix; BL-P1-4+5 lock fixes (can also ride P4-4) | land BEFORE P4-2 so its format gate is clean |
-| 1 | Product | P4-2 (DeepSeek) | first user-visible feature; includes doc-numbering alignment |
-| 2 | Product | P4-3 (Qwen) | session policy |
-| 3 | Product | P4-4 (Qwen) | failover + R-1/R-2 lock fixes (if not done in hygiene) |
-| 4 | Product | P4-5 (DeepSeek) | MCP server + client foundation |
-| 5 | Product | P4-6 (DeepSeek) | recovery UI/API (may swap with P4-5 by owner preference) |
-| 6 | Product | P4-7 (Qwen) | webhook/artifact delivery completion |
-| 7 | Ops + live | PW-3, then P4-8 (Qwen, owner present) | real NotebookLM, four paths, crash leg |
+| Sequence                       | Track      | Prompts                                                       | Notes                                                        |
+| ------------------------------ | ---------- | ------------------------------------------------------------- | ------------------------------------------------------------ |
+| Immediate (parallel)           | Ops        | PW-1 (needs owner SSH), PW-2, decision BL-P1-3 (UUID)         | gates P4-8, not P4-2                                         |
+| Immediate (fast, repo hygiene) | Hygiene    | BL-P1-1 format fix; BL-P1-4+5 lock fixes (can also ride P4-4) | land BEFORE P4-2 so its format gate is clean                 |
+| 1                              | Product    | P4-2 (DeepSeek)                                               | first user-visible feature; includes doc-numbering alignment |
+| 2                              | Product    | P4-3 (Qwen)                                                   | session policy                                               |
+| 3                              | Product    | P4-4 (Qwen)                                                   | failover + R-1/R-2 lock fixes (if not done in hygiene)       |
+| 4                              | Product    | P4-5 (DeepSeek)                                               | MCP server + client foundation                               |
+| 5                              | Product    | P4-6 (DeepSeek)                                               | recovery UI/API (may swap with P4-5 by owner preference)     |
+| 6                              | Product    | P4-7 (Qwen)                                                   | webhook/artifact delivery completion                         |
+| 7                              | Ops + live | PW-3, then P4-8 (Qwen, owner present)                         | real NotebookLM, four paths, crash leg                       |
 
 **Rationale:** intake (P4-2) is the first user-visible value and touches the fewest
 shared seams; sessions (P4-3) and failover (P4-4) are the reliability spine; MCP

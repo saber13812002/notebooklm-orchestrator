@@ -86,7 +86,13 @@ function radioBody(traceId: string, citations: Record<string, unknown>[]) {
     created: 1,
     model: "rag-radio",
     trace_id: traceId,
-    choices: [{ index: 0, message: { role: "assistant", content: "پاسخ تستی از رادیو." }, finish_reason: "stop" }],
+    choices: [
+      {
+        index: 0,
+        message: { role: "assistant", content: "پاسخ تستی از رادیو." },
+        finish_reason: "stop",
+      },
+    ],
     usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
     rag: { citations, metadata: { service: "radio", top_score: 0.91 } },
   };
@@ -171,7 +177,9 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
     const call = calls[0]!;
     expect(call.url).toBe("http://127.0.0.1:18043/api/v1/chat/completions");
     const init = call.init;
-    expect((init.headers as Record<string, string>)["authorization"]).toBe("Bearer test-radio-token");
+    expect((init.headers as Record<string, string>)["authorization"]).toBe(
+      "Bearer test-radio-token",
+    );
     const sent = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(sent.model).toBe("rag-radio");
     expect(sent.stream).toBe(false);
@@ -183,7 +191,10 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
   });
 
   it("maps the rrf variant: rrf_score + the real combined collection", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => radioOk(radioBody("b".repeat(32), [RRF_C1, RRF_C2]))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => radioOk(radioBody("b".repeat(32), [RRF_C1, RRF_C2]))),
+    );
     running = await startApp();
     const res = await running.app.inject({
       method: "POST",
@@ -218,7 +229,10 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
       collection: "radio",
       trace_id: "d".repeat(32),
     };
-    vi.stubGlobal("fetch", vi.fn(async () => radioOk(radioBody("d".repeat(32), [NUM_C1]))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => radioOk(radioBody("d".repeat(32), [NUM_C1]))),
+    );
     running = await startApp();
     const res = await running.app.inject({
       method: "POST",
@@ -239,7 +253,10 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
   });
 
   it("notebooklm enabled: creates a REAL text job that SUCCEEDS (mock provider)", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => radioOk(radioBody("c".repeat(32), [C1]))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => radioOk(radioBody("c".repeat(32), [C1]))),
+    );
     running = await startApp();
     addAccount(running.ctx.accounts, "orch-e2e");
     const node = addNode(running.ctx.proxies, running.ctx.vault, "orch-node");
@@ -273,11 +290,12 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
   it("radio RAG 502 -> 502 provider_unavailable with stage=radio", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(JSON.stringify({ error: { message: "retrieval failed" } }), {
-          status: 502,
-          headers: { "content-type": "application/json" },
-        }),
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ error: { message: "retrieval failed" } }), {
+            status: 502,
+            headers: { "content-type": "application/json" },
+          }),
       ),
     );
     running = await startApp();
@@ -295,9 +313,12 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
   });
 
   it("radio network failure (fetch rejects) -> 502 provider_unavailable", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => {
-      throw new Error("fetch failed");
-    }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("fetch failed");
+      }),
+    );
     running = await startApp();
     const res = await running.app.inject({
       method: "POST",
@@ -311,7 +332,10 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
   });
 
   it("NLO_RADIO_TOKEN not set -> 503 runtime_not_configured", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => radioOk(radioBody("d".repeat(32), [C1]))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => radioOk(radioBody("d".repeat(32), [C1]))),
+    );
     running = await startApp({ NLO_RADIO_TOKEN: "" });
     const res = await running.app.inject({
       method: "POST",
@@ -338,7 +362,10 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
   });
 
   it("scope: jobs:read token -> 403; jobs:write token -> 200", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => radioOk(radioBody("e".repeat(32), [C1]))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => radioOk(radioBody("e".repeat(32), [C1]))),
+    );
     running = await startApp();
     const readTok = running.ctx.apiTokens.create({ name: "orch-read", scopes: ["jobs:read"] });
     const writeTok = running.ctx.apiTokens.create({ name: "orch-write", scopes: ["jobs:write"] });
@@ -360,7 +387,10 @@ describe("POST /orchestrator/ask (M2-6-05 C)", () => {
   });
 
   it("notebooklm timeout: job never runs -> 200 with timedOut=true + pollable statusUrl", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => radioOk(radioBody("f".repeat(32), [C1]))));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => radioOk(radioBody("f".repeat(32), [C1]))),
+    );
     running = await startApp({ NLO_ORCH_NLO_TIMEOUT_MS: "60", NLO_ORCH_POLL_MS: "10" });
     const res = await running.app.inject({
       method: "POST",

@@ -11,11 +11,11 @@
 
 ## 1. `npm test` (all workspaces) — re-run result: **PASS**
 
-| Workspace | Test files | Tests | Time | Exit |
-|---|---|---|---|---|
-| `@nlo/shared` | 12 | **128 pass / 0 fail** | 1.69 s | 0 |
-| `@nlo/server` | 33 | **357 pass / 0 fail** | 10.11 s | 0 |
-| `@nlo/web` | 4 | **30 pass / 0 fail** | 8.55 s | 0 |
+| Workspace     | Test files | Tests                 | Time    | Exit |
+| ------------- | ---------- | --------------------- | ------- | ---- |
+| `@nlo/shared` | 12         | **128 pass / 0 fail** | 1.69 s  | 0    |
+| `@nlo/server` | 33         | **357 pass / 0 fail** | 10.11 s | 0    |
+| `@nlo/web`    | 4          | **30 pass / 0 fail**  | 8.55 s  | 0    |
 
 Total: **49 files, 515 tests, 0 failures.**
 
@@ -66,10 +66,10 @@ design (`docs/testing/E2E_TEST_STRATEGY.md` §5). **MOCK-E2E-VERIFIED**; live st
 
 Both implementations were extracted **exactly as CI would run them** and executed on this checkout:
 
-| Script | Extraction | Execution result |
-|---|---|---|
+| Script                                                              | Extraction                                                                                         | Execution result                                                                          |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `.gitlab-ci.yml` → `secret-scan` job (bash heredoc, 6-space indent) | awk extraction with CRLF strip (`sub(/\r$/,"")` — the file has CRLF endings); heredoc body L63–150 | planted fixture **detected → removed**; working tree clean; `secret-scan: OK`; **exit 0** |
-| `.github/workflows/ci.yml` → `secret-scan` job (`run: |` block, L89–174, 10-space indent) | awk line-range de-indent | identical behavior; **exit 0** |
+| `.github/workflows/ci.yml` → `secret-scan` job (`run:               | ` block, L89–174, 10-space indent)                                                                 | awk line-range de-indent                                                                  | identical behavior; **exit 0** |
 
 Both contain the same 8 patterns and the same 4-file allowlist (see Agent C §1). The self-test fixture
 `vless://aaaa0000-b1b1-c2c2-d3d3-4e4e4e4e4e4e@scan-fixture.example:443#selftest` is created, detected,
@@ -122,7 +122,7 @@ comma, width 100, tab 2) flags **exactly 36 files**. The complete list:
 
 For each of the 36 files, the **committed blob at HEAD** was checked:
 `git show HEAD:<file> | npx prettier --stdin-filepath <file> --check` — **all 36 fail** (i.e. the
-non-conformance exists in the *repository*, not as a local CRLF/edit artifact). `conformant_at_head=0`.
+non-conformance exists in the _repository_, not as a local CRLF/edit artifact). `conformant_at_head=0`.
 
 CRLF ruled out: `.gitattributes` sets `* text=auto eol=lf`, so committed blobs are LF.
 Pre-existence proven: blob extracts at older commits (e.g. `docs/api/README.md` @ `f07ac1f`,
@@ -141,12 +141,12 @@ CI-run history: NOT-VERIFIED due to network). This is the largest test/CI gap fo
 
 ## 8. Other CI jobs — static review (execution blocked as documented)
 
-| Job | File | Runnability on this workstation |
-|---|---|---|
-| `quality` (lint + typecheck + format) | `.github/workflows/ci.yml`, `.gitlab-ci.yml` | lint/typecheck re-run locally green; format — see §7.2 |
-| `conformance` (C1–C6) | both | re-run locally — §5 |
-| `secret-scan` | both | re-run locally — §6 |
-| `docker` (build image, `BUILD_DOCKER=1` gate) | both | **NOT RUN** — no Docker daemon on this Windows workstation (Docker API connect failed). Image build is PARTIALLY-VERIFIED (file review only; Agent E) |
+| Job                                           | File                                         | Runnability on this workstation                                                                                                                       |
+| --------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `quality` (lint + typecheck + format)         | `.github/workflows/ci.yml`, `.gitlab-ci.yml` | lint/typecheck re-run locally green; format — see §7.2                                                                                                |
+| `conformance` (C1–C6)                         | both                                         | re-run locally — §5                                                                                                                                   |
+| `secret-scan`                                 | both                                         | re-run locally — §6                                                                                                                                   |
+| `docker` (build image, `BUILD_DOCKER=1` gate) | both                                         | **NOT RUN** — no Docker daemon on this Windows workstation (Docker API connect failed). Image build is PARTIALLY-VERIFIED (file review only; Agent E) |
 
 ## 9. Test-strategy honesty check (AGENTS.md §5)
 
@@ -158,14 +158,14 @@ CI-run history: NOT-VERIFIED due to network). This is the largest test/CI gap fo
 
 ## 10. Findings summary (Agent D)
 
-| # | Sev | Finding | Evidence |
-|---|---|---|---|
-| D-BL-01 | P1 | **36 tracked files fail prettier at HEAD** → CI `format:check` would fail on a fresh clone; drift predates P4-1 (blobs at f07ac1f/90f9619 already failing) | §7, §7.1 |
-| D-BL-02 | INFO | `npm test` 515/515 green (128 shared + 357 server + 30 web); typecheck/lint/build green | §1–§4 |
-| D-BL-03 | INFO | Conformance C1–C6 PASS (mock level), C7 manual gate NOT RUN (by design) | §5 |
-| D-BL-04 | INFO | Both CI secret-scan scripts executed verbatim locally: fixture detected, exit 0 | §6 |
-| D-BL-05 | P2 | Docker CI job not verifiable locally (no daemon); image build remains file-reviewed only | §8 |
-| D-BL-06 | P3 | No CI run-history evidence available (GitHub network-blocked during audit; GitLab has no runner) — gate-red/green in CI is PARTIALLY-VERIFIED | §7.2 |
+| #       | Sev  | Finding                                                                                                                                                    | Evidence |
+| ------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| D-BL-01 | P1   | **36 tracked files fail prettier at HEAD** → CI `format:check` would fail on a fresh clone; drift predates P4-1 (blobs at f07ac1f/90f9619 already failing) | §7, §7.1 |
+| D-BL-02 | INFO | `npm test` 515/515 green (128 shared + 357 server + 30 web); typecheck/lint/build green                                                                    | §1–§4    |
+| D-BL-03 | INFO | Conformance C1–C6 PASS (mock level), C7 manual gate NOT RUN (by design)                                                                                    | §5       |
+| D-BL-04 | INFO | Both CI secret-scan scripts executed verbatim locally: fixture detected, exit 0                                                                            | §6       |
+| D-BL-05 | P2   | Docker CI job not verifiable locally (no daemon); image build remains file-reviewed only                                                                   | §8       |
+| D-BL-06 | P3   | No CI run-history evidence available (GitHub network-blocked during audit; GitLab has no runner) — gate-red/green in CI is PARTIALLY-VERIFIED              | §7.2     |
 
 ## 11. Scratch artifacts used (deleted in STOP gate)
 

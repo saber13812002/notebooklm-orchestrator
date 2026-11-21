@@ -8,12 +8,12 @@
 
 The four paths (per `docs/testing/NLO_FOUR_PATH_ACCEPTANCE_MATRIX.md` §2):
 
-| Path | Implementation | Auth |
-|---|---|---|
-| **Human UI** | `apps/web` (React + react-router) | none (loopback single-user); talks to the legacy `/api` surface |
-| **REST API** | `/api/v1` (token-auth) + legacy `/api` | `Authorization: Bearer nlo_…` (optional by default, `NLO_API_AUTH=1` to enforce) |
-| **MCP server** | — | same API tokens (per-tool scopes, planned) |
-| **External E2E agent** | `apps/server/scripts/nlo-e2e.ts` (+ `e2e-live.ts`, `verify-live.ts` manual gates) | token |
+| Path                   | Implementation                                                                    | Auth                                                                             |
+| ---------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| **Human UI**           | `apps/web` (React + react-router)                                                 | none (loopback single-user); talks to the legacy `/api` surface                  |
+| **REST API**           | `/api/v1` (token-auth) + legacy `/api`                                            | `Authorization: Bearer nlo_…` (optional by default, `NLO_API_AUTH=1` to enforce) |
+| **MCP server**         | —                                                                                 | same API tokens (per-tool scopes, planned)                                       |
+| **External E2E agent** | `apps/server/scripts/nlo-e2e.ts` (+ `e2e-live.ts`, `verify-live.ts` manual gates) | token                                                                            |
 
 ---
 
@@ -25,7 +25,7 @@ Verified across the whole tree at HEAD:
   rate-limit, multipart, error handler and the route modules — none serves MCP (Streamable-HTTP or
   otherwise). **CODE-VERIFIED.**
 - **Only design-level artifacts exist**:
-  - OpenAPI `kind` enum `["native","mcp_client"]` (`api/openapi/spec.ts:1188`) — a *descriptor field*
+  - OpenAPI `kind` enum `["native","mcp_client"]` (`api/openapi/spec.ts:1188`) — a _descriptor field_
     for external MCP providers, not a server.
   - Registry comment "MCP client under evaluation" (`providers/registry.ts`).
   - ADR-005 (MCP server), ADR-006 (external MCP client), `NLO_MCP_INTEGRATION_ARCHITECTURE.md`,
@@ -44,20 +44,20 @@ P4 phase — numbering note in §5).
 Legend: test type — **U** unit, **I** in-process integration (mock provider), **C** component test
 (web), **M** manual/live gate (NOT re-run in this audit), **n/a** not applicable.
 
-| Capability | Human UI | REST `/api/v1` | MCP | External E2E (`nlo-e2e`) |
-|---|---|---|---|---|
-| **Job create** (text/audio/podcast) | ✅ CreateJob page → `POST /api/jobs` / `/api/notebooks/from-text` — C + manual | ✅ `POST /jobs`, `POST /notebooks/from-text` — I (`api.test.ts`, `from-text.test.ts`, `provider-audio.test.ts`) | ⬜ NOT-IMPLEMENTED | ✅ scenarios `text`/`audio`/`podcast` — I-level (mock); live: M only |
-| **Job status** | ✅ JobDetails/JobHistory → `GET /api/jobs/:id`, `/events`, `/attempts` — C | ✅ `GET /jobs/:id`, `/events`, `/attempts` — I | ⬜ `get_job` designed | ✅ `--scenario monitor --job-id j_…` (polls status/events) |
-| **Artifacts list + download** | ✅ `GET /api/jobs/:id/artifacts[/id]`, audio download — C | ✅ `GET /jobs/:id/artifacts[/:artId]` — I (`artifact-download.test.ts`, `artifact-storage.test.ts`) | ⬜ `get_artifact` designed | ✅ downloads artifact, verifies digest (script L1–22 contract) |
-| **Cancel** | ✅ `POST /api/jobs/:id/cancel` — C | ✅ `POST /jobs/:id/cancel` — I (`job-lifecycle.test.ts`) | ⬜ designed | ⬜ (monitor scenario is observe-only) |
-| **Requeue / retry** | ✅ `POST /api/jobs/:id/requeue` — C | ✅ `POST /jobs/:id/requeue` — I | ⬜ `retry_job` designed | ⬜ (requeue exists in API; scenario coverage = manual) |
-| **Accounts / sessions** | ✅ Accounts page (login, verify, import, cookie-import, logout) — C | ✅ `/api/v1`? no — accounts live on legacy `/api` (by design, documented) — I (`session-gate.test.ts`, `sessions-404.test.ts`, `accounts.repo.test.ts`) | n/a (no MCP surface in design) | session-gate scenarios (I) |
-| **Proxies / egress** | ✅ Proxies page (add/validate/health/ping/runtime) — C | ✅ legacy `/api/proxies*` (by design) — I | ⬜ `get_provider_health` designed | proxy-failure negative scenarios (I) |
-| **Capabilities / providers** | provider info view (`/api/provider`) — C | ✅ **P4-1A** `GET /api/capabilities` (registry matrix `{version, providers, activeId}`) — I (`api.test.ts`) | ⬜ `list_providers` designed | contract check vs OpenAPI (I: `openapi-v1.test.ts`) |
-| **Webhooks** | ⬜ no UI surface (by design — outbox is API/ops-side) | ✅ endpoints CRUD + deliveries + dead-letter — I (`webhooks.test.ts`) | agents subscribe (design: primary MCP push channel) | webhook delivery scenarios (I) |
-| **Tokens / auth** | ⬜ (UI is token-less by design) | ✅ create/disable/revoke/audit — I | per-tool scopes (design) | token passed via env, never printed (script L21) |
-| **Health / readiness** | settings/dashboard poll `/api/health/ready` — C | ✅ open (health/openapi/docs exempt from auth) — I | n/a | n/a |
-| **Orchestrator (radio RAG)** | ⬜ no UI | ✅ `POST /api/v1/orchestrator/ask` — I (`orchestrator.test.ts`) | n/a | n/a |
+| Capability                          | Human UI                                                                       | REST `/api/v1`                                                                                                                                          | MCP                                                 | External E2E (`nlo-e2e`)                                             |
+| ----------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------- |
+| **Job create** (text/audio/podcast) | ✅ CreateJob page → `POST /api/jobs` / `/api/notebooks/from-text` — C + manual | ✅ `POST /jobs`, `POST /notebooks/from-text` — I (`api.test.ts`, `from-text.test.ts`, `provider-audio.test.ts`)                                         | ⬜ NOT-IMPLEMENTED                                  | ✅ scenarios `text`/`audio`/`podcast` — I-level (mock); live: M only |
+| **Job status**                      | ✅ JobDetails/JobHistory → `GET /api/jobs/:id`, `/events`, `/attempts` — C     | ✅ `GET /jobs/:id`, `/events`, `/attempts` — I                                                                                                          | ⬜ `get_job` designed                               | ✅ `--scenario monitor --job-id j_…` (polls status/events)           |
+| **Artifacts list + download**       | ✅ `GET /api/jobs/:id/artifacts[/id]`, audio download — C                      | ✅ `GET /jobs/:id/artifacts[/:artId]` — I (`artifact-download.test.ts`, `artifact-storage.test.ts`)                                                     | ⬜ `get_artifact` designed                          | ✅ downloads artifact, verifies digest (script L1–22 contract)       |
+| **Cancel**                          | ✅ `POST /api/jobs/:id/cancel` — C                                             | ✅ `POST /jobs/:id/cancel` — I (`job-lifecycle.test.ts`)                                                                                                | ⬜ designed                                         | ⬜ (monitor scenario is observe-only)                                |
+| **Requeue / retry**                 | ✅ `POST /api/jobs/:id/requeue` — C                                            | ✅ `POST /jobs/:id/requeue` — I                                                                                                                         | ⬜ `retry_job` designed                             | ⬜ (requeue exists in API; scenario coverage = manual)               |
+| **Accounts / sessions**             | ✅ Accounts page (login, verify, import, cookie-import, logout) — C            | ✅ `/api/v1`? no — accounts live on legacy `/api` (by design, documented) — I (`session-gate.test.ts`, `sessions-404.test.ts`, `accounts.repo.test.ts`) | n/a (no MCP surface in design)                      | session-gate scenarios (I)                                           |
+| **Proxies / egress**                | ✅ Proxies page (add/validate/health/ping/runtime) — C                         | ✅ legacy `/api/proxies*` (by design) — I                                                                                                               | ⬜ `get_provider_health` designed                   | proxy-failure negative scenarios (I)                                 |
+| **Capabilities / providers**        | provider info view (`/api/provider`) — C                                       | ✅ **P4-1A** `GET /api/capabilities` (registry matrix `{version, providers, activeId}`) — I (`api.test.ts`)                                             | ⬜ `list_providers` designed                        | contract check vs OpenAPI (I: `openapi-v1.test.ts`)                  |
+| **Webhooks**                        | ⬜ no UI surface (by design — outbox is API/ops-side)                          | ✅ endpoints CRUD + deliveries + dead-letter — I (`webhooks.test.ts`)                                                                                   | agents subscribe (design: primary MCP push channel) | webhook delivery scenarios (I)                                       |
+| **Tokens / auth**                   | ⬜ (UI is token-less by design)                                                | ✅ create/disable/revoke/audit — I                                                                                                                      | per-tool scopes (design)                            | token passed via env, never printed (script L21)                     |
+| **Health / readiness**              | settings/dashboard poll `/api/health/ready` — C                                | ✅ open (health/openapi/docs exempt from auth) — I                                                                                                      | n/a                                                 | n/a                                                                  |
+| **Orchestrator (radio RAG)**        | ⬜ no UI                                                                       | ✅ `POST /api/v1/orchestrator/ask` — I (`orchestrator.test.ts`)                                                                                         | n/a                                                 | n/a                                                                  |
 
 **Matrix honest limits** (from the matrix doc §6, re-confirmed here): UI rows are CODE-VERIFIED via
 component tests + manual browser runs — never silently `PASS` without a recorded manual run;
@@ -103,21 +103,21 @@ acceptance surface; its `/api/health` returned 200 during this audit (live probe
 - **Limitations:** the legacy `/api` surface's error shape predates the envelope standard in places
   (404s on unknown sessions use the same envelope — `sessions-404.test.ts` asserts it); webhook
   dead-letter reasons are machine-readable strings (`ssrf_blocked:<reason>`, `http 404 (client
-  rejected)`). No user-facing i18l error catalog — messages are English technical strings.
+rejected)`). No user-facing i18l error catalog — messages are English technical strings.
 
 ## 5. Phase-numbering discrepancy (flagged for the consolidated report)
 
 The owner's mission statement (P4-2…P4-8) and the in-repo roadmap doc disagree on phase numbers:
 
-| Capability | Owner's numbering (mission) | In-repo docs (`NLO_FOUR_PATH_ACCEPTANCE_MATRIX.md` §3/§5, `NLO_P4_IMPLEMENTATION_PROMPT_ROADMAP.md`) |
-|---|---|---|
-| Content intake + prompt templates | **P4-2** | P4-2 ✅ (matches) |
-| Multi-account session mgmt | **P4-3** | P4-3 ✅ (matches) |
-| Proxy pool & egress failover | **P4-4** | split: egress policy = P4-3/4; failover matrix = **P4-4** (retry/checkpoints/UNKNOWN state also P4-4) |
-| Manual retry & durable recovery UI | **P4-6** | **P4-4** (in-repo) |
-| MCP server + external MCP providers | **P4-5** | **P4-6** (server) + **P4-7** (external client) |
-| Webhook & artifact delivery | **P4-7** | distributed across P4-4/5/6 rows |
-| Four-path live acceptance | **P4-8** | P4-8 (hardening/full re-run) ✅ roughly |
+| Capability                          | Owner's numbering (mission) | In-repo docs (`NLO_FOUR_PATH_ACCEPTANCE_MATRIX.md` §3/§5, `NLO_P4_IMPLEMENTATION_PROMPT_ROADMAP.md`)  |
+| ----------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Content intake + prompt templates   | **P4-2**                    | P4-2 ✅ (matches)                                                                                     |
+| Multi-account session mgmt          | **P4-3**                    | P4-3 ✅ (matches)                                                                                     |
+| Proxy pool & egress failover        | **P4-4**                    | split: egress policy = P4-3/4; failover matrix = **P4-4** (retry/checkpoints/UNKNOWN state also P4-4) |
+| Manual retry & durable recovery UI  | **P4-6**                    | **P4-4** (in-repo)                                                                                    |
+| MCP server + external MCP providers | **P4-5**                    | **P4-6** (server) + **P4-7** (external client)                                                        |
+| Webhook & artifact delivery         | **P4-7**                    | distributed across P4-4/5/6 rows                                                                      |
+| Four-path live acceptance           | **P4-8**                    | P4-8 (hardening/full re-run) ✅ roughly                                                               |
 
 This is a **documentation-alignment issue, not a capability gap** — every capability exists in some
 numbered phase in the in-repo docs; the NEXT_PROMPT_PLAN must pick one canonical numbering (the owner's
@@ -126,13 +126,13 @@ Backlog item F-BL-02 (P2).
 
 ## 6. Findings summary (Agent F)
 
-| # | Sev | Finding | Evidence |
-|---|---|---|---|
-| F-BL-01 | P1 (planning) | **MCP path is NOT-IMPLEMENTED** — the four-path contract has only 3 of 4 doors; P4-5 (owner numbering) must build the server + 9 tools + harness before four-path parity can be claimed | §1 |
-| F-BL-02 | P2 | Phase numbering mismatch between owner's mission P4-2…P4-8 and in-repo roadmap/matrix docs | §5 |
-| F-BL-03 | P2 | UI uses only the legacy `/api` surface (by design) but the matrix doc says "session + token"; capabilities view for P4-1A's `/api/capabilities` missing in UI | §3, F-1 |
-| F-BL-04 | INFO | Error envelope consistent, machine-readable failure classes, honest E2E exit codes — external agents can operate the API without message parsing | §4 |
-| F-BL-05 | INFO | All non-MCP capabilities that exist are reachable from ≥2 paths (UI + REST + E2E) with mock-level integration evidence re-verified green (Agent D) | §2 |
+| #       | Sev           | Finding                                                                                                                                                                                 | Evidence |
+| ------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| F-BL-01 | P1 (planning) | **MCP path is NOT-IMPLEMENTED** — the four-path contract has only 3 of 4 doors; P4-5 (owner numbering) must build the server + 9 tools + harness before four-path parity can be claimed | §1       |
+| F-BL-02 | P2            | Phase numbering mismatch between owner's mission P4-2…P4-8 and in-repo roadmap/matrix docs                                                                                              | §5       |
+| F-BL-03 | P2            | UI uses only the legacy `/api` surface (by design) but the matrix doc says "session + token"; capabilities view for P4-1A's `/api/capabilities` missing in UI                           | §3, F-1  |
+| F-BL-04 | INFO          | Error envelope consistent, machine-readable failure classes, honest E2E exit codes — external agents can operate the API without message parsing                                        | §4       |
+| F-BL-05 | INFO          | All non-MCP capabilities that exist are reachable from ≥2 paths (UI + REST + E2E) with mock-level integration evidence re-verified green (Agent D)                                      | §2       |
 
 ## 7. What this agent did NOT do
 
