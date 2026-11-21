@@ -10,11 +10,14 @@
 #   NLO_BACKUP_DIR       (default /www/backup) pre-change vhost backup location
 #   NLO_UPSTREAM         (default 127.0.0.1:4870) NLO loopback upstream
 #   NLO_MAX_UPLOAD_MB    (default 210) client_max_body_size (NLO 200 MB + headroom)
+#   NLO_AUTH_FILE        (stageBAuth only, required) htpasswd file path
 #
 # Usage (run as root; requires sudo on most hosts):
 #   NLO_DOMAIN=… NLO_VHOST_DIR=… NLO_LOG_DIR=… NLO_ACME_WEBROOT=… \
-#     sudo bash deploy/nginx/nlo-nginx-deploy.sh stageA   # HTTP-only (ACME + 301)
-#   … same env … sudo bash deploy/nginx/nlo-nginx-deploy.sh stageB   # full HTTPS
+#     sudo bash deploy/nginx/nlo-nginx-deploy.sh stageA     # HTTP-only (ACME + 301)
+#   … same env … sudo bash deploy/nginx/nlo-nginx-deploy.sh stageB      # full HTTPS
+#   … same env + NLO_AUTH_FILE=/etc/nginx/htpasswd-… \
+#     sudo bash deploy/nginx/nlo-nginx-deploy.sh stageBAuth # full HTTPS + Basic auth (Stage)
 #
 # Rollback (any time, any stage):
 #   sudo rm "$NLO_VHOST_DIR/$NLO_DOMAIN.conf" && sudo nginx -t && sudo systemctl reload nginx
@@ -37,8 +40,19 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 stage() { # render <tpl> <out>
+  # Templates use __NLO_*__ placeholders (NOT shell $NLO_* variables), so each
+  # placeholder is substituted literally via sed. (An earlier envsubst call
+  # with a '$NLO_…' variable list was a no-op against __NLO_*__ syntax — it
+  # rendered nothing and the fail-closed grep below would always abort.)
   local tpl="$1" out="$2"
-  envsubst '$NLO_DOMAIN $NLO_LOG_DIR $NLO_ACME_WEBROOT $NLO_CERT_DIR $NLO_UPSTREAM $NLO_MAX_UPLOAD_MB' \
+  local authfile="${NLO_AUTH_FILE:-}"
+  sed -e "s|__NLO_DOMAIN__|${NLO_DOMAIN}|g" \
+      -e "s|__NLO_LOG_DIR__|${NLO_LOG_DIR}|g" \
+      -e "s|__NLO_ACME_WEBROOT__|${NLO_ACME_WEBROOT}|g" \
+      -e "s|__NLO_CERT_DIR__|${NLO_CERT_DIR}|g" \
+      -e "s|__NLO_UPSTREAM__|${NLO_UPSTREAM}|g" \
+      -e "s|__NLO_MAX_UPLOAD_MB__|${NLO_MAX_UPLOAD_MB}|g" \
+      -e "s|__NLO_AUTH_FILE__|${authfile}|g" \
     < "$tpl" > "$out"
   # Fail closed if any placeholder survived rendering.
   if grep -q '__NLO_' "$out"; then
@@ -50,9 +64,13 @@ render_and_install() { # <stage> <tpl>
   local s="$1" tpl="$2"
   local work; work="$(mktemp /tmp/nlo-vhost.XXXXXX)"
   stage "$tpl" "$work"
-  if [ "$s" = "stageB" ]; then
+  if [ "$s" = "stageB" ] || [ "$s" = "stageBAuth" ]; then
     [ -f "$NLO_CERT_DIR/fullchain.pem" ] || { echo "FATAL: $NLO_CERT_DIR/fullchain.pem missing — run certbot first"; exit 1; }
-    [ -f "$NLO_CERT_DIR/privkey.pem" ]   || { echo "FATAL: $NLO_CERT_DIR/privkey.pem missing"; exit 1; }
+    [ -f "$NLO_CERT_DIR/privkey.pem" ]   || { echo "FATAL: $NLO_CERT_DIR/privkey.pem missing — run certbot first"; exit 1; }
+  fi
+  if [ "$s" = "stageBAuth" ]; then
+    [ -n "${NLO_AUTH_FILE:-}" ] || { echo "FATAL: NLO_AUTH_FILE is required for stageBAuth"; exit 1; }
+    [ -f "$NLO_AUTH_FILE" ] || { echo "FATAL: htpasswd file $NLO_AUTH_FILE missing — create it first (htpasswd -b -c … user pass)"; exit 1; }
   fi
   $SUDO install -m 0644 -o root -g root "$work" "$NLO_VHOST_DIR/$NLO_DOMAIN.conf"
   rm -f "$work"
@@ -70,19 +88,24 @@ backup_vhosts() {
   echo "BACKUP_OK $bk"
 }
 
-verify() { # expect-redirect (stageA) or expect-https (stageB)
-  local kind="$1" code
-  if [ "$kind" = stageA ]; then
+verify() { # stageA: expect 301; stageB: expect HTTPS 200; stageBAuth: expect 401
+  local kind="$1" code redir
+  if [ "$kind" = "stageA" ]; then
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1/ -H "Host: $NLO_DOMAIN")"
     echo "local-nlo-http=$code"
     [ "$code" = "301" ] || { echo "FATAL: expected 301, got $code"; exit 1; }
-  else
-    code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 https://127.0.0.1/api/health -H "Host: $NLO_DOMAIN")"
-    local redir; redir="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1/ -H "Host: $NLO_DOMAIN")"
-    echo "local-https-health=$code local-http-redirect=$redir"
-    [ "$code" = "200" ] || { echo "FATAL: expected HTTPS 200, got $code"; exit 1; }
-    [ "$redir" = "301" ] || { echo "FATAL: expected redirect 301, got $redir"; exit 1; }
+    return 0
   fi
+  # Without credentials: stageB -> 200 (no auth); stageBAuth -> 401 (auth gate).
+  code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 https://127.0.0.1/api/health -H "Host: $NLO_DOMAIN")"
+  redir="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1/ -H "Host: $NLO_DOMAIN")"
+  echo "local-https-health=$code local-http-redirect=$redir"
+  if [ "$kind" = "stageBAuth" ]; then
+    [ "$code" = "401" ] || { echo "FATAL: expected HTTPS 401 (auth gate), got $code"; exit 1; }
+  else
+    [ "$code" = "200" ] || { echo "FATAL: expected HTTPS 200, got $code"; exit 1; }
+  fi
+  [ "$redir" = "301" ] || { echo "FATAL: expected redirect 301, got $redir"; exit 1; }
 }
 
 : "${NLO_DOMAIN:?NLO_DOMAIN is required}"
@@ -115,8 +138,15 @@ case "${1:-}" in
     verify stageB
     echo "STAGE_B_DONE"
     ;;
+  stageBAuth)
+    backup_vhosts
+    render_and_install stageBAuth "$TPL_DIR/nlo-vhost.stageB-auth.conf.tpl"
+    sleep 1
+    verify stageBAuth
+    echo "STAGE_B_AUTH_DONE"
+    ;;
   *)
-    echo "usage: $0 stageA|stageB   (env: NLO_DOMAIN NLO_VHOST_DIR NLO_LOG_DIR NLO_ACME_WEBROOT [NLO_CERT_DIR NLO_UPSTREAM NLO_MAX_UPLOAD_MB NLO_BACKUP_DIR])"
+    echo "usage: $0 stageA|stageB|stageBAuth   (env: NLO_DOMAIN NLO_VHOST_DIR NLO_LOG_DIR NLO_ACME_WEBROOT [NLO_CERT_DIR NLO_UPSTREAM NLO_MAX_UPLOAD_MB NLO_BACKUP_DIR NLO_AUTH_FILE])"
     exit 2
     ;;
 esac
