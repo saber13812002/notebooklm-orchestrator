@@ -49,10 +49,7 @@ export class AutoOps {
   start(): void {
     const { config } = this.d;
     if (config.autoRetryEnabled) {
-      const t = setInterval(
-        () => void this.sweepAutoRetry(),
-        config.autoRetryIntervalMs,
-      );
+      const t = setInterval(() => void this.sweepAutoRetry(), config.autoRetryIntervalMs);
       t.unref?.();
       this.timers.push(t);
       // First sweep shortly after boot (after restart recovery re-queued
@@ -65,10 +62,7 @@ export class AutoOps {
       );
     }
     if (config.sessionRefreshEnabled && config.provider === "python-worker") {
-      const t = setInterval(
-        () => void this.refreshSessions(),
-        config.sessionRefreshIntervalMs,
-      );
+      const t = setInterval(() => void this.refreshSessions(), config.sessionRefreshIntervalMs);
       t.unref?.();
       this.timers.push(t);
       const first = setTimeout(() => void this.refreshSessions(), 30_000);
@@ -93,7 +87,12 @@ export class AutoOps {
   }
 
   /** Observability (for /api/health-style inspection + tests). */
-  status(): { autoRetry: boolean; sessionRefresh: boolean; lastRetryAt: string | null; lastRefreshAt: string | null } {
+  status(): {
+    autoRetry: boolean;
+    sessionRefresh: boolean;
+    lastRetryAt: string | null;
+    lastRefreshAt: string | null;
+  } {
     return {
       autoRetry: this.d.config.autoRetryEnabled,
       sessionRefresh: this.d.config.sessionRefreshEnabled,

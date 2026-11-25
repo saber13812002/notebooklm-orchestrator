@@ -354,7 +354,11 @@ export class JobsRepo {
           "UPDATE jobs SET status='QUEUED', progress_note='auto-retry: re-queued by hourly sweep', updated_at=? WHERE id=? AND status='FAILED'",
         )
         .run(now, r.id);
-      this.appendEvent(r.id, "auto_retry_requeue", "job re-queued by the hourly auto-retry sweep (unlimited retries until output)");
+      this.appendEvent(
+        r.id,
+        "auto_retry_requeue",
+        "job re-queued by the hourly auto-retry sweep (unlimited retries until output)",
+      );
     }
     return rows.map((r) => r.id);
   }
