@@ -31,6 +31,7 @@ export function registerHealthRoutes(
       },
       proxyRuntime: runtime,
       liveDisabled: !ctx.config.liveTestsEnabled,
+      autoOps: ctx.autoOps.status(),
     };
   });
 

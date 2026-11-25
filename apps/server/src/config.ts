@@ -86,6 +86,22 @@ export interface AppConfig {
   orchNloTimeoutMs: number;
   /** Poll interval for the optional NotebookLM job (ms). */
   orchNloPollMs: number;
+  /**
+   * NLO-O1: auto-retry loop. Hourly sweep that re-queues terminal-FAILED
+   * jobs so submitted tasks keep being attempted (unlimited retries) until
+   * they produce output. 0 = disabled (default: off unless opted in).
+   */
+  autoRetryEnabled: boolean;
+  autoRetryIntervalMs: number;
+  autoRetryMaxPerSweep: number;
+  /**
+   * NLO-O1: session keep-alive loop. Hourly re-verification of every
+   * enabled account's auth session against the real service, so the
+   * "verified within TTL" gate keeps passing without manual clicks.
+   * 0 = disabled (default).
+   */
+  sessionRefreshEnabled: boolean;
+  sessionRefreshIntervalMs: number;
   /** NLO-P2 (webhooks): SSRF allowlist entries (host[:port], comma-separated)
    *  for webhook delivery targets. */
   webhookAllowlist: string[];
@@ -242,6 +258,14 @@ export function loadConfig(overrides: Partial<Record<string, string>> = {}): App
     radioTimeoutMs: intEnv(env, "NLO_RADIO_TIMEOUT_MS", 120_000),
     orchNloTimeoutMs: intEnv(env, "NLO_ORCH_NLO_TIMEOUT_MS", 300_000),
     orchNloPollMs: intEnv(env, "NLO_ORCH_POLL_MS", 2_000),
+    // NLO-O1: auto-retry loop (hourly sweep re-queues FAILED jobs —
+    // unlimited retries until a job produces output).
+    autoRetryEnabled: boolEnv(env, "NLO_AUTO_RETRY", false),
+    autoRetryIntervalMs: intEnv(env, "NLO_AUTO_RETRY_INTERVAL_MS", 60 * 60_000),
+    autoRetryMaxPerSweep: intEnv(env, "NLO_AUTO_RETRY_MAX_PER_SWEEP", 20),
+    // NLO-O1: session keep-alive (hourly re-verification of live sessions).
+    sessionRefreshEnabled: boolEnv(env, "NLO_SESSION_REFRESH", false),
+    sessionRefreshIntervalMs: intEnv(env, "NLO_SESSION_REFRESH_INTERVAL_MS", 60 * 60_000),
     webhookAllowlist: (env("NLO_WEBHOOK_ALLOWLIST") ?? "")
       .split(",")
       .map((s) => s.trim())

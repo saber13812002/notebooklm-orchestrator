@@ -55,6 +55,12 @@ services:
       NLO_PROXY_RUNTIME: ${NLO_PROXY_RUNTIME:-mock}
       NLO_PYTHON_BIN: /opt/nbl-venv/bin/python
       NLO_JOB_TIMEOUT_MS: ${NLO_JOB_TIMEOUT_MS:-1800000}
+      # NLO-O1: hourly auto-retry — Stage re-queues FAILED jobs every hour
+      # (unlimited retries until output) so submitted tasks keep being
+      # attempted. Session refresh is mock-provider only skipped.
+      NLO_AUTO_RETRY: ${NLO_AUTO_RETRY:-1}
+      NLO_AUTO_RETRY_INTERVAL_MS: ${NLO_AUTO_RETRY_INTERVAL_MS:-3600000}
+      NLO_SESSION_REFRESH: ${NLO_SESSION_REFRESH:-0}
       # Require a Stage-minted token for non-exempt /api/v1 requests
       # (health/openapi/docs GETs stay open).
       NLO_API_AUTH: ${NLO_API_AUTH:-1}

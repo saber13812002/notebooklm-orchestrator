@@ -24,6 +24,7 @@ import { EgressGateway } from "./proxy/gateway.js";
 import { fetchThroughTunnel } from "./proxy/connect-proxy.js";
 import { JobRunner } from "./queue/job-runner.js";
 import { Queue } from "./queue/queue.js";
+import { AutoOps } from "./queue/auto-ops.js";
 
 /**
  * AppContext: composes all services from configuration.
@@ -52,6 +53,8 @@ export interface AppContext {
   lock: JobLocks;
   runner: JobRunner;
   queue: Queue;
+  /** NLO-O1: hourly auto-retry (FAILED jobs) + session keep-alive loops. */
+  autoOps: AutoOps;
   /** NLO-P2 (webhooks): outbox delivery (endpoints, deliveries, dispatcher). */
   webhooks: WebhookServices;
   close(): Promise<void>;
@@ -257,6 +260,18 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
 
   queue.start();
 
+  // NLO-O1: hourly auto-retry of FAILED jobs + hourly session re-verification
+  // (both opt-in via env; no-ops when disabled).
+  const autoOps = new AutoOps({
+    config,
+    accounts,
+    sessions,
+    jobs,
+    provider,
+    log: (msg) => console.log(msg),
+  });
+  autoOps.start();
+
   return {
     config,
     db,
@@ -277,8 +292,10 @@ export function createAppContext(config: AppConfig = loadConfig()): AppContext {
     lock,
     runner,
     queue,
+    autoOps,
     webhooks,
     close: async () => {
+      await autoOps.stop();
       await webhookDispatcher.stop();
       await queue.stop();
       (provider as { dispose?: () => void }).dispose?.();

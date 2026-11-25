@@ -333,6 +333,32 @@ export class JobsRepo {
     return rows.map((r) => r.id);
   }
 
+  /**
+   * NLO-O1 (auto-retry): re-queue terminal FAILED jobs so submitted tasks
+   * keep being attempted until they produce output. Unbounded by design —
+   * the hourly sweep is the pacing, not a per-job attempt budget. CANCELLED
+   * and NEEDS_ATTENTION jobs are never touched (explicit user/operator
+   * decisions). Returns the re-queued job ids (oldest first, capped).
+   */
+  requeueFailed(limit = 20): string[] {
+    const rows = this.db.raw
+      .prepare(
+        `SELECT id FROM jobs WHERE status = 'FAILED'
+         ORDER BY updated_at ASC LIMIT ?`,
+      )
+      .all(limit) as { id: string }[];
+    const now = this.db.now();
+    for (const r of rows) {
+      this.db.raw
+        .prepare(
+          "UPDATE jobs SET status='QUEUED', progress_note='auto-retry: re-queued by hourly sweep', updated_at=? WHERE id=? AND status='FAILED'",
+        )
+        .run(now, r.id);
+      this.appendEvent(r.id, "auto_retry_requeue", "job re-queued by the hourly auto-retry sweep (unlimited retries until output)");
+    }
+    return rows.map((r) => r.id);
+  }
+
   private map(row: Record<string, unknown>): Job {
     const input = JSON.parse(row.input_json as string) as JobInput;
     const status = row.status as JobStatus;
