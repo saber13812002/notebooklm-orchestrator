@@ -8,6 +8,29 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-25] — NLO-P5-1A: Gate D ACME CONNECTIVITY RCA — **EVIDENCE COMPLETE** (host-side PASS; edge-layer root cause; no code change)
+
+### Added
+
+- **[`docs/reports/NLO-P5-1A-GATE-D-ACME-CONNECTIVITY-RCA.md`](docs/reports/NLO-P5-1A-GATE-D-ACME-CONNECTIVITY-RCA.md)** — the full 12-step Gate D RCA for the `nlo2.ai.ismc.ir` Let's Encrypt HTTP-01 failure, completed **before** any firewall/ISP change.
+
+### Verified (recorded live evidence, read-only on host)
+
+- **Step 1 (DNS):** public A `nlo2.ai.ismc.ir → 185.213.10.25` (Cloudflare DoH); internal A `→ 172.30.0.133`; **no AAAA** anywhere. PASS.
+- **Step 2 (webroot reachability):** benign challenge file served **HTTP 200 + exact body** from the host and from an external network through the public edge `185.213.10.25`. PASS.
+- **Step 3 (vhost exclusions):** ACME `^~ /.well-known/acme-challenge/` location has no `auth_basic` and is not subject to the 301 redirect. PASS.
+- **Step 4 (exact error):** 3 production + 1 control (`rag.ai.ismc.ir`) + 4 staging attempts all yield `Detail: 185.213.10.25: Fetching http://…/.well-known/acme-challenge/…: Timeout during connect (likely firewall problem)`; nginx `access.log` **0** `acme-challenge` hits.
+- **Step 5 (tcpdump :80 during a live Staging validation):** **0 packets** on port 80 reached the host — validator traffic is dropped before nginx. DECISIVE.
+- **Step 6 (Staging used):** all debug probes ran against `acme-staging-v02` with throwaway `--cert-name p51a-staging-probe` (deleted after) so production issuance limits were not consumed.
+- **Step 7 (separation):** DNS/IPv6/Nginx/Vhost/Webroot/RateLimit all PASS; **edge Firewall/NAT/ISP inbound :80 from LE validator sources = ROOT CAUSE** (reproduced on a control domain → edge-wide, not vhost-specific).
+- **Step 12 (server identity):** hostname `AI-TOOLS`, `172.30.0.133/20` (ens33, gw `172.30.15.254`, MAC `00:50:56:ad:fb:00`), public **inbound edge `185.213.10.25`** vs **egress `185.208.180.217`** (asymmetric NAT).
+
+### Notes
+
+- **Step 8** — a precise technical request for the network owner is written into the report (§8): allow **inbound TCP/80** to `185.213.10.25` from Let's Encrypt validator source ranges.
+- **No Cloudflare. No Production / global firewall / other-service changes.** All throwaway artifacts (benign challenge file, staging certs, temp scripts) were removed; the Stage A vhost is untouched.
+- **Steps 10–11 are DEFERRED** (issue prod cert + test auto-renewal; Stage B HTTPS+BasicAuth + external proof matrix) until the network owner applies the edge fix and the user says **"retry"**.
+
 ## [2026-11-16] — Mission NLO-P4-1D: PROVIDER CONFORMANCE SUITE + CI SECURITY GATES — **IMPLEMENTED + TESTED** (Live NOT verified)
 
 ### Added
