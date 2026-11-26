@@ -8,6 +8,23 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-26] — Mission M00: PRODUCT GAP ANALYSIS & DELIVERY BACKLOG — **COMPLETED (READ-ONLY)**
+
+### Added
+
+- **[`docs/reports/NLO-M00-PRODUCT-GAP-ANALYSIS.md`](docs/reports/NLO-M00-PRODUCT-GAP-ANALYSIS.md)** — full product gap analysis at `main @ 25841c0`: capability inventory (27 implemented capabilities + 9 gaps, each status-labeled with code/test/report evidence), gap analysis vs the M00–M10 mission program, PRD, prioritized backlog (P0–P3, stable IDs B-…), dependency map, per-capability acceptance criteria + Definition of Done, file ownership matrix, release-readiness matrix, and the parallel execution plan (wave 1: M01/M03/M04/M05/M08/M09 → wave 2: M02/M06/M07 → M10).
+
+### Verified (re-run at baseline, read-only)
+
+- `npm run build` ✓, `typecheck` ✓, `lint` ✓, `format:check` ✓ (after reformatting the Gate-D RCA md — the only drift at HEAD).
+- `npm test`: shared **128/128**, server **356/357**, web **30/30**. The single server failure is a **flaky Windows exit-code artifact** in the E2E negative control (libuv `UV_HANDLE_CLOSING` → child exit `3221226505` instead of `1`; the negative behavior itself was correct — fail-closed FAILED, `provenance: unknown`; passed on immediate re-run). Tracked as backlog item **B-M00-1** (P3).
+- Reconciled the P4-1.1 (2026-11-17) action backlog against current HEAD: BL-P1-1 (prettier drift) **CLOSED** by `41ac79b`; BL-P0-1 (production re-deploy), BL-P1-2 (venv `0xC0000006`), BL-P1-8 (MCP) still open → mapped to M08/M01/M07.
+
+### Notes
+
+- Key M00 findings: MCP (server + client) and the template engine are **DESIGNED_ONLY** (architecture + ADRs, zero code); webhook/polling/hourly-auto-retry/durable-recovery are **already implemented + integration-tested** (M04/M05 are primarily real acceptance, not new builds); GitLab one-way mirror is configured in-repo but **no GitLab remote exists**; live provider is locally blocked (venv + FFmpeg) despite a historical live-verified podcast (2026-11-06).
+- READ-ONLY mission: no product code changed. Awaiting owner approval to start Wave 1.
+
 ## [2026-11-25] — NLO-P5-1A: Gate D ACME CONNECTIVITY RCA — **EVIDENCE COMPLETE** (host-side PASS; edge-layer root cause; no code change)
 
 ### Added

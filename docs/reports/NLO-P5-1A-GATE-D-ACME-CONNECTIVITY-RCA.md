@@ -19,32 +19,32 @@
 The name "s52" was ambiguous in prior reports. Definitive identity captured
 2026-11-25 from the host itself:
 
-| Property                | Value                                          |
-| ----------------------- | ---------------------------------------------- |
-| Hostname                | `AI-TOOLS`                                     |
-| Internal IP (ens33)     | `172.30.0.133/20` (brd `172.30.15.255`)        |
-| Default gateway         | `172.30.15.254`                                |
-| MAC (ens33)             | `00:50:56:ad:fb:00` (VMware OUI — it is a VM)  |
-| IPv6 (ens33)            | link-local only: `fe80::250:56ff:fead:fb00`    |
-| Public inbound edge IP  | `185.213.10.25` (what LE resolves & dials)     |
-| Public egress IP        | `185.208.180.217` (cf/ipify from the host)     |
-| Uptime                  | ~25 days at capture time                       |
-| Docker bridges          | ~35 × `10.240.x.1`                             |
-| Public DNS (A)          | `nlo2.ai.ismc.ir → 185.213.10.25` (CF DoH)     |
-| Internal DNS (A)        | `nlo2.ai.ismc.ir → 172.30.0.133` (TTL 175)     |
-| AAAA (public & internal)| **none**                                       |
+| Property                 | Value                                         |
+| ------------------------ | --------------------------------------------- |
+| Hostname                 | `AI-TOOLS`                                    |
+| Internal IP (ens33)      | `172.30.0.133/20` (brd `172.30.15.255`)       |
+| Default gateway          | `172.30.15.254`                               |
+| MAC (ens33)              | `00:50:56:ad:fb:00` (VMware OUI — it is a VM) |
+| IPv6 (ens33)             | link-local only: `fe80::250:56ff:fead:fb00`   |
+| Public inbound edge IP   | `185.213.10.25` (what LE resolves & dials)    |
+| Public egress IP         | `185.208.180.217` (cf/ipify from the host)    |
+| Uptime                   | ~25 days at capture time                      |
+| Docker bridges           | ~35 × `10.240.x.1`                            |
+| Public DNS (A)           | `nlo2.ai.ismc.ir → 185.213.10.25` (CF DoH)    |
+| Internal DNS (A)         | `nlo2.ai.ismc.ir → 172.30.0.133` (TTL 175)    |
+| AAAA (public & internal) | **none**                                      |
 
 **Asymmetric NAT:** the inbound edge IP (`185.213.10.25`) differs from the
-host's own egress IP (`185.208.180.217`). LE dials the *inbound* edge address.
+host's own egress IP (`185.208.180.217`). LE dials the _inbound_ edge address.
 
 ## 2. Step 1 — DNS (A/AAAA, public + internal)
 
-| Query                                | Resolver          | Result                          |
-| ------------------------------------ | ----------------- | ------------------------------- |
-| `nlo2.ai.ismc.ir` A (public)         | Cloudflare DoH    | `185.213.10.25`                 |
-| `nlo2.ai.ismc.ir` AAAA (public)      | Cloudflare DoH    | none                            |
-| `nlo2.ai.ismc.ir` A (internal)       | workstation resv  | `172.30.0.133` (TTL 175)        |
-| `nlo2.ai.ismc.ir` AAAA (internal)    | workstation resv  | none                            |
+| Query                             | Resolver         | Result                   |
+| --------------------------------- | ---------------- | ------------------------ |
+| `nlo2.ai.ismc.ir` A (public)      | Cloudflare DoH   | `185.213.10.25`          |
+| `nlo2.ai.ismc.ir` AAAA (public)   | Cloudflare DoH   | none                     |
+| `nlo2.ai.ismc.ir` A (internal)    | workstation resv | `172.30.0.133` (TTL 175) |
+| `nlo2.ai.ismc.ir` AAAA (internal) | workstation resv | none                     |
 
 Note: Google DoH (`dns.google`) timed out from this workstation (a local
 workstation→Google DNS quirk); Cloudflare DoH (`1.1.1.1/dns-query`) was the
@@ -116,7 +116,7 @@ Nginx evidence:
 
 - Used the **Let's Encrypt Staging** endpoint
   (`--staging`, `acme-staging-v02`) with throwaway `--cert-name
-  p51a-staging-probe` so production issuance limits were **not** consumed.
+p51a-staging-probe` so production issuance limits were **not** consumed.
 - 4 staging attempts total this window, all with the identical edge timeout:
   `Bw_FIR6K...`, `F3pKYG0t...`, `ClsEUxkv...`, `2aL4Uw8x...` →
   `Timeout during connect (likely firewall problem)`.
@@ -136,17 +136,18 @@ Nginx evidence:
   the edge's inbound :80 path from external/validator source ranges.
 
 ## 7. Step 7 — Separation matrix (Firewall / NAT / ISP / IPv6 / DNS / Nginx /
-   Webroot / Rate Limit)
 
-| Layer            | Verdict | Evidence                                                          |
-| ---------------- | ------- | ----------------------------------------------------------------- |
-| **DNS**          | PASS    | A=185.213.10.25 public, 172.30.0.133 internal; no AAAA             |
-| **IPv6**         | N/A     | No public/internal AAAA; host has only link-local → LE can't use v6 |
-| **Nginx**        | PASS    | Listening 0.0.0.0:80+[::]:80; -t clean; 200 on challenge locally  |
-| **Vhost config** | PASS    | ACME `^~` location excluded from auth + redirect (§4)             |
-| **Webroot**      | PASS    | Benign file 200 + correct body locally AND externally (§3)        |
-| **External reach (workstation)** | PASS | 200 through 185.213.10.25 by domain and by IP+Host |
-| **ACME Rate Limit** | PASS  | Staging used; failures are `connection` timeouts, not `rateLimited` |
+Webroot / Rate Limit)
+
+| Layer                                                          | Verdict               | Evidence                                                                                                                             |
+| -------------------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **DNS**                                                        | PASS                  | A=185.213.10.25 public, 172.30.0.133 internal; no AAAA                                                                               |
+| **IPv6**                                                       | N/A                   | No public/internal AAAA; host has only link-local → LE can't use v6                                                                  |
+| **Nginx**                                                      | PASS                  | Listening 0.0.0.0:80+[::]:80; -t clean; 200 on challenge locally                                                                     |
+| **Vhost config**                                               | PASS                  | ACME `^~` location excluded from auth + redirect (§4)                                                                                |
+| **Webroot**                                                    | PASS                  | Benign file 200 + correct body locally AND externally (§3)                                                                           |
+| **External reach (workstation)**                               | PASS                  | 200 through 185.213.10.25 by domain and by IP+Host                                                                                   |
+| **ACME Rate Limit**                                            | PASS                  | Staging used; failures are `connection` timeouts, not `rateLimited`                                                                  |
 | **Firewall/NAT/ISP (edge inbound :80 from validator sources)** | **FAIL — ROOT CAUSE** | tcpdump=0 packets on :80 during live validation; access.log=0; "Timeout during connect"; reproduced on control domain rag.ai.ismc.ir |
 
 **Root cause (single sentence):** inbound TCP/80 to the public edge
@@ -170,6 +171,7 @@ or an edge ACL specific to the validator's egress IPs/ASNs.
 > direction **inbound** (validator → edge).
 >
 > **Why (evidence):**
+>
 > - 7+ validation attempts (production + staging, two domains `nlo2` and
 >   `rag`) all fail with
 >   `Detail: 185.213.10.25: Fetching http://<domain>/.well-known/acme-challenge/<token>: Timeout during connect (likely firewall problem)`.
@@ -188,7 +190,7 @@ or an edge ACL specific to the validator's egress IPs/ASNs.
 > https://letsencrypt.org/docs/ports/): IPv4 egress ranges are published by
 > Let's Encrypt; the network owner should allow inbound :80 from those
 > ranges (or from general Internet if per-range allowlisting is not
-> feasible). Note: the host's *egress* IP is `185.208.180.217` (asymmetric
+> feasible). Note: the host's _egress_ IP is `185.208.180.217` (asymmetric
 > NAT) — only the **inbound** edge `185.213.10.25:80` needs to be opened for
 > the validators.
 >
@@ -198,7 +200,8 @@ or an edge ACL specific to the validator's egress IPs/ASNs.
 > behavior).
 
 ## 9. Backups & rollback (nothing on the host changed in a way needing
-   rollback)
+
+rollback)
 
 - **No production files, no global firewall, no other services were changed.**
 - Stage A vhost (already live, verified 301) — backup from its install:
@@ -223,7 +226,7 @@ Once the network owner opens inbound :80 from LE validator sources to
 
 1. **Issue the production cert:**
    `certbot certonly --webroot -w /www/acme -d nlo2.ai.ismc.ir --key-type
-   ecdsa` (standard store `/etc/letsencrypt/live/nlo2.ai.ismc.ir`), then
+ecdsa` (standard store `/etc/letsencrypt/live/nlo2.ai.ismc.ir`), then
    **test auto-renewal** (`certbot renew --dry-run`).
 2. **Stage B install:** render + install the `stageB-auth` vhost (443 + TLS +
    Basic Auth, `CERT_DIR=/etc/letsencrypt/live/nlo2.ai.ismc.ir`), `nginx -t`,
