@@ -35,9 +35,12 @@ The product's **center of gravity is real (Live) acceptance**, not more features
   re-verification is M02's job.
 - **MCP (both directions) and the Content-Intake template engine are
   `DESIGNED_ONLY`** — detailed target architecture + ADRs exist, zero code.
-- **Production exists only as Stage A** (nlo2.ai.ismc.ir behind Basic-auth,
-  HTTP-only; Stage B cert blocked on the edge :80 issue documented in the
-  Gate-D RCA). Production re-deploy (BL-P0-1) is still open.
+- **Production is running** on `172.30.0.133` (`AI-TOOLS`): systemd `nlo.service`,
+  loopback `127.0.0.1:4870`, commit `278273a` (deployed 2026-11-14 17:35 UTC,
+  confirmed via SSH in the P5-0 baseline 2026-11-20). The open item is a
+  **forward deploy** (production is N commits behind `origin/main`), not a
+  first-ever deployment. Stage A (nlo2.ai.ismc.ir, HTTP + Basic-auth) also
+  exists; Stage B (TLS) is blocked on the edge :80 issue (Gate-D RCA).
 - **GitLab one-way mirror is configured in-repo (`.gitlab-ci.yml`) but the
   GitLab remote does not exist** — dual-repo policy is half-built.
 
@@ -101,7 +104,7 @@ Evidence key: code = current `apps/`/`packages/` at `25841c0`; tests = workspace
 | G3  | **Template engine T1–T4** (`GET /api/v1/templates`, versioned template data store, `list_templates` MCP tool)                         | `DESIGNED_ONLY`                                                                                                                  | `NLO_CONTENT_INTAKE_ARCHITECTURE.md` §2.5/ADR-002                                | Current "template" is the in-code versioned master prompt (`shared/text-source.ts`) — a **label**, not a data store.                               |
 | G4  | **Content Intake v2**: PDF, Markdown, video (audio-track), URL fetch, LLM metadata enrichment                                         | `NOT_IMPLEMENTED` (URL SSRF guard building block `IMPLEMENTED`+`UNIT_TESTED`; docx/srt/txt extraction `IMPLEMENTED`)             | `NLO_CONTENT_INTAKE_ARCHITECTURE.md` §2, `ADR-002`                               | M09 scope.                                                                                                                                         |
 | G5  | **GitLab mirror + GitLab CI** (one-way GitHub→GitLab; runner; secret-scan gate)                                                       | `DESIGNED_ONLY` (in-repo: `.gitlab-ci.yml` mirrors the GitHub workflow)                                                          | AGENTS.md §2, `docs/operations/gitlab-sync.md`                                   | **No `gitlab` remote configured** at `25841c0`. M08 scope (needs owner to provide GitLab URL/creds).                                               |
-| G6  | **Production deployment** (systemd `nlo` on 172.30.0.133)                                                                             | `NOT_IMPLEMENTED` on new host (legacy s52 decommissioned 2026-11-01); **Stage A exists** for nlo2.ai.ismc.ir (HTTP + Basic-auth) | `deploy/deploy.sh`, `deploy/systemd/nlo.service`, `deploy/stage/*`, P5-1A report | Stage B (TLS) blocked on edge :80 (Gate-D RCA, 2026-11-25). M08 scope.                                                                             |
+| G6  | **Production forward deploy** (systemd `nlo` on 172.30.0.133)                                                                        | `IMPLEMENTED` + `RUNNING` (active since 2026-11-14, commit `278273a`, loopback 4870); **behind `origin/main`** — forward deploy needed; Stage A also exists (HTTP + Basic-auth) | `deploy/deploy.sh`, `deploy/systemd/nlo.service`, `deploy/stage/*`, P5-0 baseline, P5-1A report | Production has been running continuously (deployed progressively: `b5e9ad3` → `d705634` → `278273a`). The P4-1.1 "ABSENT" claim was a stale workstation-only port probe. Stage B (TLS) blocked on edge :80 (Gate-D RCA). M08 scope. |
 | G7  | **Live provider local runtime** (venv + FFmpeg on workstation)                                                                        | `BLOCKED`                                                                                                                        | BL-P1-2 (`0xC0000006`), BL-P3-7                                                  | M01 scope. Historical live proof exists (2026-11-06).                                                                                              |
 | G8  | **Job retry endpoint** (`POST /api/v1/jobs/:id/retry`, ADR-007)                                                                       | `DESIGNED_ONLY`                                                                                                                  | `ADR-007`, MCP doc tool table                                                    | Needed by MCP `retry_job`; also useful for humans. Small delta on existing state machine.                                                          |
 | G9  | **Webhook retry/delivery observability admin** (per-delivery status view)                                                             | `PARTIAL` (admin CRUD exists; delivery table exists)                                                                             | —                                                                                | Check during M04; likely small.                                                                                                                    |
@@ -138,7 +141,7 @@ the JSON verdict only).
 
 | P4-1.1 item                                                                             | State at `25841c0`                                                                                                                              |
 | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| BL-P0-1 re-deploy prod 172.30.0.133                                                     | **Still open.** New host never got a production deploy; P5-1A built Stage A (HTTP+Basic-auth) for nlo2.ai.ismc.ir; Stage B blocked on edge :80. |
+| BL-P0-1 re-deploy prod 172.30.0.133                                                     | **Reframed: forward deploy.** Production IS running on 172.30.0.133 (commit `278273a`, active since 2026-11-14 17:35 UTC, confirmed via SSH in P5-0 baseline 2026-11-20). The P4-1.1 "ABSENT" claim (line 105 of the consolidated audit) was a stale workstation-only port-4870 probe without SSH — it is contradicted by the newer SSH-verified P5-0 baseline. The open item is bringing production from `278273a` up to `origin/main` (currently `08c1848`), an approval-gated forward deploy. P5-1A also built Stage A (HTTP+Basic-auth) for nlo2.ai.ismc.ir; Stage B blocked on edge :80. |
 | BL-P1-1 prettier 36-file drift                                                          | **CLOSED** by `41ac79b` (only residual drift was the later RCA md — fixed during M00).                                                          |
 | BL-P1-2 venv `0xC0000006`                                                               | **Still open** → M01.                                                                                                                           |
 | BL-P1-3 VLESS UUID owner decision                                                       | **Still open** (owner decision, unchanged).                                                                                                     |
@@ -192,7 +195,7 @@ ACCEPTED_WITH_LIMITATIONS with the limitations enumerated).
 | "Durable job management & safe recovery"                  | Implemented + integration-tested; R-1/R-2 open                             | Acceptance + hardening          | **M05**                                              |
 | "Human UI complete"                                       | Feature-complete at mock level; needs real-session walkthrough             | Acceptance                      | **M06**                                              |
 | "MCP Server & Client"                                     | Design only                                                                | Build                           | G1/G2 → **M07**                                      |
-| "GitLab + docs + release engineering"                     | GitLab remote absent; Docker build unverified; release tagging absent      | Build/ops                       | G5/G6 + BL-P2-6/P2-8 → **M08**                       |
+| "GitLab + docs + release engineering"                     | GitLab remote absent; Docker build unverified; release tagging absent; production running but behind main | Build/ops                       | G5/G6 + BL-P2-6/P2-8 → **M08**                       |
 | "Universal content intake & templates"                    | Formats: text/txt/srt/docx/audio only; templates = in-code label           | Build                           | G3/G4 → **M09**                                      |
 | "Final independent acceptance"                            | —                                                                          | Gate                            | **M10**                                              |
 
@@ -235,7 +238,7 @@ IDs are stable for mission references. `Dep` = must be done before.
 | B-P2-2 | Independent MCP client acceptance (e.g. Claude/agent driver calling NLO's MCP)                                                             | M07     | B-P2-1                            | M    |
 | B-P2-3 | MCP **client adapter** (provider kind `mcp_client`, mapping file, supervisor ownership) — scope: design → one real external MCP admitted   | M07     | B-P2-1                            | L    |
 | B-P2-4 | GitLab remote + one-way mirror + GitLab CI parity + secret-scan gate; verify Docker image build on daemon host; release tagging convention | M08     | owner: GitLab URL/creds           | M    |
-| B-P2-5 | Production re-deploy on 172.30.0.133 (systemd `nlo`, port 4870) — separate from nlo2 stage                                                 | M08     | B-P2-4 (optional), owner approval | M    |
+| B-P2-5 | Production **forward deploy** on 172.30.0.133 (systemd `nlo`, port 4870) — bring `278273a` → `origin/main` (`08c1848`); separate from nlo2 stage | M08     | B-P2-4 (optional), owner approval | M    |
 | B-P2-6 | Docs refresh: ROADMAP_MASTER + MASTER_EXECUTION_STATUS reconciliation; wiki publish to Wiki.js when creds available                        | M08     | —                                 | S    |
 
 ### P3 (extension)
@@ -341,7 +344,7 @@ wraps it after; OpenAPI changes land per-mission and are merged forward.
 | Durable recovery proven               | 🟡 integration-tested, not crash-acceptanced         | M05                                                                                                  |
 | Webhook proven                        | 🟡 integration-tested (loopback stage receiver only) | M04                                                                                                  |
 | GitLab dual-repo                      | ⛔ no remote                                         | M08 (owner: GitLab URL + mirror creds)                                                               |
-| Production (systemd, 172.30.0.133)    | ⛔ absent                                            | M08 (owner approval + access)                                                                        |
+| Production (systemd, 172.30.0.133)    | 🟡 **running** (`278273a`, active since 2026-11-14); behind `origin/main` (`08c1848`) — forward deploy needed | M08 (owner approval; SSH access confirmed working per P5-0/P5-1A)                                   |
 | TLS for nlo2                          | ⛔ edge :80                                          | **Out of active scope** — Gate-D RCA pending network owner; Stage A serves HTTP+Basic-auth meanwhile |
 | Customer docs (Wiki.js)               | 🟡 md complete, publication blocked                  | owner: Wiki.js API creds                                                                             |
 | Release tagging + Docker build verify | ⛔ not done                                          | M08                                                                                                  |
@@ -375,7 +378,7 @@ Each mission: own worktree, STOP after report + commit, owner approves, then nex
 | 1   | Local venv `0xC0000006` — M01 to diagnose; may need a clean Python install | permission to install/repair local tooling                                                 |
 | 2   | First **live** podcast job                                                 | explicit permission (real Google account, real egress)                                     |
 | 3   | GitLab URL + mirror credentials + (optional) runner                        | M08                                                                                        |
-| 4   | Production re-deploy approval (172.30.0.133)                               | M08, explicit approval                                                                     |
+| 4   | Production **forward deploy** approval (172.30.0.133: `278273a` → `08c1848`) | M08, explicit approval (SSH access already confirmed working)                              |
 | 5   | Wiki.js API credentials (customer docs publication)                        | M08                                                                                        |
 | 6   | VLESS client UUID decision (BL-P1-3)                                       | owner decision (unchanged)                                                                 |
 | 7   | Edge :80 for LE (TLS)                                                      | **Out of active scope** — already requested in Gate-D RCA; "retry" when network owner acts |
@@ -390,10 +393,41 @@ Each mission: own worktree, STOP after report + commit, owner approves, then nex
 **PASS** — read-only assessment complete; capability inventory, gap analysis, PRD,
 prioritized backlog, dependency map, acceptance criteria, DoD, parallel plan,
 ownership matrix, and release-readiness matrix delivered in this report. No
-product code was changed. Ready for owner review before M01.
+product code was changed. Ready for Wave 1 execution (continuous autonomous
+parallel execution per owner directive 2026-11-26).
+
+## 14. Addendum — Production re-verification (2026-11-26, owner-directed)
+
+The owner flagged a contradiction in the original M00 report: the claim
+`Production: absent` contradicted prior reports documenting a live Production
+service on port 4870. This addendum records the read-only re-verification.
+
+**Finding: Production IS running on `172.30.0.133` (`AI-TOOLS`).**
+
+| Source | Date | Evidence |
+|--------|------|----------|
+| `PHASE_G3A_NEW_HOST_AUDIT.md` | 2026-11-02 | "NLO was deployed on the new host on 2026-10-31, at commit `b5e9ad3`" |
+| `PHASE_T0_STUCK_JOBS_AUDIT.md` | 2026-11-02 | "Service `nlo.service` active (running) since 2026-10-31 07:10:44 UTC" |
+| `PRODUCTION_READINESS_2026-11-06.md` | 2026-11-06 | "nlo.service active (running) since Wed 2026-11-04 03:33:49 UTC" at `d705634` |
+| `NLO-P5-0-INFRASTRUCTURE-BASELINE.md` §3.1 | 2026-11-20 | "Production (de-facto) `172.30.0.133` (AI-TOOLS): systemd `nlo.service` (enabled, `Restart=always`), loopback `127.0.0.1:4870`, commit `278273a`, **active (running) since 2026-11-14 17:35:56 UTC**, MainPID 2809780" |
+| `NLO_MASTER_EXECUTION_STATUS.md` | 2026-11-15 | "Service `nlo` **active**; HEAD = deployed = `d705634`; loopback `127.0.0.1:4870` LISTEN only" |
+| `NLO_P3_BATCH3_REBASELINE.md` | 2026-11-15 | "nlo.service active + enabled; PID 2809780 tsx → node child 2809792; HEAD `278273a`" |
+
+**Root cause of the M00 error:** The P4-1.1 consolidated audit (2026-11-17,
+HEAD `b833d89`) line 105 stated "Production (172.30.0.133) **ABSENT** — no
+service, no vhost, no TLS, port 4870 closed." This was based on Agent E's
+deployment audit, which probed port 4870 **from the workstation** (where it is
+correctly closed because production binds loopback-only) and had **no SSH
+access** at that time. The P5-0 baseline (2026-11-20) subsequently confirmed
+via SSH that production has been running continuously since 2026-11-14.
+
+**Corrected state:** Production is **active on `278273a`**, approximately
+12–15 commits behind `origin/main` (`08c1848`). The open item is a **forward
+deploy** (approval-gated), not a first-ever deployment. No re-deploy order is
+issued based on this finding.
 
 ### STOP
 
-M00 complete. Deliverable: this report + the accompanying prettier fix for the
-Gate-D RCA md. Awaiting owner approval to start Wave 1 (M01 first for the live
-path; M03/M04/M05/M08/M09 can run in parallel).
+M00 complete (accepted by owner). Deliverable: this report. Per the new
+continuous autonomous execution contract (2026-11-26), Wave 1 begins
+immediately without awaiting per-mission approval.

@@ -8,6 +8,16 @@ step in the API productization phase).
 Honesty rule: an entry may say "implemented" only with tests; "live-verified"
 only with a recorded live run; otherwise "planned".
 
+## [2026-11-26] — Mission M00 CORRECTION: Production re-verification + continuous execution contract
+
+### Fixed
+
+- **Corrected the "Production: absent" claim** in `NLO-M00-PRODUCT-GAP-ANALYSIS.md` (G6, B-P2-5, §2.2, §4, §9, §11, new §14 addendum). The P4-1.1 audit's "ABSENT" conclusion was a stale workstation-only port-4870 probe (loopback-only bind → port closed from workstation) without SSH. The P5-0 baseline (2026-11-20, SSH-verified) and multiple earlier reports confirm production has been **active on `172.30.0.133` since 2026-11-14 17:35 UTC** at commit `278273a`. The open item is a **forward deploy** (N commits behind `origin/main`), not a first deployment.
+
+### Notes
+
+- Owner accepted M00 and issued the **Continuous Autonomous Parallel Execution** contract (2026-11-26): STOP-after-mission rule cancelled for dev/test/docs in isolated environments; Wave 1 (M01/M03/M04/M05/M07/M08/M09) begins immediately; Wave 2 (M02/M06) after deps; M10 final. Production changes, real job execution, and new version publication remain owner-gated.
+
 ## [2026-11-26] — Mission M00: PRODUCT GAP ANALYSIS & DELIVERY BACKLOG — **COMPLETED (READ-ONLY)**
 
 ### Added
